@@ -39,8 +39,10 @@ def make_config(env):
 
     all_configs = config.all()
     args, sweep_config = all_configs[env]()
+    print(f"Using config: {args}")
 
     env_kwargs = get_init_args(env_module.make_env)
+    print(f"Using env_kwargs: {env_kwargs}")
     policy_kwargs = get_init_args(env_module.Policy.__init__)
 
     recurrent_kwargs = {}
