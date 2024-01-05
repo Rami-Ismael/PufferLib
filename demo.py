@@ -126,7 +126,7 @@ def train(args, env_module):
         exp_name=args.exp_name,
         track=args.track,
     )
-
+    print(f"The the number of updates: {trainer.total_updates}")
     for update in range(trainer.total_updates):
         trainer.evaluate()
         trainer.train()
