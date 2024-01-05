@@ -8,7 +8,7 @@ import pufferlib.emulation
 
 
 def make_env(headless: bool = True, state_path=None , 
-             reward_the_agent_for_completing_the_pokedex = False , 
+             reward_the_agent_for_completing_the_pokedex = True , 
              reward_the_agent_for_the_normalize_gain_of_new_money = True,
              ):
     '''Pokemon Red'''
