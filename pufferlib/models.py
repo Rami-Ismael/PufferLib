@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 
 import torch
 import torch.nn as nn
+from torch.distributions import Categorical
 
 import pufferlib.emulation
 import pufferlib.pytorch
@@ -219,3 +220,80 @@ class Convolutional(Policy):
         action = self.actor(flat_hidden)
         value = self.value_fn(flat_hidden)
         return action, value
+    
+    
+# Impala Procegen Code from Clean RL Implementation
+# https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_procgen.py
+class ResidualBlock(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.conv0 = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        inputs = x
+        x = nn.functional.relu(x)
+        x = self.conv0(x)
+        x = nn.functional.relu(x)
+        x = self.conv1(x)
+        return x + inputs
+class ConvSequence(nn.Module):
+    def __init__(self, input_shape, out_channels):
+        super().__init__()
+        self._input_shape = input_shape
+        self._out_channels = out_channels
+        self.conv = nn.Conv2d(in_channels=self._input_shape[0], out_channels=self._out_channels, kernel_size=3, padding=1)
+        self.res_block0 = ResidualBlock(self._out_channels)
+        self.res_block1 = ResidualBlock(self._out_channels)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = nn.functional.max_pool2d(x, kernel_size=3, stride=2, padding=1)
+        x = self.res_block0(x)
+        x = self.res_block1(x)
+        assert x.shape[1:] == self.get_output_shape()
+        return x
+
+    def get_output_shape(self):
+        _c, h, w = self._input_shape
+        return (self._out_channels, (h + 1) // 2, (w + 1) // 2)
+
+
+class Impala(Policy):
+    def __init__(self, env , *args , flat_size ,input_size = 512 ,   hidden_size = 512 ,  output_size = 512 , channels_last = False):
+        super().__init__(env)
+        from rich import print
+        #h, w, c = env.box_observation_space.shape
+        # Permuate the shape observations = observations.permute(0, 3, 1, 2) if channels_last else observations
+        self.channels_last = channels_last
+        if self.channels_last:
+            #print(env.observation_space)
+            shape = (env.observation_space.shape[-1], env.observation_space.shape[0], env.observation_space.shape[1])
+        else:
+            shape = env.observation_space.shape
+        conv_seqs = []
+        self.num_actions:int= self.action_space.n
+        
+        for out_channels in [16, 32, 32]:
+            conv_seq = ConvSequence(shape, out_channels)
+            shape = conv_seq.get_output_shape()
+            conv_seqs.append(conv_seq)
+        conv_seqs += [
+            nn.Flatten(),
+            nn.ReLU(),
+            nn.Linear(flat_size, hidden_size),
+            nn.ReLU(),
+        ]
+        self.network = nn.Sequential(*conv_seqs)
+        print(self.network)
+        self.actor = pufferlib.pytorch.layer_init(nn.Linear( output_size, self.num_actions), std=0.01)
+        self.critic = pufferlib.pytorch.layer_init(nn.Linear(output_size, 1), std=1) # Value Function 
+    def encode_observations(self, observations):
+        if self.channels_last:
+            observations = observations.permute(0, 3, 1, 2)
+        return self.network(observations.float() / 255.0), None
+    def decode_actions(self, flat_hidden, lookup, concat=None):
+        action = self.actor(flat_hidden)
+        value = self.critic(flat_hidden)
+        return action, value
+
