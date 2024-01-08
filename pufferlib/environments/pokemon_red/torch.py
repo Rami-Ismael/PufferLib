@@ -1,11 +1,10 @@
 import pufferlib.models
 
 class Recurrent:
-    input_size = 512
-    hidden_size = 512
-    num_layers = 1
+    input_size:int = 512
+    hidden_size:int = 512
+    num_layers:int = 1
 
-'''
 class Policy(pufferlib.models.Convolutional):
     def __init__(self, env, input_size=512, hidden_size=512, output_size=512,
             framestack=3, flat_size=64*5*6): # framestack=3
@@ -20,8 +19,8 @@ class Policy(pufferlib.models.Convolutional):
         )
 '''
 class Policy(pufferlib.models.Impala):
-    def __init__( self , env , input_size  = 512 , hidden_size = 512 , 
-                 output_size = 512 , 
+    def __init__( self , env , input_size  = 256 , hidden_size = 256 , 
+                 output_size = 256 , 
                  flat_size = 2880 ,
                  ):
         super().__init__(
@@ -32,3 +31,4 @@ class Policy(pufferlib.models.Impala):
             flat_size = flat_size,
             channels_last = True
         )
+'''

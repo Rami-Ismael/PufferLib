@@ -15,5 +15,6 @@ def make_env(headless: bool = True, state_path=None ,
     env = env_creator(headless=headless, state_path=state_path , 
                       reward_the_agent_for_completing_the_pokedex=  reward_the_agent_for_completing_the_pokedex, 
                         reward_the_agent_for_the_normalize_gain_of_new_money = reward_the_agent_for_the_normalize_gain_of_new_money)
+    env = gymnasium.wrappers.normalize.NormalizeObservation(env=env)
     return pufferlib.emulation.GymnasiumPufferEnv(env=env,
         postprocessor_cls=pufferlib.emulation.BasicPostprocessor)
