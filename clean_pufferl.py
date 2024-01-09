@@ -336,7 +336,7 @@ def evaluate(data):
                 if data.wandb is not None:
                     data.stats['Media/exploration_map'] = data.wandb.Image(overlay)
             except Exception as e:
-                print(e)
+                print(e , file="error.txt")
                 continue
         try: # TODO: Better checks on log data types
             data.stats[k] = np.mean(v)

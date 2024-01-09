@@ -127,7 +127,7 @@ class RecurrentWrapper(Policy):
 
         x = x.reshape(B*TT, *space_shape)
         hidden, lookup = self.policy.encode_observations(x)
-        assert hidden.shape == (B*TT, self.input_size)
+        assert hidden.shape == (B*TT, self.input_size), f"{hidden.shape} != {(B*TT, self.input_size)}"
 
         hidden = hidden.reshape(B, TT, self.input_size)
         hidden = hidden.transpose(0, 1)
@@ -260,7 +260,7 @@ class ConvSequence(nn.Module):
 
 
 class Impala(Policy):
-    def __init__(self, env , *args , flat_size ,input_size = 512 ,   hidden_size = 512 ,  output_size = 512 , channels_last = False):
+    def __init__(self, env , *args , flat_size ,input_size = 256 ,   hidden_size = 256 ,  output_size = 256 , channels_last = False):
         super().__init__(env)
         from rich import print
         #h, w, c = env.box_observation_space.shape
