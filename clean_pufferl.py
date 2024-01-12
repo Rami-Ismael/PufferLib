@@ -330,13 +330,17 @@ def evaluate(data):
             continue
         if 'pokemon_exploration_map' in k:
             import cv2
-            bg = cv2.imread('kanto_map_dsv.png')
+            background = cv2.imread('kanto_map_dsv.png')
             try:
-                overlay = make_pokemon_red_overlay(bg, sum(v))
+                overlay = make_pokemon_red_overlay(background, sum(v))
                 if data.wandb is not None:
                     data.stats['Media/exploration_map'] = data.wandb.Image(overlay)
             except Exception as e:
-                print(e , file="error.txt")
+                # print(e , file="error.txt")
+                with open("error.txt", "a") as f:
+                    print(e, file=f)
+                    print(f"The type of error is {type(e)}", "a")
+                    print(f"The shape of the array is {v.shape}", "a")
                 continue
         try: # TODO: Better checks on log data types
             data.stats[k] = np.mean(v)
