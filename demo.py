@@ -101,6 +101,7 @@ def init_wandb(args, env_module):
 def sweep(args, env_module, sweep_config):
     import wandb
     sweep_id = wandb.sweep(sweep=sweep_config, project="pufferlib")
+    print(f"Sweep ID: {sweep_id}")
 
     def main():
         args.exp_name = init_wandb(args, env_module)
