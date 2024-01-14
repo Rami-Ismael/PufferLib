@@ -472,7 +472,7 @@ def check_space(data, space):
 
     if not contains:
         raise ValueError(
-            f'Data:\n{data}\n not in space:\n{space}')
+            f'Data:\n{data}\n not in space:\n{space} the min and max data is {data.min()} and {data.max()} the shape is {data.shape}')
     
     return True
 
