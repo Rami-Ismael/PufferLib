@@ -39,60 +39,6 @@ def load_from_config(env):
    
 def make_policy(env, env_module, args):
     policy = env_module.Policy(env, **args.policy)
-import pufferlib.models
-
-import config
-from clean_pufferl import CleanPuffeRL, rollout
-
-
-def get_init_args(fn):
-    sig = inspect.signature(fn)
-    args = {}
-    for name, param in sig.parameters.items():
-        if name in ('self', 'env'):
-            continue
-        if param.kind == inspect.Parameter.VAR_POSITIONAL:
-            continue
-        elif param.kind == inspect.Parameter.VAR_KEYWORD:
-            continue
-        else:
-            args[name] = param.default if param.default is not inspect.Parameter.empty else None
-    return args
-
-def make_config(env):
-    # TODO: Improve install checking with pkg_resources
-    try:
-        env_module = importlib.import_module(f'pufferlib.environments.{env}')
-    except:
-        pufferlib.utils.install_requirements(env)
-        env_module = importlib.import_module(f'pufferlib.environments.{env}')
-
-    all_configs = config.all()
-    args, sweep_config = all_configs[env]()
-    print(f"Using config: {args}")
-
-    env_kwargs = get_init_args(env_module.make_env)
-    print(f"Using env_kwargs: {env_kwargs}")
-    policy_kwargs = get_init_args(env_module.Policy.__init__)
-
-    recurrent_kwargs = {}
-    recurrent = env_module.Recurrent
-    if recurrent is not None:
-        recurrent_kwargs = dict(
-            input_size=recurrent.input_size,
-            hidden_size=recurrent.hidden_size,
-            num_layers=recurrent.num_layers
-        )
-
-    return env_module, sweep_config, pufferlib.namespace(
-        args=args,
-        env_kwargs = env_kwargs,
-        policy_kwargs = policy_kwargs,
-        recurrent_kwargs = recurrent_kwargs,
-   )
- 
-def make_policy(envs, env_module, args):
-    policy = env_module.Policy(envs.driver_env, **args.policy_kwargs)
     if args.force_recurrence or env_module.Recurrent is not None:
         policy = env_module.Recurrent(env, policy, **args.recurrent)
         policy = pufferlib.frameworks.cleanrl.RecurrentPolicy(policy)
@@ -206,7 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('--no-render', action='store_true', help='Disable render during evaluate')
     parser.add_argument('--exp-name', type=str, default=None, help="Resume from experiment")
     parser.add_argument('--vectorization', type=str, default='serial', help='Vectorization method (serial, multiprocessing, ray)')
-    parser.add_argument('--wandb-entity', type=str, default='xinpw8', help='WandB entity')
+    parser.add_argument('--wandb-entity', type=str, default='compress_rl', help='WandB entity')
     parser.add_argument('--wandb-project', type=str, default='pufferlib', help='WandB project')
     parser.add_argument('--wandb-group', type=str, default='debug', help='WandB group')
     parser.add_argument('--track', action='store_true', help='Track on WandB')
