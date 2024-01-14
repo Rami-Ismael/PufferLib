@@ -1,11 +1,11 @@
 train:
   seed: 1
   torch_deterministic: True
-  device: cuda
+  device: cpu 
   total_timesteps: 10_000_000
   learning_rate: 2.5e-4
   num_steps: 128
-  anneal_lr: True
+  anneal_lr: False
   gamma: 0.99
   gae_lambda: 0.95
   num_minibatches: 4
@@ -33,7 +33,7 @@ train:
   vf_clip_coef: 0.1
 
 sweep:
-  method: random
+  method: bayes
   name: sweep
   metric:
     goal: maximize
@@ -47,15 +47,7 @@ sweep:
           'min': 1e-4,
           'max': 1e-1,
         }
-        batch_size: {
-          'values': [128, 256, 512, 1024, 2048],
-        }
-        batch_rows: {
-          'values': [16, 32, 64, 128, 256],
-        }
-        bptt_horizon: {
-          'values': [4, 8, 16, 32],
-        }
+
 
 ### Arcade Learning Environment suite
 # Convenience wrappers provided for common test environments
@@ -662,14 +654,15 @@ connect4:
 pokemon_red:
   package: pokemon_red
   train:
-    total_timesteps: 100_000_000
-    num_envs: 4
+    total_timesteps: 1_000_000
+    num_envs: 9
     envs_per_worker: 1
     envpool_batch_size: 4
     update_epochs: 3
     gamma: 0.998
     batch_size: 1024
     batch_rows: 16
+    anneal_lr: False
   env:
     name: pokemon_red
 pokemon-red:
