@@ -2,7 +2,7 @@ import pufferlib.models
 
 
 class Recurrent(pufferlib.models.RecurrentWrapper):
-    def __init__(self, env, policy, input_size=512, hidden_size=512, num_layers=1):
+    def __init__(self, env, policy, input_size=512 + 32  , hidden_size=512 + 32, num_layers=1):
         super().__init__(env, policy, input_size, hidden_size, num_layers)
 
 import torch
@@ -19,7 +19,7 @@ class CReLU(nn.Module):
 class Policy(pufferlib.models.Policy):
     def __init__( self, env, 
                  frame_stack = 3, 
-                 hiden_size = 512, 
+                 hiden_size = 512 , 
                  output_size = 512 +32,
                  flat_size = 64*5*6,
                  downsample = 1
