@@ -1,8 +1,7 @@
 import pufferlib.models
 
-
 class Recurrent(pufferlib.models.RecurrentWrapper):
-    def __init__(self, env, policy, input_size=512 + 32  , hidden_size=512 + 32, num_layers=1):
+    def __init__(self, env, policy, input_size=512 + 2  , hidden_size=512 + 2, num_layers=1):
         super().__init__(env, policy, input_size, hidden_size, num_layers)
 
 import torch
@@ -20,7 +19,7 @@ class Policy(pufferlib.models.Policy):
     def __init__( self, env, 
                  frame_stack = 3, 
                  hiden_size = 512 , 
-                 output_size = 512 +32,
+                 output_size = 512 +2,
                  flat_size = 64*5*6,
                  downsample = 1
                  ):
@@ -49,9 +48,10 @@ class Policy(pufferlib.models.Policy):
             nn.ReLU(),
             nn.Flatten(),
             pufferlib.pytorch.layer_init(nn.Linear(flat_size, hiden_size)),
+            nn.ReLU(),
         )
-        self.player_row_embedding = nn.Embedding(444,16)
-        self.player_column_embedding = nn.Embedding(436,16)
+        #self.player_row_embedding = nn.Embedding(444,16)
+        #self.player_column_embedding = nn.Embedding(436,16)
         self.actor = pufferlib.pytorch.layer_init(nn.Linear(output_size, self.num_actions), std=0.01)
         self.value_fn = pufferlib.pytorch.layer_init(nn.Linear(output_size, 1), std=1)
     def encode_observations(self, env_outputs):
@@ -65,11 +65,11 @@ class Policy(pufferlib.models.Policy):
         #return self.network(observations.float() / 255.0), None
         img = self.nature_cnn(observations.float() / 255.0)
         #print("img: ", img.shape)
-        player_row = self.player_row_embedding(env_outputs["player_row"]).squeeze(1).to(torch.int)
+        #player_row = self.player_row_embedding(env_outputs["player_row"]).squeeze(1).to(torch.int)
         #print("player_row: ", player_row.shape)
-        player_col = self.player_column_embedding(env_outputs["player_column"]).squeeze(1).to(torch.int)
+        #player_col = self.player_column_embedding(env_outputs["player_column"]).squeeze(1).to(torch.int)
         #print("player_col: ", player_col.shape)
-        return F.relu(torch.cat((img, player_row, player_col), dim=1)), None
+        return F.relu(torch.cat((img, env_outputs["player_row"] / 444, env_outputs["player_column"] / 436), dim=1)), None
         
 
     def decode_actions(self, flat_hidden, lookup, concat=None):

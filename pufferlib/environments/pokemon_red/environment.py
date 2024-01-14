@@ -11,6 +11,7 @@ import pufferlib.emulation
 def env_creator(name='pokemon_red'):
     return functools.partial(make, name)
 
+
 def make(name, headless: bool = True, state_path=None):
     '''Pokemon Red'''
     env = Environment(headless=headless, state_path=state_path)
