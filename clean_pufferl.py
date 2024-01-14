@@ -340,8 +340,10 @@ def evaluate(data):
                 with open("error.txt", "a") as f:
                     print(e, file=f)
                     print(f"The type of error is {type(e)}", file =f)
+                    print(f"The type of v is {type(v)}", file=f)
+                    print(f"The type of background is {type(background)}", file=f)
                     print(f"The shape of the background is {background.shape}", file=f)
-                continue
+                pass # TODO: Fix this 
         try: # TODO: Better checks on log data types
             data.stats[k] = np.mean(v)
         except:
