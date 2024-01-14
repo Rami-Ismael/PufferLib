@@ -1,9 +1,9 @@
 import pufferlib.models
 
-class Recurrent:
-    input_size:int = 512 + 32
-    hidden_size:int = 512 + 32
-    num_layers:int = 1
+
+class Recurrent(pufferlib.models.RecurrentWrapper):
+    def __init__(self, env, policy, input_size=512, hidden_size=512, num_layers=1):
+        super().__init__(env, policy, input_size, hidden_size, num_layers)
 
 import torch
 import torch.nn as nn

@@ -15,7 +15,6 @@ import torch.nn as nn
 import torch.optim as optim
 
 import pufferlib
-import pufferlib.args
 import pufferlib.utils
 import pufferlib.emulation
 import pufferlib.vectorization
@@ -58,12 +57,10 @@ class Charts:
     global_step = 0
     SPS = 0
     learning_rate = 0
-    episodic_length = 0
-    episodic_return = 0
 
 def init(
         self: object = None,
-        config: pufferlib.args.CleanPuffeRL = None,
+        config: pufferlib.namespace = None,
         exp_name: str = None,
         track: bool = False,
 
@@ -85,6 +82,7 @@ def init(
 
     if exp_name is None:
         exp_name = str(uuid.uuid4())[:8]
+
     wandb = None
     if track:
         import wandb
@@ -105,7 +103,7 @@ def init(
             num_envs=config.num_envs,
             envs_per_worker=config.envs_per_worker,
             envs_per_batch=config.envs_per_batch,
-            #synchronous=config.synchronous,
+            env_pool=config.env_pool,
         )
 
     obs_shape = pool.single_observation_space.shape
@@ -125,7 +123,7 @@ def init(
               f'with policy {resume_state["model_name"]}')
     else:
         agent = pufferlib.emulation.make_object(
-            agent, agent_creator, [pool], agent_kwargs)
+            agent, agent_creator, [pool.driver_env], agent_kwargs)
 
     global_step = resume_state.get("global_step", 0)
     agent_step = resume_state.get("agent_step", 0)
@@ -136,7 +134,6 @@ def init(
     opt_state = resume_state.get("optimizer_state_dict", None)
     if opt_state is not None:
         optimizer.load_state_dict(resume_state["optimizer_state_dict"])
-
 
     # Create policy pool
     pool_agents = num_agents * pool.envs_per_batch
@@ -165,12 +162,6 @@ def init(
     values=torch.zeros(config.batch_size + 1).to(device)
     storage_profiler.stop()
 
-    # Original CleanRL charts for comparison
-    charts = Charts(
-        global_step=global_step,
-        learning_rate=config.learning_rate,
-    )
-
     #"charts/actions": wandb.Histogram(b_actions.cpu().numpy()),
     init_performance = pufferlib.namespace(
         init_time = time.time() - start_time,
@@ -191,7 +182,7 @@ def init(
         # Logging
         exp_name = exp_name,
         wandb = wandb,
-        charts = charts,
+        learning_rate=config.learning_rate,
         losses = Losses(),
         init_performance = init_performance,
         performance = Performance(),
@@ -221,15 +212,15 @@ def evaluate(data):
     # TODO: Handle update on resume
     if data.wandb is not None and data.performance.total_uptime > 0:
         data.wandb.log({
-            **{f'charts/{k}': v for k, v in data.charts.items()},
+            'SPS': data.SPS,
+            'global_step': data.global_step,
+            'learning_rate': data.optimizer.param_groups[0]["lr"],
             **{f'losses/{k}': v for k, v in data.losses.items()},
             **{f'performance/{k}': v
                 for k, v in data.performance.items()},
             **{f'stats/{k}': v for k, v in data.stats.items()},
             **{f'skillrank/{policy}': elo
                 for policy, elo in data.policy_pool.ranker.ratings.items()},
-            'global_step': data.charts.global_step,
-            'agent_steps': data.charts.agent_steps,
         })
 
     data.policy_pool.update_policies()
@@ -302,14 +293,11 @@ def evaluate(data):
         with env_profiler:
             data.pool.send(actions.cpu().numpy())
 
-    data.global_step += config.batch_size
     eval_profiler.stop()
 
-    charts = data.charts
-    charts.reward = float(torch.mean(data.rewards))
-    charts.agent_steps = data.global_step
-    charts.SPS = int(padded_steps_collected / eval_profiler.elapsed)
-    charts.global_step = data.global_step
+    data.global_step += padded_steps_collected
+    data.reward = float(torch.mean(data.rewards))
+    data.SPS = int(padded_steps_collected / eval_profiler.elapsed)
 
     perf = data.performance
     perf.total_uptime = int(time.time() - data.start_time)
@@ -330,6 +318,7 @@ def evaluate(data):
             continue
         if 'pokemon_exploration_map' in k:
             import cv2
+            from pokemon_red_eval import make_pokemon_red_overlay
             background = cv2.imread('kanto_map_dsv.png')
             try:
                 overlay = make_pokemon_red_overlay(background, sum(v))
@@ -342,6 +331,7 @@ def evaluate(data):
                     print(f"The type of error is {type(e)}", file =f)
                     print(f"The shape of the background is {background.shape}", file=f)
                 continue
+            # @Leanke: Add your infos['learner']['x'] etc
         try: # TODO: Better checks on log data types
             data.stats[k] = np.mean(v)
         except:
@@ -362,6 +352,11 @@ def train(data):
     # assert data.num_steps % bptt_horizon == 0, "num_steps must be divisible by bptt_horizon"
     train_profiler = pufferlib.utils.Profiler(memory=True, pytorch_memory=True)
     train_profiler.start()
+
+    # Anneal learning rate
+    frac = 1.0 - (data.update - 1.0) / data.total_updates
+    lrnow = frac * config.learning_rate
+    data.optimizer.param_groups[0]["lr"] = lrnow
 
     if config.anneal_lr:
         frac = 1.0 - (data.update - 1.0) / data.total_updates
@@ -489,9 +484,6 @@ def train(data):
     var_y = np.var(y_true)
     explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
-    charts = data.charts
-    charts.learning_rate = data.optimizer.param_groups[0]["lr"]
-
     losses = data.losses
     losses.policy_loss = np.mean(pg_losses)
     losses.value_loss = np.mean(v_losses)
@@ -514,10 +506,9 @@ def train(data):
     if config.verbose:
         print_dashboard(data.stats, data.init_performance, data.performance)
 
+    data.update += 1
     if data.update % config.checkpoint_interval == 0 or done_training(data):
        save_checkpoint(data)
-
-    data.update += 1
 
 def close(data):
     data.pool.close()
@@ -530,13 +521,15 @@ def close(data):
         data.wandb.run.log_artifact(artifact)
         data.wandb.finish()
 
-def rollout(env_creator, env_kwargs, model_path, device='cuda', verbose=True):
+def rollout(env_creator, env_kwargs, agent_creator, agent_kwargs,
+        model_path=None, device='cuda', verbose=True):
     env = env_creator(**env_kwargs)
-    agent = torch.load(model_path, map_location=device)
-    terminal = truncated = True
+    if model_path is None:
+        agent = agent_creator(env, **agent_kwargs)
+    else:
+        agent = torch.load(model_path, map_location=device)
 
-    import cv2
-    bg = cv2.imread('kanto_map_dsv.png')
+    terminal = truncated = True
  
     while True:
         if terminal or truncated:
@@ -558,18 +551,14 @@ def rollout(env_creator, env_kwargs, model_path, device='cuda', verbose=True):
         ob, reward, terminal, truncated, _ = env.step(action[0].item())
         return_val += reward
 
-        counts_map = env.env.counts_map
-        if env_kwargs['headless'] and np.sum(counts_map) > 0 and step % 100 == 0:
-            overlay = make_pokemon_red_overlay(bg, counts_map)
-            cv2.imshow('Pokemon Red', overlay[1000:][::4, ::4])
-            cv2.waitKey(1)
+        chars = env.render()
+        print("\033c", end="")
+        print(chars)
 
         if verbose:
             print(f'Step: {step} Reward: {reward:.4f} Return: {return_val:.2f}')
 
-        if not env_kwargs['headless']:
-            env.render()
-
+        time.sleep(0.5)
         step += 1
 
 def done_training(data):
@@ -596,6 +585,10 @@ def save_checkpoint(data):
         "update": data.update,
         "model_name": model_name,
     }
+
+    if data.wandb:
+        state['exp_name'] = data.exp_name
+
     state_path = os.path.join(path, 'trainer_state.pt')
     torch.save(state, state_path + '.tmp')
     os.rename(state_path + '.tmp', state_path)
@@ -656,7 +649,7 @@ def make_pokemon_red_overlay(bg, counts):
 
     # Convert counts to hue map
     hsv = np.zeros((*counts.shape, 3))
-    hsv[..., 0] =  (240.0 / 360) - scaled * (240.0 / 360.0) # heatmap, not coldmap. scaled*(240.0/360.0)
+    hsv[..., 0] = scaled*(240.0/360.0)
     hsv[..., 1] = nonzero
     hsv[..., 2] = nonzero
 

@@ -1,20 +1,18 @@
 from pdb import set_trace as T
 
 import gymnasium
+import functools
 
-from pokegym import Environment as env_creator
+from pokegym import Environment
 
 import pufferlib.emulation
 
 
-def make_env(headless: bool = True, state_path=None , 
-             reward_the_agent_for_completing_the_pokedex = True , 
-             reward_the_agent_for_the_normalize_gain_of_new_money = True,
-             ):
+def env_creator(name='pokemon_red'):
+    return functools.partial(make, name)
+
+def make(name, headless: bool = True, state_path=None):
     '''Pokemon Red'''
-    env = env_creator(headless=headless, state_path=state_path , 
-                      reward_the_agent_for_completing_the_pokedex=  reward_the_agent_for_completing_the_pokedex, 
-                        reward_the_agent_for_the_normalize_gain_of_new_money = reward_the_agent_for_the_normalize_gain_of_new_money)
-    #env = gymnasium.wrappers.normalize.NormalizeObservation(env=env)
+    env = Environment(headless=headless, state_path=state_path)
     return pufferlib.emulation.GymnasiumPufferEnv(env=env,
         postprocessor_cls=pufferlib.emulation.BasicPostprocessor)
