@@ -556,7 +556,7 @@ def rollout(env_creator, env_kwargs, agent_creator, agent_kwargs,
         if verbose:
             print(f'Step: {step} Reward: {reward:.4f} Return: {return_val:.2f}')
 
-        time.sleep(0.5)
+        #time.sleep(0.5)
         step += 1
 
 def done_training(data):
