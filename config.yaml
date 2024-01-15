@@ -35,6 +35,9 @@ train:
 sweep:
   method: bayes
   name: sweep
+  early_terminate:
+    type: hyperband
+    min_iter: 1  
   metric:
     goal: maximize
     name: episodic_return
