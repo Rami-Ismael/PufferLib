@@ -2,7 +2,7 @@ train:
   seed: 1
   torch_deterministic: True
   device: cpu 
-  total_timesteps: 10_000_000
+  total_timesteps: 5_000_000
   learning_rate: 2.5e-4
   num_steps: 128
   anneal_lr: False
@@ -44,8 +44,8 @@ sweep:
       parameters:
         learning_rate: {
           'distribution': 'log_uniform_values',
-          'min': 1e-4,
-          'max': 1e-1,
+          'min': 1e-5,
+          'max': 1e-2,
         }
 
 
@@ -654,7 +654,7 @@ connect4:
 pokemon_red:
   package: pokemon_red
   train:
-    total_timesteps: 1_000_000
+    total_timesteps: 5_000_000
     num_envs: 9
     envs_per_worker: 1
     envpool_batch_size: 4

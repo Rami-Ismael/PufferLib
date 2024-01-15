@@ -11,6 +11,7 @@ import pufferlib
 import pufferlib.utils
 
 from clean_pufferl import CleanPuffeRL, rollout, done_training
+from rich import print
 
 
 def load_from_config(env):
@@ -117,7 +118,7 @@ def train(args, env_module, make_env):
             exp_name=args.exp_name,
             track=args.track,
         )
-
+        print('Training...')
         while not done_training(trainer):
             trainer.evaluate()
             trainer.train()
