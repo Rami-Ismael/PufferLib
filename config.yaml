@@ -55,7 +55,11 @@ sweep:
           "min": 3 ,
           "max": 9
         }
-
+        clip_coef: {
+          "distribution": "uniform",
+          "min": .1,
+          "max": .9
+        }
 ### Arcade Learning Environment suite
 # Convenience wrappers provided for common test environments
 atari:
@@ -662,7 +666,7 @@ pokemon_red:
   package: pokemon_red
   train:
     total_timesteps: 100_000_000
-    num_envs: 32
+    num_envs: 8
     envs_per_worker: 1
     envpool_batch_size: 4
     gamma: 0.998
