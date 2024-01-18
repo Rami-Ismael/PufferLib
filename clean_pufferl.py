@@ -44,6 +44,7 @@ class Performance:
 
 @pufferlib.dataclass
 class Losses:
+    dead_neuron_score = 0
     policy_loss = 0
     value_loss = 0
     entropy = 0
@@ -412,6 +413,7 @@ def train(data):
     # Optimizing the policy and value network
     train_time = time.time()
     pg_losses, entropy_losses, v_losses, clipfracs, old_kls, kls = [], [], [], [], [], []
+    dead_neuron_scores:list = []
     for epoch in range(config.update_epochs):
         lstm_state = None
         for mb in range(num_minibatches):
@@ -420,6 +422,16 @@ def train(data):
             mb_values = b_values[mb].reshape(-1)
             mb_advantages = b_advantages[mb].reshape(-1)
             mb_returns = b_returns[mb].reshape(-1)
+            
+            # Calculat the dormatn neuron
+            dead_neuron_score:float = calculate_dormant_ratio(
+                model = data.agent , 
+                observation = mb_obs.detach(),
+                state = lstm_state , 
+                action = mb_actions.detach(),
+                percentage = 0.025
+            )
+            dead_neuron_scores.append( dead_neuron_score)
 
             if hasattr(data.agent, 'lstm'):
                 _, newlogprob, entropy, newvalue, lstm_state = data.agent.get_action_and_value(
@@ -493,6 +505,7 @@ def train(data):
     explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
     losses = data.losses
+    losses.dead_neuron_score = np.mean(dead_neuron_score)
     losses.policy_loss = np.mean(pg_losses)
     losses.value_loss = np.mean(v_losses)
     losses.entropy = np.mean(entropy_losses)
@@ -676,6 +689,57 @@ def make_pokemon_red_overlay(bg, counts):
     render[mask] = 0.2*render[mask] + 0.8*overlay[mask]
     render = np.clip(render, 0, 255).astype(np.uint8)
     return render
+class LinearOutputHook:
+    def __init__(self):
+        self.outputs = []
+
+    def __call__(self, module, module_in, module_out):
+        self.outputs.append(module_out)
+
+def calculate_dormant_ratio(model, 
+                        observation,
+                            state,
+                            action,
+                            percentage=0.025) -> float:
+    hooks = []
+    hook_handlers = []
+    total_neurons = 0
+    dormant_neurons = 0
+
+    for _, module in model.named_modules():
+        if isinstance(module, nn.Linear):
+            hook = LinearOutputHook()
+            hooks.append(hook)
+            hook_handlers.append(module.register_forward_hook(hook))
+
+    with torch.no_grad():
+            if hasattr( model, "lstm"):
+                _ = model.get_action_and_value(
+                    observation , 
+                    state = state, 
+                    action = action
+                )
+
+    for module, hook in zip(
+        (module
+         for module in model.modules() if isinstance(module, nn.Linear)),
+            hooks):
+        with torch.no_grad():
+            for output_data in hook.outputs:
+                mean_output = output_data.abs().mean(0)
+                avg_neuron_output = mean_output.mean()
+                dormant_indices = (mean_output < avg_neuron_output *
+                                   percentage).nonzero(as_tuple=True)[0]
+                total_neurons += module.weight.shape[0]
+                dormant_neurons += len(dormant_indices)         
+
+    for hook in hooks:
+        hook.outputs.clear()
+
+    for hook_handler in hook_handlers:
+        hook_handler.remove()
+
+    return dormant_neurons / total_neurons
 
 class CleanPuffeRL:
     __init__ = init
