@@ -46,11 +46,15 @@ sweep:
     train:
       parameters:
         learning_rate: {
-          'distribution': 'log_uniform_values',
+          'distribution': 'uniform',
           'min': 1e-5,
           'max': 1e-2,
         }
-
+        update_epochs: {
+          "distribution": "int_uniform",
+          "min": 3 ,
+          "max": 9
+        }
 
 ### Arcade Learning Environment suite
 # Convenience wrappers provided for common test environments
@@ -657,11 +661,10 @@ connect4:
 pokemon_red:
   package: pokemon_red
   train:
-    total_timesteps: 5_000_000
-    num_envs: 9
+    total_timesteps: 100_000_000
+    num_envs: 32
     envs_per_worker: 1
     envpool_batch_size: 4
-    update_epochs: 3
     gamma: 0.998
     batch_size: 1024
     batch_rows: 16
