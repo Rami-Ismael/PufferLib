@@ -424,14 +424,15 @@ def train(data):
             mb_returns = b_returns[mb].reshape(-1)
             
             # Calculat the dormatn neuron
-            dead_neuron_score:float = calculate_dormant_ratio(
-                model = data.agent , 
-                observation = mb_obs.detach(),
-                state = lstm_state , 
-                action = mb_actions.detach(),
-                percentage = 0.025
-            )
-            dead_neuron_scores.append( dead_neuron_score)
+            if lstm_state is not None:
+                dead_neuron_score:float = calculate_dormant_ratio(
+                    model = data.agent , 
+                    observation = mb_obs.detach(),
+                    state = (lstm_state[0].detach(), lstm_state[1].detach()),
+                    action = mb_actions.detach(),
+                    percentage = 0.025
+                )
+                dead_neuron_scores.append( dead_neuron_score)
 
             if hasattr(data.agent, 'lstm'):
                 _, newlogprob, entropy, newvalue, lstm_state = data.agent.get_action_and_value(

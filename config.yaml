@@ -40,7 +40,7 @@ sweep:
     min_iter: 1  
   metric:
     goal: maximize
-    name: episodic_return
+    name: return 
   # Nested parameters name required by WandB API
   parameters:
     train:
@@ -60,6 +60,15 @@ sweep:
           "min": .1,
           "max": .9
         }
+        ent_coef: {
+          "distribution": "uniform" , 
+          "min" : .01,
+          "max" : 1
+        }
+        anneal_lr: 
+          values: [True , False]
+        punish_wipe_out:
+          values: [True , False]
 ### Arcade Learning Environment suite
 # Convenience wrappers provided for common test environments
 atari:
@@ -665,14 +674,13 @@ connect4:
 pokemon_red:
   package: pokemon_red
   train:
-    total_timesteps: 100_000_000
+    total_timesteps: 2_000_000
     num_envs: 8
     envs_per_worker: 1
     envpool_batch_size: 4
     gamma: 0.998
     batch_size: 1024
     batch_rows: 16
-    anneal_lr: False
   env:
     name: pokemon_red
 pokemon-red:
