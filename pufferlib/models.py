@@ -274,7 +274,7 @@ class Impala(Policy):
         conv_seqs = []
         self.num_actions:int= self.action_space.n
         
-        for out_channels in [16, 32, 32]:
+        for out_channels in [16, 16 , 16 ]:
             conv_seq = ConvSequence(shape, out_channels)
             shape = conv_seq.get_output_shape()
             conv_seqs.append(conv_seq)

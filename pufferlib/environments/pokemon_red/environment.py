@@ -15,11 +15,11 @@ def env_creator(name='pokemon_red'):
 
 def make(name, headless: bool = True, state_path=None , 
          punish_wipe_out:bool = False
-         ) -> GymnasiumPufferEnv:
+         ):
     '''Pokemon Red'''
     env = Environment(headless=headless, 
                       state_path=state_path , 
-                        punish_wipe=punish_wipe
+                        punish_wipe_out=punish_wipe_out
                       )
     print('env', env)
     return pufferlib.emulation.GymnasiumPufferEnv(env=env,
