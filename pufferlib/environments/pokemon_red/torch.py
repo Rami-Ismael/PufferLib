@@ -328,11 +328,6 @@ class Policy(pufferlib.models.Policy):
         self.num_actions = env.action_space.n
         self.channels_last = True
         self.downsample = downsample
-        if self.channels_last:
-            #print(env.observation_space)
-            shape = (env.observation_space.shape[-1], env.observation_space.shape[0], env.observation_space.shape[1])
-        else:
-            shape = env.observation_space.shape
         self.nature_cnn = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Conv2d(frame_stack, 32, 8, stride=4)),
             nn.ReLU(),
@@ -344,20 +339,6 @@ class Policy(pufferlib.models.Policy):
             pufferlib.pytorch.layer_init(nn.Linear(flat_size, hidden_size)),
             nn.ReLU(),
         )
-        conv_seqs = []
-        self.num_actions:int= self.action_space.n
-        # Because you are broke and you can't afford a GPU
-        for out_channels in [16, 16 , 16]:
-            conv_seq = ConvSequence(shape, out_channels)
-            shape = conv_seq.get_output_shape()
-            conv_seqs.append(conv_seq)
-        conv_seqs += [
-            nn.Flatten(),
-            nn.ReLU(),
-            nn.Linear(flat_size, hidden_size),
-            nn.ReLU(),
-        ]
-        self.network = nn.Sequential(*conv_seqs)
         self.pokemon_levels_embedding = nn.Sequential(
             nn.Embedding( num_embeddings = 128 , embedding_dim = 8),
             nn.Flatten(),
