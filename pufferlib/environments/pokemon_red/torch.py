@@ -328,6 +328,11 @@ class Policy(pufferlib.models.Policy):
         self.num_actions = env.action_space.n
         self.channels_last = True
         self.downsample = downsample
+        if self.channels_last:
+            #print(env.observation_space)
+            shape = (env.observation_space.shape[-1], env.observation_space.shape[0], env.observation_space.shape[1])
+        else:
+            shape = env.observation_space.shape
         self.nature_cnn = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Conv2d(frame_stack, 32, 8, stride=4)),
             nn.ReLU(),
