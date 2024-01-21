@@ -267,42 +267,6 @@ def reset_noise(layer: nn.Module) -> None:
     """Resets the noise of noisy layers."""
     if hasattr(layer, "reset_noise"):
         layer.reset_noise()
-# Impala Procegen Code from Clean RL Implementation
-# https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_procgen.py
-class ResidualBlock(nn.Module):
-    def __init__(self, channels):
-        super().__init__()
-        self.conv0 = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3, padding=1)
-        self.conv1 = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3, padding=1)
-
-    def forward(self, x):
-        inputs = x
-        x = nn.functional.relu(x)
-        x = self.conv0(x)
-        x = nn.functional.relu(x)
-        x = self.conv1(x)
-        return x + inputs
-class ConvSequence(nn.Module):
-    def __init__(self, input_shape, out_channels):
-        super().__init__()
-        self._input_shape = input_shape
-        self._out_channels = out_channels
-        self.conv = nn.Conv2d(in_channels=self._input_shape[0], out_channels=self._out_channels, kernel_size=3, padding=1)
-        self.res_block0 = ResidualBlock(self._out_channels)
-        self.res_block1 = ResidualBlock(self._out_channels)
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = nn.functional.max_pool2d(x, kernel_size=3, stride=2, padding=1)
-        x = self.res_block0(x)
-        x = self.res_block1(x)
-        assert x.shape[1:] == self.get_output_shape()
-        return x
-
-    def get_output_shape(self):
-        _c, h, w = self._input_shape
-        return (self._out_channels, (h + 1) // 2, (w + 1) // 2)
-
 
 class Policy(pufferlib.models.Policy):
     def __init__( self, env, 
@@ -331,12 +295,12 @@ class Policy(pufferlib.models.Policy):
         self.nature_cnn = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Conv2d(frame_stack, 32, 8, stride=4)),
             nn.ReLU(),
-            pufferlib.pytorch.layer_init(nn.Conv2d(32, 64, 4, stride=2)),
+            pufferlib.pytorch.layer_init(nn.Conv2d(32, 64, 4, stride=2)) if not adding_noise_lineay_layer else pufferlib.pytorch.layer_init(NoisyLinear( in_features = 32*9*9 , out_features = 64)),
             nn.ReLU(),
-            pufferlib.pytorch.layer_init(nn.Conv2d(64, 64, 3, stride=1)),
+            pufferlib.pytorch.layer_init(nn.Conv2d(64, 64, 3, stride=1)) if not adding_noise_lineay_layer else pufferlib.pytorch.layer_init(NoisyLinear( in_features = 64*7*7 , out_features = 64)),
             nn.ReLU(),
             nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear(flat_size, hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear(flat_size, hidden_size)) if not adding_noise_lineay_layer else pufferlib.pytorch.layer_init(NoisyLinear( in_features = flat_size , out_features = hidden_size)),
             nn.ReLU(),
         )
         self.pokemon_levels_embedding = nn.Sequential(
