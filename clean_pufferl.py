@@ -584,8 +584,13 @@ def rollout(env_creator, env_kwargs, agent_creator, agent_kwargs,
         step += 1
 
 def done_training(data):
-    if data.losses.explain_variance < 0:
-        return False
+    try:
+        if data.losses.explained_variance < 0:
+            return False
+    except:
+        with open("error.txt", "a") as f:
+            print(f"Error in calculating the variance", file=f)
+        pass
     return data.update >= data.total_updates
 
 def save_checkpoint(data):
