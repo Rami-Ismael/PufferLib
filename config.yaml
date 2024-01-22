@@ -40,7 +40,7 @@ sweep:
     min_iter: 1  
   metric:
     goal: maximize
-    name: return 
+    name: stats/pokemon_1_level 
   # Nested parameters name required by WandB API
   parameters:
     train:
@@ -69,6 +69,8 @@ sweep:
           values: [True , False]
         punish_wipe_out:
           values: [True , False]
+        adding_noise_lineay_layer:
+          values: [ True , False]
 ### Arcade Learning Environment suite
 # Convenience wrappers provided for common test environments
 atari:
