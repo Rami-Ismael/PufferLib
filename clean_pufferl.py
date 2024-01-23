@@ -585,11 +585,13 @@ def rollout(env_creator, env_kwargs, agent_creator, agent_kwargs,
 
 def done_training(data):
     try:
-        if data.losses.explained_variance < 0:
-            return False
-    except:
+        if data.losses.explained_variance < -.1:
+            return True
+        if data.losses.policy_loss > .1:
+            return True
+    except Exception as e:
         with open("error.txt", "a") as f:
-            print(f"Error in calculating the variance", file=f)
+            print(f"Error in calculating the variance0100 {e}", file=f)
         pass
     return data.update >= data.total_updates
 
