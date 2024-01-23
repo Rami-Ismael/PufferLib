@@ -41,7 +41,6 @@ sweep:
   metric:
     goal: maximize
     name: stats/number_of_uniqiue_coordinate_it_explored 
-  # Nested parameters name required by WandB API
   parameters:
     train:
       parameters:
