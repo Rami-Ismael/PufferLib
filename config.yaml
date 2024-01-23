@@ -40,7 +40,7 @@ sweep:
     min_iter: 1  
   metric:
     goal: maximize
-    name: stats/pokemon_1_level 
+    name: stats/number_of_uniqiue_coordinate_it_explored 
   # Nested parameters name required by WandB API
   parameters:
     train:
