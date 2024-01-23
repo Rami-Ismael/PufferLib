@@ -71,6 +71,8 @@ sweep:
           values: [True , False]
         adding_noise_lineay_layer:
           values: [ True , False]
+        num_envs: 
+          values: [ 8 , 16 , 32 , 64, 128]
 ### Arcade Learning Environment suite
 # Convenience wrappers provided for common test environments
 atari:
@@ -677,7 +679,6 @@ pokemon_red:
   package: pokemon_red
   train:
     total_timesteps: 2_000_000
-    num_envs: 8
     envs_per_worker: 1
     envpool_batch_size: 4
     gamma: 0.998
