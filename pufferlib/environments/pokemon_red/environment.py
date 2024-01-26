@@ -13,7 +13,7 @@ def env_creator(name='pokemon_red'):
     return functools.partial(make, name)
 
 
-def make(name, headless: bool = True, state_path=None , 
+def make(name:str="pokemon_red", headless: bool = True, state_path=None , 
          punish_wipe_out:bool =True  ,
          ):
     '''Pokemon Red'''

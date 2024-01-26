@@ -51,8 +51,10 @@ def setup(env_creator, env_args, env_kwargs):
         is_multiagent = True
     else:
         raise TypeError(
-            'env_creator must return an instance '
-            'of GymnasiumPufferEnv or PettingZooPufferEnv'
+            f'''env_creator must return an instance 
+            of GymnasiumPufferEnv or PettingZooPufferEnv instead of {type(driver_env)}
+            '''
+            
         )
 
     obs_space = _single_observation_space(driver_env)

@@ -280,14 +280,14 @@ if __name__ == "__main__":
     # env setup
     # PufferLib env setup
     # Create Enironemtns
-    from pufferlib.environments.pokemon_red.environment import env_creator 
+    from pufferlib.environments.pokemon_red.environment import env_creator  , make
     # Create environments, agent, and optimizer
     init_profiler = pufferlib.utils.Profiler(memory=True)
     env_creator_kwargs = None
     import pufferlib.vectorization
     with init_profiler:
         pool = pufferlib.vectorization.Multiprocessing(
-            env_creator,
+            env_creator = make,
             env_kwargs=env_creator_kwargs,
             num_envs=args.num_envs,
             envs_per_worker=1,
