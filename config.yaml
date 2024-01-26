@@ -693,7 +693,6 @@ pokemon:
   package: pokemon_red
 pokegym:
   package: pokemon_red
- 
 links_awaken:
   package: links_awaken
 links-awaken:
