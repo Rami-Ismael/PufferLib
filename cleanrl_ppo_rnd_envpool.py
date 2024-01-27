@@ -43,7 +43,7 @@ def parse_args():
         help="the entity (team) of wandb's project")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="MontezumaRevenge-v5",
+    parser.add_argument("--env-id", type=str, default="pokemon_red",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=2000000000,
         help="total timesteps of the experiments")
@@ -339,14 +339,19 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    print(envs.reset()[0])
-    next_obs = torch.Tensor(envs.reset()[0]).to(device)
+    observation  = envs.reset()
+    print(
+        f"The observation shape is: {observation[0]}\n"
+    )
+    print(
+        f"the type of observation is: {type(observation[0])}\n"
+    )
+    next_obs = torch.Tensor(observation[0]).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
 
     print("Start to initialize observation normalization parameter.....")
     next_ob = []
-    print(f"The action spaces number is: {envs.action_space.n}")
     for step in range(args.num_steps * args.num_iterations_obs_norm_init):
         acs = np.random.randint(0, envs.action_space.n, size=args.num_envs)
         s, r, d, _, info = envs.step(acs)
