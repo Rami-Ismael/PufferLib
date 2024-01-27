@@ -156,12 +156,13 @@ class Agent(nn.Module):
             layer_init(nn.Linear(256, 448)),
             nn.ReLU(),
         )
-        self.num_actions = envs.action_space.n
+        self.num_actions = envs.single_action_space.n
         self.extra_layer = nn.Sequential(layer_init(nn.Linear(448, 448), std=0.1), nn.ReLU())
+        # Policy
         self.actor = nn.Sequential(
             layer_init(nn.Linear(448, 448), std=0.01),
             nn.ReLU(),
-            layer_init(nn.Linear(448, envs.action_space.n), std=0.01),
+            layer_init(nn.Linear(448, self.num_actions), std=0.01),
         )
         self.critic_ext = layer_init(nn.Linear(448, 1), std=0.01)
         self.critic_int = layer_init(nn.Linear(448, 1), std=0.01)
@@ -286,37 +287,36 @@ if __name__ == "__main__":
     env_creator_kwargs = None
     import pufferlib.vectorization
     with init_profiler:
-        pool = pufferlib.vectorization.Multiprocessing(
-            env_creator = make,
+        envs = pufferlib.vectorization.Multiprocessing(
+            env_creator=make,
             env_kwargs=env_creator_kwargs,
             num_envs=args.num_envs,
             envs_per_worker=1,
         )
-
-    obs_shape = pool.single_observation_space.shape
-    atn_shape = pool.single_action_space.shape
-    num_agents = pool.agents_per_env
-    total_agents = num_agents * args.num_envs
+    print(f"The type of envs is: {type(envs)}")
+    print(f"The structure action space is: {envs.single_action_space}")
     
-    print(
-        f"Observation space shape: {obs_shape}, action space shape: {atn_shape}, num_agents: {num_agents}, total_agents: {total_agents}"
-    )
+    observation_space = envs.single_observation_space
+    print(f"The observation space is: {observation_space}")
+    action_shape = envs.single_action_space.shape
+    print(f"The action shape is: {action_shape}")
+    size_action_space = envs.single_action_space.n
+    print(f"The size of action space is: {size_action_space}")
+    action_shape = envs.single_action_space.shape
+    print(f"The action shape is: {action_shape}")
+    
+    #print(f"The observation space is: {pool.single_observation_space}")
     
     #assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs).to(device)
-    rnd_model = RNDModel(4, envs.flat_action_space).to(device)
+    rnd_model = RNDModel( input_size = 4 , output_size = size_action_space ).to(device)
     combined_parameters = list(agent.parameters()) + list(rnd_model.predictor.parameters())
     optimizer = optim.Adam(
         combined_parameters,
         lr=args.learning_rate,
         eps=1e-5,
     )
-
-    reward_rms = RunningMeanStd()
-    obs_rms = RunningMeanStd(shape=(1, 1, 84, 84))
-    discounted_reward = RewardForwardFilter(args.int_gamma)
-    print(f"The keys for observation are: {envs.flat_action_space.keys()}\n")
     
 
     # ALGO Logic: Storage setup
@@ -327,7 +327,7 @@ if __name__ == "__main__":
     print(f"pixel_screen_flat_shape: {pixel_screen_flat_shape}")
     obs = torch.zeros((args.num_steps, args.num_envs) + (pixel_screen_flat_shape, 1)).to(device)
     print(f"obs_shape: {obs.shape}")
-    actions = torch.zeros((args.num_steps, args.num_envs) + envs.flat_action_space["V"].shape).to(device)
+    actions = torch.zeros((args.num_steps, args.num_envs) + action_shape).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     curiosity_rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
