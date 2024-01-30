@@ -49,7 +49,7 @@ def parse_args():
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float, default=1e-4,
         help="the learning rate of the optimizer")
-    parser.add_argument("--num-envs", type=int, default=128,
+    parser.add_argument("--num-envs", type=int, default=4,
         help="the number of parallel game environments")
     parser.add_argument("--num-steps", type=int, default=128,
         help="the number of steps to run in each environment per policy rollout")
@@ -89,7 +89,7 @@ def parse_args():
         help="coefficient of intrinsic reward")
     parser.add_argument("--int-gamma", type=float, default=0.99,
         help="Intrinsic reward discount rate")
-    parser.add_argument("--num-iterations-obs-norm-init", type=int, default=50,
+    parser.add_argument("--num-iterations-obs-norm-init", type=int, default=5,
         help="number of iterations to initialize the observations normalization parameters")
 
     args = parser.parse_args()
@@ -195,7 +195,7 @@ class RNDModel(nn.Module):
         self.input_size = input_size
         self.output_size = output_size
 
-        feature_output = 7 * 7 * 64
+        feature_output = 7 * 7 * 64 # That is flat size , simlilar to nature cnn
 
         # Prediction network
         self.predictor = nn.Sequential(
@@ -252,6 +252,7 @@ class RewardForwardFilter:
 if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    debug:bool = False
     if args.track:
         import wandb
 
@@ -352,16 +353,42 @@ if __name__ == "__main__":
 
     print("Start to initialize observation normalization parameter.....")
     next_ob = []
+    time_state = time.time()
+    print(f"I was wondering the size of the nummberof of envs is: {args.num_envs}")
+    isinstance(args.num_envs, int)
     for step in range(args.num_steps * args.num_iterations_obs_norm_init):
-        acs = np.random.randint(0, envs.action_space.n, size=args.num_envs)
-        s, r, d, _, info = envs.step(acs)
-        next_ob += s[:, 3, :, :].reshape([-1, 1, 84, 84]).tolist()
-
+        random_action = np.random.randint(0, size_action_space, size=args.num_envs)
+        '''
+        observation_step , reward_step , done_step , _ , info_step, _ , _ = envs.step(acs)
+        env_output = envs.unpack_batched_obs(
+                envs.step(acs)[0]
+        )
+        next_ob = np.transpose(env_output["screen"], (0, 3, 1, 2))
         if len(next_ob) % (args.num_steps * args.num_envs) == 0:
             next_ob = np.stack(next_ob)
-            obs_rms.update(next_ob)
+            print(f"The size of the step is : {len(envs.step(acs))}")
+            print(f"The size of the observation_step is : {observation_step[0].shape}")
+            print(f"What is the observation_step: {observation_step[0]}")
+            print(f"The pixel_observation.shape is: {next_ob.shape}") # (128, 3, 72, 80)
+            #obs_rms.update(next_ob)
             next_ob = []
+        '''
+        obs , reward , dones , truncateds , infos, env_ids , maks = envs.step(random_action)
+        # Un bach the results
+        isinstance(obs, np.ndarray), "The observation is not a numpy array"
+        next_observation = np.transpose(envs.unpack_batched_obs(obs)["screen"], (0, 3, 1, 2))
+        assert next_observation.shape == (args.num_envs, 3, 72, 80), "The shape of the observation is not correct"
+        next_ob += next_observation.tolist()
+        
+        if len(next_ob) % (args.num_steps * args.num_envs) == 0:
+            next_ob = np.stack(next_ob)
+            #observation_running_mean_std.update(next_obs)
+            next_ob: list = []
+
+        
     print("End to initialize...")
+    end_time = time.time()
+    print(f"Time to initialize the observation normalization parameter: {end_time - time_state}")
 
     for update in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
