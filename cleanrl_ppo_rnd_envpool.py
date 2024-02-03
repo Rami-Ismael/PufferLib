@@ -359,34 +359,37 @@ if __name__ == "__main__":
     time_state = time.time()
     print(f"I was wondering the size of the nummberof of envs is: {args.num_envs}")
     isinstance(args.num_envs, int)
-    for step in range(args.num_steps * args.num_iterations_obs_norm_init):
-        random_action = np.random.randint(0, size_action_space, size=args.num_envs)
-        '''
-        observation_step , reward_step , done_step , _ , info_step, _ , _ = envs.step(acs)
-        env_output = envs.unpack_batched_obs(
-                envs.step(acs)[0]
-        )
-        next_ob = np.transpose(env_output["screen"], (0, 3, 1, 2))
-        if len(next_ob) % (args.num_steps * args.num_envs) == 0:
-            next_ob = np.stack(next_ob)
-            print(f"The size of the step is : {len(envs.step(acs))}")
-            print(f"The size of the observation_step is : {observation_step[0].shape}")
-            print(f"What is the observation_step: {observation_step[0]}")
-            print(f"The pixel_observation.shape is: {next_ob.shape}") # (128, 3, 72, 80)
-            #observation_running_mean_std.update(next_ob)
-            next_ob = []
-        '''
-        obs , reward , dones , truncateds , infos, env_ids , maks = envs.step(random_action)
-        # Un bach the results
-        isinstance(obs, np.ndarray), "The observation is not a numpy array"
-        next_observation = np.transpose(envs.unpack_batched_obs(obs)["screen"], (0, 3, 1, 2))
-        assert next_observation.shape == (args.num_envs, 3, 72, 80), "The shape of the observation is not correct"
-        next_ob += next_observation.tolist()
-        
-        if len(next_ob) % (args.num_steps * args.num_envs) == 0:
-            next_ob = np.stack(next_ob)
-            observation_running_mean_std.update(next_obs)
-            next_ob: list = []
+for step in range(args.num_steps * args.num_iterations_obs_norm_init):
+    random_action = np.random.randint(0, size_action_space, size=args.num_envs)
+    '''
+    observation_step , reward_step , done_step , _ , info_step, _ , _ = envs.step(acs)
+    env_output = envs.unpack_batched_obs(
+            envs.step(acs)[0]
+    )
+    next_observation = np.transpose(env_output["screen"], (0, 3, 1, 2))
+    if len(next_observation) % (args.num_steps * args.num_envs) == 0:
+        next_observation = np.stack(next_observation)
+        print(f"The size of the step is : {len(envs.step(acs))}")
+        print(f"The size of the observation_step is : {observation_step[0].shape}")
+        print(f"What is the observation_step: {observation_step[0]}")
+        print(f"The pixel_observation.shape is: {next_observation.shape}") # (128, 3, 72, 80)
+        #observation_running_mean_std.update(next_ob)
+        next_observation = []
+    '''
+    obs, reward, dones, truncateds, infos, env_ids, maks = envs.step(
+        random_action)
+    # Un bach the results
+    isinstance(obs, np.ndarray), "The observation is not a numpy array"
+    next_obs = np.transpose(envs.unpack_batched_obs(obs)[
+                            "screen"], (0, 3, 1, 2))
+    assert next_obs.shape == (
+        args.num_envs, 3, 72, 80), "The shape of the observation is not correct"
+    next_ob += next_obs.tolist()
+
+    if len(next_ob) % (args.num_steps * args.num_envs) == 0:
+        next_ob = np.stack(next_ob)
+        observation_running_mean_std.update(next_obs)
+        next_ob: list = []
 
         
     print("End to initialize...")
