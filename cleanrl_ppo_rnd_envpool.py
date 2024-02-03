@@ -319,6 +319,9 @@ if __name__ == "__main__":
         eps=1e-5,
     )
     
+    # Reward Calculation
+    observation_running_mean_std = RunningMeanStd(shape=(1, 3, 72, 80))
+    
 
     # ALGO Logic: Storage setup
     print(
@@ -370,7 +373,7 @@ if __name__ == "__main__":
             print(f"The size of the observation_step is : {observation_step[0].shape}")
             print(f"What is the observation_step: {observation_step[0]}")
             print(f"The pixel_observation.shape is: {next_ob.shape}") # (128, 3, 72, 80)
-            #obs_rms.update(next_ob)
+            #observation_running_mean_std.update(next_ob)
             next_ob = []
         '''
         obs , reward , dones , truncateds , infos, env_ids , maks = envs.step(random_action)
@@ -382,7 +385,7 @@ if __name__ == "__main__":
         
         if len(next_ob) % (args.num_steps * args.num_envs) == 0:
             next_ob = np.stack(next_ob)
-            #observation_running_mean_std.update(next_obs)
+            observation_running_mean_std.update(next_obs)
             next_ob: list = []
 
         
@@ -420,8 +423,8 @@ if __name__ == "__main__":
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
             rnd_next_obs = (
                 (
-                    (next_obs[:, 3, :, :].reshape(args.num_envs, 1, 84, 84) - torch.from_numpy(obs_rms.mean).to(device))
-                    / torch.sqrt(torch.from_numpy(obs_rms.var).to(device))
+                    (next_obs[:, 3, :, :].reshape(args.num_envs, 1, 84, 84) - torch.from_numpy(observation_running_mean_std.mean).to(device))
+                    / torch.sqrt(torch.from_numpy(observation_running_mean_std.var).to(device))
                 ).clip(-5, 5)
             ).float()
             target_next_feature = rnd_model.target(rnd_next_obs)
@@ -497,15 +500,15 @@ if __name__ == "__main__":
 
         b_advantages = b_int_advantages * args.int_coef + b_ext_advantages * args.ext_coef
 
-        obs_rms.update(b_obs[:, 3, :, :].reshape(-1, 1, 84, 84).cpu().numpy())
+        observation_running_mean_std.update(b_obs[:, 3, :, :].reshape(-1, 1, 84, 84).cpu().numpy())
 
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
 
         rnd_next_obs = (
             (
-                (b_obs[:, 3, :, :].reshape(-1, 1, 84, 84) - torch.from_numpy(obs_rms.mean).to(device))
-                / torch.sqrt(torch.from_numpy(obs_rms.var).to(device))
+                (b_obs[:, 3, :, :].reshape(-1, 1, 84, 84) - torch.from_numpy(observation_running_mean_std.mean).to(device))
+                / torch.sqrt(torch.from_numpy(observation_running_mean_std.var).to(device))
             ).clip(-5, 5)
         ).float()
 
