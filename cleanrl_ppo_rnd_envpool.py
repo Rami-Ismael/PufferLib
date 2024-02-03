@@ -320,6 +320,7 @@ if __name__ == "__main__":
     )
     
     # Reward Calculation
+    reward_running_mean_std = RunningMeanStd()
     observation_running_mean_std = RunningMeanStd(shape=(1, 3, 72, 80))
     
 
@@ -387,9 +388,9 @@ for step in range(args.num_steps * args.num_iterations_obs_norm_init):
     next_ob += next_obs.tolist()
 
     if len(next_ob) % (args.num_steps * args.num_envs) == 0:
-        next_ob = np.stack(next_ob)
+        next_obs = np.stack(next_ob)
         observation_running_mean_std.update(next_obs)
-        next_ob: list = []
+        next_obs: list = []
 
         
     print("End to initialize...")
@@ -457,9 +458,9 @@ for step in range(args.num_steps * args.num_iterations_obs_norm_init):
             np.std(curiosity_reward_per_env),
             len(curiosity_reward_per_env),
         )
-        reward_rms.update_from_moments(mean, std**2, count)
+        reward_running_mean_std.update_from_moments(mean, std**2, count)
 
-        curiosity_rewards /= np.sqrt(reward_rms.var)
+        curiosity_rewards /= np.sqrt(reward_running_mean_std.var)
 
         # bootstrap value if not done
         with torch.no_grad():
