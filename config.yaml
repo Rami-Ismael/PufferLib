@@ -66,8 +66,6 @@ sweep:
         }
         anneal_lr: 
           values: [True , False]
-        punish_wipe_out:
-          values: [True , False]
         adding_noise_lineay_layer:
           values: [ True , False]
         num_envs: 
