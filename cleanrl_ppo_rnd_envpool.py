@@ -322,6 +322,7 @@ if __name__ == "__main__":
     # Reward Calculation
     reward_running_mean_std = RunningMeanStd()
     observation_running_mean_std = RunningMeanStd(shape=(1, 3, 72, 80))
+    discounted_reward = RewardForwardFilter(args.int_gamma)
     
 
     # ALGO Logic: Storage setup
