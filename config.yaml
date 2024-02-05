@@ -37,7 +37,7 @@ sweep:
   name: sweep
   early_terminate:
     type: hyperband
-    min_iter: 1  
+    min_iter: 2  
   metric:
     goal: maximize
     name: stats/number_of_uniqiue_coordinate_it_explored 
