@@ -44,7 +44,6 @@ class Performance:
 
 @pufferlib.dataclass
 class Losses:
-    dead_neuron_score = 0
     policy_loss = 0
     value_loss = 0
     entropy = 0
@@ -413,7 +412,6 @@ def train(data):
     # Optimizing the policy and value network
     train_time = time.time()
     pg_losses, entropy_losses, v_losses, clipfracs, old_kls, kls = [], [], [], [], [], []
-    dead_neuron_scores:list = []
     for epoch in range(config.update_epochs):
         lstm_state = None
         for mb in range(num_minibatches):
@@ -423,16 +421,7 @@ def train(data):
             mb_advantages = b_advantages[mb].reshape(-1)
             mb_returns = b_returns[mb].reshape(-1)
             
-            # Calculat the dormatn neuron
-            if lstm_state is not None:
-                dead_neuron_score:float = calculate_dormant_ratio(
-                    model = data.agent , 
-                    observation = mb_obs.detach(),
-                    state = (lstm_state[0].detach(), lstm_state[1].detach()),
-                    action = mb_actions.detach(),
-                    percentage = 0.025
-                )
-                dead_neuron_scores.append( dead_neuron_score)
+
 
             if hasattr(data.agent, 'lstm'):
                 _, newlogprob, entropy, newvalue, lstm_state = data.agent.get_action_and_value(
@@ -506,7 +495,6 @@ def train(data):
     explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
     losses = data.losses
-    losses.dead_neuron_score = np.mean(dead_neuron_score)
     losses.policy_loss = np.mean(pg_losses)
     losses.value_loss = np.mean(v_losses)
     losses.entropy = np.mean(entropy_losses)
