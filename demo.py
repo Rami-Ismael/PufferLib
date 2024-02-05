@@ -72,7 +72,8 @@ def init_wandb(args, env_module):
 
 def sweep(args, env_module, make_env):
     import wandb
-    sweep_id = wandb.sweep(sweep=args.sweep, project="pufferlib")
+    #sweep_id = wandb.sweep(sweep=args.sweep, project="pufferlib")
+    #print(f"Sweep ID: {sweep_id}")
 
     def main():
         try:
@@ -87,7 +88,10 @@ def sweep(args, env_module, make_env):
             import traceback
             traceback.print_exc()
 
-    wandb.agent(sweep_id, main, count=20)
+    wandb.agent(sweep_id = "0ftsqqbh", 
+                project="pufferlib",
+                function = main, 
+                count=40)
 
 def get_init_args(fn):
     if fn is None:
