@@ -338,17 +338,6 @@ def evaluate(data):
             data.stats[k] = np.mean(v)
         except:
             continue
-    ## Just add Check for the number of zeros in the model weights
-    try:
-        zero_param_counts = 0
-        for param in data.agent.parameters():
-            zero_param_counts += param.numel() - param.nonzero().size(0) 
-        data.stats["Debugging/zero_param_counts"] = zero_param_counts
-    except:
-        with open("error.txt", "a") as f:
-            print(f"Error in counting the number of zeros in the model weights", file=f)
-        pass
-
     if config.verbose:
         print_dashboard(data.stats, data.init_performance, data.performance)
 
