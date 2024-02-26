@@ -324,14 +324,7 @@ class Policy(pufferlib.models.Policy):
                  ):
         super().__init__(env)
         
-        self.flat_observation_space = env.flat_observation_space
-        self.flat_observation_structure = env.flat_observation_structure
-        print(
-            "flat_observation_space: ", self.flat_observation_space,
-            "\n"
-            "flat_observation_structure: ", self.flat_observation_structure
-        )
-        
+        self.unflatten_context = env.unflatten_context
         self.observation_space = env.structured_observation_space
         self.screen_observation_space = self.observation_space["screen"]
         self.num_actions = env.action_space.n
@@ -369,13 +362,12 @@ class Policy(pufferlib.models.Policy):
         # poke_ids (12, ) -> (12, 8)
         #self.player_row_embedding = nn.Embedding(444,16)
         #self.player_column_embedding = nn.Embedding(436,16)
-        self.last_projection = nn.LazyLinear( out_features = 512 ) if not adding_noise_lineay_layer else NoisyLazyLinear( out_features = 512 )
+        self.last_projection = nn.Linear( in_features = 42 , out_features = 512 ) if not adding_noise_lineay_layer else NoisyLazyLinear( out_features = 512 )
         self.actor = pufferlib.pytorch.layer_init(nn.Linear(output_size, self.num_actions), std=0.01) # Policy 
         self.value_fn = pufferlib.pytorch.layer_init(nn.Linear(output_size, 1), std=1)
         #self.value_fn = VNetwork(output_size, 512, 512)
     def encode_observations(self, env_outputs):
-        env_outputs = pufferlib.emulation.unpack_batched_obs(env_outputs,
-            self.flat_observation_space, self.flat_observation_structure)
+        env_outputs = pufferlib.emulation.unpack_batched_obs(env_outputs, self.unflatten_context)
         if self.channels_last:
             observations = env_outputs["screen"].permute(0, 3, 1, 2)
             #print("observations: ", observations.shape)
@@ -402,6 +394,7 @@ class Policy(pufferlib.models.Policy):
         if concat.dtype != torch.float32:
             concat = concat.to(torch.float32)
         assert concat.dtype == torch.float32, f"concat.dtype: {concat.dtype} it should be torch.float32"
+        print("concat: ", concat.shape)
         
         return F.relu(self.last_projection(concat)), None
         
