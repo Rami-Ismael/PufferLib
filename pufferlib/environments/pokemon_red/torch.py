@@ -320,13 +320,11 @@ class Policy(pufferlib.models.Policy):
                  flat_size = 64*5*6,
                  downsample = 1 , 
                  adding_noise_lineay_layer = False, 
-                 add_blur_pool: bool = False
                  ):
         super().__init__(env)
         
         self.unflatten_context = env.unflatten_context
         self.observation_space = env.structured_observation_space
-        self.screen_observation_space = self.observation_space["screen"]
         self.num_actions = env.action_space.n
         self.channels_last = True
         self.downsample = downsample
@@ -341,31 +339,8 @@ class Policy(pufferlib.models.Policy):
             pufferlib.pytorch.layer_init(nn.Linear(flat_size, hidden_size)) if not adding_noise_lineay_layer else pufferlib.pytorch.layer_init(NoisyLinear( in_features = flat_size , out_features = hidden_size)),
             nn.ReLU(),
         )
-        self.pokemon_levels_embedding = nn.Sequential(
-            nn.Embedding( num_embeddings = 128 , embedding_dim = 8),
-            nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear( in_features = 8*6 , out_features = 16)) if not adding_noise_lineay_layer else pufferlib.pytorch.layer_init(NoisyLinear( in_features = 8*6 , out_features = 16)),
-            nn.ReLU(),
-        )
-        self.batle_status_embedding = nn.Sequential(
-            nn.Embedding( num_embeddings = 4 , embedding_dim = 8),
-            nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear( in_features = 8 , out_features = 16)) if not adding_noise_lineay_layer else pufferlib.pytorch.layer_init(NoisyLinear( in_features = 8 , out_features = 16)),
-            nn.ReLU(),
-        )
-        self.pokemon_and_oppoent_party_ids_embedding = nn.Sequential(
-            nn.Embedding( num_embeddings = 256 , embedding_dim = 16),
-            nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear( in_features = 16*12 , out_features = 16)) if not adding_noise_lineay_layer else pufferlib.pytorch.layer_init(NoisyLinear( in_features = 16*12 , out_features = 16)),
-            nn.ReLU(),
-        )
-        # poke_ids (12, ) -> (12, 8)
-        #self.player_row_embedding = nn.Embedding(444,16)
-        #self.player_column_embedding = nn.Embedding(436,16)
-        self.last_projection = nn.Linear( in_features = 42 , out_features = 512 ) if not adding_noise_lineay_layer else NoisyLazyLinear( out_features = 512 )
         self.actor = pufferlib.pytorch.layer_init(nn.Linear(output_size, self.num_actions), std=0.01) # Policy 
         self.value_fn = pufferlib.pytorch.layer_init(nn.Linear(output_size, 1), std=1)
-        #self.value_fn = VNetwork(output_size, 512, 512)
     def encode_observations(self, env_outputs):
         env_outputs = pufferlib.emulation.unpack_batched_obs(env_outputs, self.unflatten_context)
         if self.channels_last:
@@ -373,31 +348,8 @@ class Policy(pufferlib.models.Policy):
             #print("observations: ", observations.shape)
         if self.downsample > 1:
             observations = observations[:, :, ::self.downsample, ::self.downsample]
-        #return self.network(observations.float() / 255.0), None
-        img = self.nature_cnn(observations.float() / 255.0)
-        # Change the data tyupe of each pomemon lelve
-        #print(env_outputs["each_pokemon_level"])
-        each_pokemon_level = env_outputs["each_pokemon_level"]
-        isinstance(each_pokemon_level, np.ndarray)
-        pokemon_level_embedding = self.pokemon_levels_embedding(each_pokemon_level.to(torch.long))
-        battle_embedding = self.batle_status_embedding(env_outputs["type_of_battle"].to(torch.long))
-        concat = torch.cat((img, 
-                                 env_outputs["party_size"] / 6.0 ,
-                                 env_outputs["player_row"] / 444, 
-                                 env_outputs["player_column"] / 436 , 
-                                 env_outputs["party_health_ratio"],
-                                 pokemon_level_embedding,
-                                 battle_embedding,
-                                 env_outputs["total_party_level"] / 600,
-                                 ), dim=-1)
-        assert not torch.isnan(concat).any()
-        if concat.dtype != torch.float32:
-            concat = concat.to(torch.float32)
-        assert concat.dtype == torch.float32, f"concat.dtype: {concat.dtype} it should be torch.float32"
-        print("concat: ", concat.shape)
-        
-        return F.relu(self.last_projection(concat)), None
-        
+        print(observations)
+        return self.nature_cnn( observations.float() / 255.0 ) , None
 
     def decode_actions(self, flat_hidden, lookup, concat=None):
         action = self.actor(flat_hidden)
