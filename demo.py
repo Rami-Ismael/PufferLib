@@ -11,7 +11,7 @@ import yaml
 import pufferlib
 import pufferlib.utils
 
-from clean_pufferl import CleanPuffeRL, rollout, done_training
+import clean_pufferl
 from rich import print
 
 
