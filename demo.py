@@ -1,5 +1,6 @@
 from pdb import set_trace as T
 import argparse
+import shutil
 import sys
 import os
 
@@ -48,11 +49,11 @@ def make_policy(env, env_module, args):
 
     return policy.to(args.train.device)
 
-def init_wandb(args, env_module):
+def init_wandb(args, env_module, name=None, resume=True):
     #os.environ["WANDB_SILENT"] = "true"
 
     import wandb
-    wandb.init(
+    return wandb.init(
         id=args.exp_name or wandb.util.generate_id(),
         project=args.wandb_project,
         entity=args.wandb_entity,
@@ -63,12 +64,11 @@ def init_wandb(args, env_module):
             'policy': args.policy,
             'recurrent': args.recurrent,
         },
-        name=args.config,
+        name=name or args.config,
         monitor_gym=True,
         save_code=True,
-        resume=True,
+        resume=resume,
     )
-    return wandb.run.id
 
 def sweep(args, env_module, make_env):
     import wandb
@@ -112,7 +112,7 @@ def get_init_args(fn):
 
 def train(args, env_module, make_env):
     if args.backend == 'clean_pufferl':
-        trainer = CleanPuffeRL(
+        data = clean_pufferl.create(
             config=args.train,
             agent_creator=make_policy,
             agent_kwargs={'env_module': env_module, 'args': args},
@@ -122,13 +122,13 @@ def train(args, env_module, make_env):
             exp_name=args.exp_name,
             track=args.track,
         )
-        print('Training...')
-        while not done_training(trainer):
-            trainer.evaluate()
-            trainer.train()
+
+        while not clean_pufferl.done_training(data):
+            clean_pufferl.evaluate(data)
+            clean_pufferl.train(data)
 
         print('Done training. Saving data...')
-        trainer.close()
+        clean_pufferl.close(data)
         print('Run complete')
     elif args.backend == 'sb3':
         from stable_baselines3 import PPO
@@ -152,11 +152,12 @@ if __name__ == '__main__':
     parser.add_argument('--backend', type=str, default='clean_pufferl', help='Train backend (clean_pufferl, sb3)')
     parser.add_argument('--config', type=str, default='pokemon_red', help='Configuration in config.yaml to use')
     parser.add_argument('--env', type=str, default=None, help='Name of specific environment to run')
-    parser.add_argument('--mode', type=str, default='train', help='train/sweep/evaluate')
+    parser.add_argument('--mode', type=str, default='train', choices='train sweep evaluate'.split())
     parser.add_argument('--eval-model-path', type=str, default=None, help='Path to model to evaluate')
+    parser.add_argument('--baseline', action='store_true', help='Baseline run')
     parser.add_argument('--no-render', action='store_true', help='Disable render during evaluate')
     parser.add_argument('--exp-name', type=str, default=None, help="Resume from experiment")
-    parser.add_argument('--vectorization', type=str, default='serial', help='Vectorization method (serial, multiprocessing, ray)')
+    parser.add_argument('--vectorization', type=str, default='serial', choices='serial multiprocessing ray'.split())
     parser.add_argument('--wandb-entity', type=str, default='compress_rl', help='WandB entity')
     parser.add_argument('--wandb-project', type=str, default='pufferlib', help='WandB project')
     parser.add_argument('--wandb-group', type=str, default='debug', help='WandB group')
@@ -220,7 +221,20 @@ if __name__ == '__main__':
     if args.mode == 'sweep':
         args.track = True
     elif args.track:
-        args.exp_name = init_wandb(args, env_module)
+        args.exp_name = init_wandb(args, env_module).id
+    elif args.baseline:
+        args.track = True
+        version = '.'.join(pufferlib.__version__.split('.')[:2])
+        args.exp_name = f'puf-{version}-{args.config}'
+        args.wandb_group = f'puf-{version}-baseline'
+        shutil.rmtree(f'experiments/{args.exp_name}', ignore_errors=True)
+        run = init_wandb(args, env_module, name=args.exp_name, resume=False)
+        if args.mode == 'evaluate':
+            model_name = f'puf-{version}-{args.config}_model:latest'
+            artifact = run.use_artifact(model_name)
+            data_dir = artifact.download()
+            model_file = max(os.listdir(data_dir))
+            args.eval_model_path = os.path.join(data_dir, model_file)
 
     if args.mode == 'train':
         train(args, env_module, make_env)

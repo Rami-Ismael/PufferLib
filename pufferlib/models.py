@@ -43,6 +43,9 @@ class Policy(nn.Module):
             self.observation_space = env.single_observation_space
             self.action_space = env.single_action_space
 
+        # Used to unflatten observation in forward pass
+        self.unflatten_context = env.unflatten_context
+
         self.is_multidiscrete = isinstance(self.action_space,
                 pufferlib.spaces.MultiDiscrete)
 
@@ -57,7 +60,7 @@ class Policy(nn.Module):
         function to unflatten observations to their original structured form:
 
         observations = pufferlib.emulation.unpack_batched_obs(
-            self.envs.structured_observation_space, env_outputs)
+            env_outputs, self.unflatten_context)
  
         Args:
             flat_observations: A tensor of shape (batch, ..., obs_size)
@@ -220,10 +223,9 @@ class Convolutional(Policy):
         action = self.actor(flat_hidden)
         value = self.value_fn(flat_hidden)
         return action, value
-    
-    
-# Impala Procegen Code from Clean RL Implementation
-# https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_procgen.py
+
+# ResNet Procgen baseline 
+# https://github.com/AIcrowd/neurips2020-procgen-starter-kit/blob/142d09586d2272a17f44481a115c4bd817cf6a94/models/impala_cnn_torch.py
 class ResidualBlock(nn.Module):
     def __init__(self, channels):
         super().__init__()
@@ -237,6 +239,7 @@ class ResidualBlock(nn.Module):
         x = nn.functional.relu(x)
         x = self.conv1(x)
         return x + inputs
+
 class ConvSequence(nn.Module):
     def __init__(self, input_shape, out_channels):
         super().__init__()
@@ -258,42 +261,35 @@ class ConvSequence(nn.Module):
         _c, h, w = self._input_shape
         return (self._out_channels, (h + 1) // 2, (w + 1) // 2)
 
-
-class Impala(Policy):
-    def __init__(self, env , *args , flat_size ,input_size = 256 ,   hidden_size = 256 ,  output_size = 256 , channels_last = False):
+class ProcgenResnet(Policy):
+    def __init__(self, env, cnn_width=16, mlp_width=256):
         super().__init__(env)
-        from rich import print
-        #h, w, c = env.box_observation_space.shape
-        # Permuate the shape observations = observations.permute(0, 3, 1, 2) if channels_last else observations
-        self.channels_last = channels_last
-        if self.channels_last:
-            #print(env.observation_space)
-            shape = (env.observation_space.shape[-1], env.observation_space.shape[0], env.observation_space.shape[1])
-        else:
-            shape = env.observation_space.shape
+        h, w, c = env.structured_observation_space.shape
+        shape = (c, h, w)
         conv_seqs = []
-        self.num_actions:int= self.action_space.n
-        
-        for out_channels in [16, 16 , 16 ]:
+        for out_channels in [cnn_width, 2*cnn_width, 2*cnn_width]:
             conv_seq = ConvSequence(shape, out_channels)
             shape = conv_seq.get_output_shape()
             conv_seqs.append(conv_seq)
         conv_seqs += [
             nn.Flatten(),
             nn.ReLU(),
-            nn.Linear(flat_size, hidden_size),
+            nn.Linear(in_features=shape[0] * shape[1] * shape[2], out_features=mlp_width),
             nn.ReLU(),
         ]
         self.network = nn.Sequential(*conv_seqs)
-        print(self.network)
-        self.actor = pufferlib.pytorch.layer_init(nn.Linear( output_size, self.num_actions), std=0.01)
-        self.critic = pufferlib.pytorch.layer_init(nn.Linear(output_size, 1), std=1) # Value Function 
-    def encode_observations(self, observations):
-        if self.channels_last:
-            observations = observations.permute(0, 3, 1, 2)
-        return self.network(observations.float() / 255.0), None
-    def decode_actions(self, flat_hidden, lookup, concat=None):
-        action = self.actor(flat_hidden)
-        value = self.critic(flat_hidden)
-        return action, value
+        self.actor = pufferlib.pytorch.layer_init(
+                nn.Linear(mlp_width, self.action_space.n), std=0.01)
+        self.value = pufferlib.pytorch.layer_init(
+                nn.Linear(mlp_width, 1), std=1)
 
+    def encode_observations(self, x):
+        x = pufferlib.emulation.unpack_batched_obs(x, self.unflatten_context)
+        hidden = self.network(x.permute((0, 3, 1, 2)) / 255.0)
+        return hidden, None
+ 
+    def decode_actions(self, hidden, lookup):
+        '''linear decoder function'''
+        action = self.actor(hidden)
+        value = self.value(hidden)
+        return action, value

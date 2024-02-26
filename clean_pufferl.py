@@ -41,6 +41,7 @@ class Performance:
     train_sps = 0
     train_memory = 0
     train_pytorch_memory = 0
+    misc_time = 0
 
 @pufferlib.dataclass
 class Losses:
@@ -58,7 +59,7 @@ class Charts:
     SPS = 0
     learning_rate = 0
 
-def init(
+def create(
         self: object = None,
         config: pufferlib.namespace = None,
         exp_name: str = None,
@@ -92,7 +93,6 @@ def init(
     total_updates = config.total_timesteps // config.batch_size
 
     device = config.device
-    obs_device = 'cpu' if config.cpu_offload else device
 
     # Create environments, agent, and optimizer
     init_profiler = pufferlib.utils.Profiler(memory=True)
@@ -104,6 +104,7 @@ def init(
             envs_per_worker=config.envs_per_worker,
             envs_per_batch=config.envs_per_batch,
             env_pool=config.env_pool,
+            mask_agents=True,
         )
 
     obs_shape = pool.single_observation_space.shape
@@ -131,6 +132,15 @@ def init(
 
     optimizer = optim.Adam(agent.parameters(),
         lr=config.learning_rate, eps=1e-5)
+
+    uncompiled_agent = agent # Needed to save the model
+    if config.compile:
+        agent = torch.compile(agent, mode=config.compile_mode)
+
+    if config.verbose:
+        n_params = sum(p.numel() for p in agent.parameters() if p.requires_grad)
+        print(f"Model Size: {n_params//1000} K parameters")
+
     opt_state = resume_state.get("optimizer_state_dict", None)
     if opt_state is not None:
         optimizer.load_state_dict(resume_state["optimizer_state_dict"])
@@ -153,13 +163,22 @@ def init(
             torch.zeros(shape).to(device),
             torch.zeros(shape).to(device),
         )
-    obs=torch.zeros(config.batch_size + 1, *obs_shape).to(obs_device)
-    actions=torch.zeros(config.batch_size + 1, *atn_shape, dtype=int).to(device)
-    logprobs=torch.zeros(config.batch_size + 1).to(device)
-    rewards=torch.zeros(config.batch_size + 1).to(device)
-    dones=torch.zeros(config.batch_size + 1).to(device)
-    truncateds=torch.zeros(config.batch_size + 1).to(device)
-    values=torch.zeros(config.batch_size + 1).to(device)
+    obs=torch.zeros(config.batch_size + 1, *obs_shape)
+    actions=torch.zeros(config.batch_size + 1, *atn_shape, dtype=int)
+    logprobs=torch.zeros(config.batch_size + 1)
+    rewards=torch.zeros(config.batch_size + 1)
+    dones=torch.zeros(config.batch_size + 1)
+    truncateds=torch.zeros(config.batch_size + 1)
+    values=torch.zeros(config.batch_size + 1)
+
+    obs_ary = np.asarray(obs)
+    actions_ary = np.asarray(actions)
+    logprobs_ary = np.asarray(logprobs)
+    rewards_ary = np.asarray(rewards)
+    dones_ary = np.asarray(dones)
+    truncateds_ary = np.asarray(truncateds)
+    values_ary = np.asarray(values)
+
     storage_profiler.stop()
 
     #"charts/actions": wandb.Histogram(b_actions.cpu().numpy()),
@@ -176,6 +195,7 @@ def init(
         config=config,
         pool = pool,
         agent = agent,
+        uncompiled_agent = uncompiled_agent,
         optimizer = optimizer,
         policy_pool = policy_pool,
 
@@ -196,13 +216,19 @@ def init(
         rewards = rewards,
         dones = dones,
         values = values,
+        obs_ary = obs_ary,
+        actions_ary = actions_ary,
+        logprobs_ary = logprobs_ary,
+        rewards_ary = rewards_ary,
+        dones_ary = dones_ary,
+        truncateds_ary = truncateds_ary,
+        values_ary = values_ary,
 
         # Misc
         total_updates = total_updates,
         update = update,
         global_step = global_step,
         device = device,
-        obs_device = obs_device,
         start_time = start_time,
     )
 
@@ -228,6 +254,7 @@ def evaluate(data):
     env_profiler = pufferlib.utils.Profiler()
     inference_profiler = pufferlib.utils.Profiler()
     eval_profiler = pufferlib.utils.Profiler(memory=True, pytorch_memory=True).start()
+    misc_profiler = pufferlib.utils.Profiler()
 
     ptr = step = padded_steps_collected = agent_steps_collected = 0
     infos = defaultdict(lambda: defaultdict(list))
@@ -239,16 +266,21 @@ def evaluate(data):
         with env_profiler:
             o, r, d, t, i, env_id, mask = data.pool.recv()
 
-        i = data.policy_pool.update_scores(i, "return")
+        with misc_profiler:
+            i = data.policy_pool.update_scores(i, "return")
+            # TODO: Update this for policy pool
+            for ii, ee  in zip(i['learner'], env_id):
+                ii['env_id'] = ee
+
 
         with inference_profiler, torch.no_grad():
             o = torch.as_tensor(o)
             r = torch.as_tensor(r).float().to(data.device).view(-1)
             d = torch.as_tensor(d).float().to(data.device).view(-1)
 
-        agent_steps_collected += sum(mask)
-        padded_steps_collected += len(mask)
-        with inference_profiler, torch.no_grad():
+            agent_steps_collected += sum(mask)
+            padded_steps_collected += len(mask)
+
             # Multiple policies will not work with new envpool
             next_lstm_state = data.next_lstm_state
             if next_lstm_state is not None:
@@ -267,31 +299,37 @@ def evaluate(data):
 
             value = value.flatten()
 
-        # Index alive mask with policy pool idxs...
-        # TODO: Find a way to avoid having to do this
-        learner_mask = mask * data.policy_pool.mask
+       
+        with misc_profiler:
+            actions = actions.cpu().numpy()
+     
+            # Index alive mask with policy pool idxs...
+            # TODO: Find a way to avoid having to do this
+            learner_mask = torch.Tensor(mask * data.policy_pool.mask)
 
-        for idx in np.where(learner_mask)[0]:
-            if ptr == config.batch_size + 1:
-                break
-            data.obs[ptr] = o[idx]
-            data.values[ptr] = value[idx]
-            data.actions[ptr] = actions[idx]
-            data.logprobs[ptr] = logprob[idx]
-            data.sort_keys.append((env_id[idx], step))
-            if len(d) != 0:
-                data.rewards[ptr] = r[idx]
-                data.dones[ptr] = d[idx]
-            ptr += 1
+            # Ensure indices do not exceed batch size
+            indices = torch.where(learner_mask)[0][:config.batch_size - ptr + 1].numpy()
+            end = ptr + len(indices)
 
+            # Batch indexing
+            data.obs_ary[ptr:end] = o.cpu().numpy()[indices]
+            data.values_ary[ptr:end] = value.cpu().numpy()[indices]
+            data.actions_ary[ptr:end] = actions[indices]
+            data.logprobs_ary[ptr:end] = logprob.cpu().numpy()[indices]
+            data.rewards_ary[ptr:end] = r.cpu().numpy()[indices]
+            data.dones_ary[ptr:end] = d.cpu().numpy()[indices]
+            data.sort_keys.extend([(env_id[i], step) for i in indices])
 
-        for policy_name, policy_i in i.items():
-            for agent_i in policy_i:
-                for name, dat in unroll_nested_dict(agent_i):
-                    infos[policy_name][name].append(dat)
+            # Update pointer
+            ptr += len(indices)
+
+            for policy_name, policy_i in i.items():
+                for agent_i in policy_i:
+                    for name, dat in unroll_nested_dict(agent_i):
+                        infos[policy_name][name].append(dat)
 
         with env_profiler:
-            data.pool.send(actions.cpu().numpy())
+            data.pool.send(actions)
 
     eval_profiler.stop()
 
@@ -310,30 +348,28 @@ def evaluate(data):
     perf.eval_sps = int(padded_steps_collected / eval_profiler.elapsed)
     perf.eval_memory = eval_profiler.end_mem
     perf.eval_pytorch_memory = eval_profiler.end_torch_mem
+    perf.misc_time = misc_profiler.elapsed
 
     data.stats = {}
-    for k, v in infos['learner'].items():
+    infos = infos['learner']
+
+    if 'pokemon_exploration_map' in infos:
+        for idx, pmap in zip(infos['env_id'], infos['pokemon_exploration_map']):
+            if not hasattr(data, 'pokemon'):
+                import pokemon_red_eval
+                data.map_updater = pokemon_red_eval.map_updater()
+                data.map_buffer = np.zeros((data.config.num_envs, *pmap.shape))
+
+            data.map_buffer[idx] = pmap
+
+        pokemon_map = np.sum(data.map_buffer, axis=0)
+        rendered = data.map_updater(pokemon_map)
+        data.stats['Media/exploration_map'] = data.wandb.Image(rendered)
+
+    for k, v in infos.items():
         if 'Task_eval_fn' in k:
-            # Temporary hack for NMMO competition
+            # Temporary hack for NMMO competitio
             continue
-        if 'pokemon_exploration_map' in k:
-            import cv2
-            from pokemon_red_eval import make_pokemon_red_overlay
-            background = cv2.imread('kanto_map_dsv.png')
-            try:
-                overlay = make_pokemon_red_overlay(background, sum(v))
-                if data.wandb is not None:
-                    data.stats['Media/exploration_map'] = data.wandb.Image(overlay)
-            except Exception as e:
-                # print(e , file="error.txt")
-                with open("error.txt", "a") as f:
-                    print(e, file=f)
-                    print(f"The type of error is {type(e)}", file =f)
-                    print(f"The type of v is {type(v)}", file=f)
-                    print(f"The type of background is {type(background)}", file=f)
-                    print(f"The shape of the background is {background.shape}", file=f)
-                continue
-            # @Leanke: Add your infos['learner']['x'] etc
         try: # TODO: Better checks on log data types
             data.stats[k] = np.mean(v)
         except:
@@ -353,7 +389,6 @@ def train(data):
     # assert data.num_steps % bptt_horizon == 0, "num_steps must be divisible by bptt_horizon"
     train_profiler = pufferlib.utils.Profiler(memory=True, pytorch_memory=True)
     train_profiler.start()
-
 
     if config.anneal_lr:
         frac = 1.0 - (data.update - 1.0) / data.total_updates
@@ -388,11 +423,15 @@ def train(data):
             )
 
     # Flatten the batch
-    data.b_obs = b_obs = data.obs[b_idxs]
-    b_actions = data.actions[b_idxs]
-    b_logprobs = data.logprobs[b_idxs]
-    b_dones = data.dones[b_idxs]
-    b_values = data.values[b_idxs]
+    data.b_obs = b_obs = torch.Tensor(data.obs_ary[b_idxs])
+    b_actions = torch.Tensor(data.actions_ary[b_idxs]
+        ).to(data.device, non_blocking=True)
+    b_logprobs = torch.Tensor(data.logprobs_ary[b_idxs]
+        ).to(data.device, non_blocking=True)
+    b_dones = torch.Tensor(data.dones_ary[b_idxs]
+        ).to(data.device, non_blocking=True)
+    b_values = torch.Tensor(data.values_ary[b_idxs]
+        ).to(data.device, non_blocking=True)
     b_advantages = advantages.reshape(
         config.batch_rows, num_minibatches, config.bptt_horizon
     ).transpose(0, 1)
@@ -401,10 +440,14 @@ def train(data):
     # Optimizing the policy and value network
     train_time = time.time()
     pg_losses, entropy_losses, v_losses, clipfracs, old_kls, kls = [], [], [], [], [], []
+    mb_obs_buffer = torch.zeros_like(b_obs[0], pin_memory=(data.device=="cuda"))
+
     for epoch in range(config.update_epochs):
         lstm_state = None
         for mb in range(num_minibatches):
-            mb_obs = b_obs[mb].to(data.device)
+            mb_obs_buffer.copy_(b_obs[mb], non_blocking=True)
+            mb_obs = mb_obs_buffer.to(data.device, non_blocking=True)
+            #mb_obs = b_obs[mb].to(data.device, non_blocking=True)
             mb_actions = b_actions[mb].contiguous()
             mb_values = b_values[mb].reshape(-1)
             mb_advantages = b_advantages[mb].reshape(-1)
@@ -413,11 +456,11 @@ def train(data):
 
 
             if hasattr(data.agent, 'lstm'):
-                _, newlogprob, entropy, newvalue, lstm_state = data.agent.get_action_and_value(
+                _, newlogprob, entropy, newvalue, lstm_state = data.agent(
                     mb_obs, state=lstm_state, action=mb_actions)
                 lstm_state = (lstm_state[0].detach(), lstm_state[1].detach())
             else:
-                _, newlogprob, entropy, newvalue = data.agent.get_action_and_value(
+                _, newlogprob, entropy, newvalue = data.agent(
                     mb_obs.reshape(-1, *data.pool.single_observation_space.shape),
                     action=mb_actions,
                 )
@@ -543,9 +586,9 @@ def rollout(env_creator, env_kwargs, agent_creator, agent_kwargs,
         ob = torch.tensor(ob).unsqueeze(0).to(device)
         with torch.no_grad():
             if hasattr(agent, 'lstm'):
-                action, _, _, _, state = agent.get_action_and_value(ob, state)
+                action, _, _, _, state = agent(ob, state)
             else:
-                action, _, _, _ = agent.get_action_and_value(ob)
+                action, _, _, _ = agent(ob)
 
         ob, reward, terminal, truncated, _ = env.step(action[0].item())
         return_val += reward
@@ -584,7 +627,7 @@ def save_checkpoint(data):
     if os.path.exists(model_path):
         return model_path
 
-    torch.save(data.agent, model_path)
+    torch.save(data.uncompiled_agent, model_path)
 
     state = {
         "optimizer_state_dict": data.optimizer.state_dict(),
@@ -650,87 +693,4 @@ def print_dashboard(stats, init_performance, performance):
     
     print("\033c", end="")
     print('\n'.join(output))
-
-def make_pokemon_red_overlay(bg, counts):
-    nonzero = np.where(counts > 0, 1, 0)
-    scaled = np.clip(counts, 0, 1000) / 1000.0
-
-    # Convert counts to hue map
-    hsv = np.zeros((*counts.shape, 3))
-    hsv[..., 0] = scaled*(240.0/360.0)
-    hsv[..., 1] = nonzero
-    hsv[..., 2] = nonzero
-
-    # Convert the HSV image to RGB
-    import matplotlib.colors as mcolors
-    overlay = 255*mcolors.hsv_to_rgb(hsv)
-
-    # Upscale to 16x16
-    kernel = np.ones((16, 16, 1), dtype=np.uint8)
-    overlay = np.kron(overlay, kernel).astype(np.uint8)
-    mask = np.kron(nonzero, kernel[..., 0]).astype(np.uint8)
-    mask = np.stack([mask, mask, mask], axis=-1).astype(bool)
-
-    # Combine with background
-    render = bg.copy().astype(np.int32)
-    render[mask] = 0.2*render[mask] + 0.8*overlay[mask]
-    render = np.clip(render, 0, 255).astype(np.uint8)
-    return render
-class LinearOutputHook:
-    def __init__(self):
-        self.outputs = []
-
-    def __call__(self, module, module_in, module_out):
-        self.outputs.append(module_out)
-
-def calculate_dormant_ratio(model, 
-                        observation,
-                            state,
-                            action,
-                            percentage=0.025) -> float:
-    hooks = []
-    hook_handlers = []
-    total_neurons = 0
-    dormant_neurons = 0
-
-    for _, module in model.named_modules():
-        if isinstance(module, nn.Linear):
-            hook = LinearOutputHook()
-            hooks.append(hook)
-            hook_handlers.append(module.register_forward_hook(hook))
-
-    with torch.no_grad():
-            if hasattr( model, "lstm"):
-                _ = model.get_action_and_value(
-                    observation , 
-                    state = state, 
-                    action = action
-                )
-
-    for module, hook in zip(
-        (module
-         for module in model.modules() if isinstance(module, nn.Linear)),
-            hooks):
-        with torch.no_grad():
-            for output_data in hook.outputs:
-                mean_output = output_data.abs().mean(0)
-                avg_neuron_output = mean_output.mean()
-                dormant_indices = (mean_output < avg_neuron_output *
-                                   percentage).nonzero(as_tuple=True)[0]
-                total_neurons += module.weight.shape[0]
-                dormant_neurons += len(dormant_indices)         
-
-    for hook in hooks:
-        hook.outputs.clear()
-
-    for hook_handler in hook_handlers:
-        hook_handler.remove()
-
-    return dormant_neurons / total_neurons
-
-class CleanPuffeRL:
-    __init__ = init
-    evaluate = evaluate
-    train = train
-    close = close
-    done_training = done_training
+    time.sleep(1/20)
