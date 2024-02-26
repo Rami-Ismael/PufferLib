@@ -3,6 +3,14 @@ import pufferlib.models
 import math
 import warnings
 
+
+import pufferlib
+import pufferlib.emulation
+import pufferlib.models
+import pufferlib.pytorch
+from pufferlib.environments import try_import
+
+
 from typing import Optional, Sequence, Union
 
 class Recurrent(pufferlib.models.RecurrentWrapper):
@@ -73,33 +81,6 @@ class CReLU(nn.Module):
         
     def forward(self, x):
         return torch.cat((F.relu(x), F.relu(-x)), dim=1)
-    
-    
-'''
-class VNetwork(nn.Module):
-    def __init__(self, repr_dim, feature_dim, hidden_dim):
-        super().__init__()
-
-        self.trunk = nn.Sequential(pufferlib.pytorch.layer_init(nn.Linear(repr_dim, feature_dim), std=1.0),
-                                   nn.LayerNorm(feature_dim), nn.Tanh())
-
-        self.V = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear(feature_dim, hidden_dim) , std=1.0),
-            nn.ReLU(inplace=True),
-            pufferlib.pytorch.layer_init(nn.Linear(hidden_dim, hidden_dim), std = 1.0),
-            nn.ReLU(inplace=True),
-            pufferlib.pytorch.layer_init(nn.Linear(hidden_dim, 1), std=1.0)
-        )
-                               
-        self.apply(utils.weight_init)
-
-    def forward(self, obs):
-        h = self.trunk(obs)
-        v = self.V(h)
-        return v
-'''
-
-
 class NoisyLinear(nn.Linear):
     """Noisy Linear Layer.
 
@@ -324,7 +305,6 @@ class Policy(pufferlib.models.Policy):
         super().__init__(env)
         
         self.unflatten_context = env.unflatten_context
-        self.observation_space = env.structured_observation_space
         self.num_actions = env.action_space.n
         self.channels_last = True
         self.downsample = downsample
@@ -345,14 +325,11 @@ class Policy(pufferlib.models.Policy):
         env_outputs = pufferlib.emulation.unpack_batched_obs(env_outputs, self.unflatten_context)
         if self.channels_last:
             observations = env_outputs["screen"].permute(0, 3, 1, 2)
-            #print("observations: ", observations.shape)
         if self.downsample > 1:
             observations = observations[:, :, ::self.downsample, ::self.downsample]
-        print(observations)
         return self.nature_cnn( observations.float() / 255.0 ) , None
 
     def decode_actions(self, flat_hidden, lookup, concat=None):
         action = self.actor(flat_hidden)
         value = self.value_fn(flat_hidden)
         return action, value
-        
