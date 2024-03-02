@@ -1,7 +1,7 @@
 train:
   seed: 1
   torch_deterministic: True
-  device: cpu 
+  device: cuda 
   total_timesteps: 5_000_000
   learning_rate: 2.5e-4
   num_steps: 128
@@ -30,7 +30,7 @@ train:
   batch_rows: 32
   bptt_horizon: 16 #8
   vf_clip_coef: 0.1
-  compile: False
+  compile: True  # superceded by pokemon_red package`` 
   compile_mode: reduce-overhead
 
 sweep:
@@ -711,13 +711,13 @@ pokemon_red:
   package: pokemon_red
   train:
     total_timesteps: 100_000_000
-    num_envs: 256
-    envs_per_worker: 8
-    envs_per_batch: 48 
+    num_envs: 512 
+    envs_per_worker: 4
+    envs_per_batch: 120  # must be divisible by envs_per_worker
     update_epochs: 3
     gamma: 0.998
-    batch_size: 32768
-    batch_rows: 256
+    batch_size: 65536 
+    batch_rows: 512
     compile: True 
   env:
     name: pokemon_red
