@@ -606,11 +606,11 @@ def rollout(env_creator, env_kwargs, agent_creator, agent_kwargs,
 
 def done_training(data):
     try:
-        if data.losses.explained_variance < -.2:
-            print("Explain variance is smaller than -.1")
+        if data.losses.explained_variance < -.3:
+            print("Explain variance is smaller than -.3")
             return True
-        if data.losses.policy_loss > .2:
-            print("Policy loss is bigger than .1")
+        if data.losses.policy_loss > .3:
+            print("Policy loss is bigger than .3")
             return True , "Policy loss is high"
     except Exception as e:
         with open("error.txt", "a") as f:
