@@ -1,7 +1,7 @@
 train:
   seed: 1
   torch_deterministic: True
-  device: cuda 
+  device: cpu 
   total_timesteps: 5_000_000
   learning_rate: 2.5e-4
   num_steps: 128
@@ -711,9 +711,9 @@ pokemon_red:
   package: pokemon_red
   train:
     total_timesteps: 100_000_000
-    num_envs: 512 
+    num_envs: 512
     envs_per_worker: 4
-    envs_per_batch: 120  # must be divisible by envs_per_worker
+    envs_per_batch: 128  # must be divisible by envs_per_worker
     update_epochs: 3
     gamma: 0.998
     batch_size: 65536 
@@ -729,6 +729,20 @@ pokemon:
   package: pokemon_red
 pokegym:
   package: pokemon_red
+local_test_pokemon_red:
+  package: pokemon_red
+  train:
+    total_timesteps: 100_000_000
+    num_envs: 64
+    envs_per_worker: 4
+    envs_per_batch: 48
+    update_epochs: 3
+    gamma: 0.998
+    batch_size: 32768
+    batch_rows: 128
+    compile: False
+  env:
+    name: pokemon_red
 links_awaken:
   package: links_awaken
 links-awaken:
