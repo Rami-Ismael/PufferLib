@@ -364,7 +364,8 @@ def evaluate(data):
 
         pokemon_map = np.sum(data.map_buffer, axis=0)
         rendered = data.map_updater(pokemon_map)
-        data.stats['Media/exploration_map'] = data.wandb.Image(rendered)
+        if data.wandb is not None:
+            data.stats['Media/exploration_map'] = data.wandb.Image(rendered)
 
     for k, v in infos.items():
         if 'Task_eval_fn' in k:
