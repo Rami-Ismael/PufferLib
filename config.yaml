@@ -1,7 +1,7 @@
 train:
   seed: 1
   torch_deterministic: True
-  device: cpu 
+  device: cuda 
   total_timesteps: 5_000_000
   learning_rate: 2.5e-4
   num_steps: 128
@@ -713,12 +713,14 @@ pokemon_red:
     total_timesteps: 100_000_000
     num_envs: 512
     envs_per_worker: 4
-    envs_per_batch: 128  # must be divisible by envs_per_worker
+    envs_per_batch: 128 # must be divisible by envs_per_worker
     update_epochs: 3
     gamma: 0.998
     batch_size: 65536 
     batch_rows: 512
     compile: True 
+    device: cuda
+    compile_mode: reduce-overhead
   env:
     name: pokemon_red
 pokemon-red:
@@ -741,6 +743,8 @@ local_test_pokemon_red:
     batch_size: 1024
     batch_rows: 64
     compile: False
+    device: cpu
+
   env:
     name: pokemon_red
 links_awaken:
