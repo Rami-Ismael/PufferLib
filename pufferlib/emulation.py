@@ -508,7 +508,8 @@ def check_space(data, space):
 
     if not contains:
         raise exceptions.APIUsageError(
-            f'Data:\n{data}\n not in space:\n{space}')
+            f'Data:\n{data}\n not in space:\n{space} the data type is {type(data)} the shape is {data.shape}'
+        )
         raise ValueError(
             f'Data:\n{data}\n not in space:\n{space} the min and max data is {data.min()} and {data.max()} the shape is {data.shape}')
     
