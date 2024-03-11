@@ -378,8 +378,9 @@ for step in range(args.num_steps * args.num_iterations_obs_norm_init):
         #observation_running_mean_std.update(next_ob)
         next_observation = []
     '''
-    obs, reward, dones, truncateds, infos, env_ids, maks = envs.step(
-        random_action)
+    #obs, reward, dones, truncateds, infos, env_ids, maks = envs.step(
+    #    random_action)
+    obs , reward , done , done, info  = envs.step(random_action)
     # Un bach the results
     isinstance(obs, np.ndarray), "The observation is not a numpy array"
     next_obs = np.transpose(envs.unpack_batched_obs(obs)[
