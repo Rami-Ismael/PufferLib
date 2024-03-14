@@ -13,7 +13,7 @@ import pufferlib.utils
 def env_creator(name='BreakoutNoFrameskip-v4'):
     return functools.partial(make, name)
 
-def make(name, framestack=4, render_mode='rgb_array'):
+def make(name, framestack=4, render_mode='rgb_array', capture_video=False, run_name=None):
     '''Atari creation function with default CleanRL preprocessing based on Stable Baselines3 wrappers'''
     pufferlib.environments.try_import('ale_py', 'atari')
     from stable_baselines3.common.atari_wrappers import (
@@ -24,7 +24,8 @@ def make(name, framestack=4, render_mode='rgb_array'):
     )
     with pufferlib.utils.Suppress():
         env = gym.make(name, render_mode=render_mode)
-
+    if capture_video:
+        env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
     env = gym.wrappers.RecordEpisodeStatistics(env)
     env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=4)
