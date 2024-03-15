@@ -15,12 +15,14 @@ def env_creator(name='pokemon_red'):
 
 def make(name:str="pokemon_red", headless: bool = True, state_path=None , 
          punish_wipe_out:bool =True  ,
+         framestack:int = 4
          ):
     '''Pokemon Red'''
     env = Environment(headless=headless, 
                       state_path=state_path , 
                         punish_wipe_out=punish_wipe_out
                       )
-    #print('env', env)
+    if framestack != -1:
+      env = gymnasium.wrappers.FrameStack(env, framestack)
     return pufferlib.emulation.GymnasiumPufferEnv(env=env,
         postprocessor_cls=pufferlib.emulation.BasicPostprocessor)
