@@ -37,7 +37,6 @@ class PolicyPool:
             total_agents, *atn_shape, dtype=int).to(device)
         self.logprobs = torch.zeros(total_agents).to(device)
         self.values = torch.zeros(total_agents).to(device)
-
         # Create policy sample indices and mask
         assert total_agents % len(kernel) == 0
         self.kernel = kernel * (total_agents // len(kernel))
@@ -77,7 +76,13 @@ class PolicyPool:
             if lstm_state is not None:
                 h = lstm_state[0][:, samp]
                 c = lstm_state[1][:, samp]
-                atn, lgprob, _, val, (h, c) = policy(obs[samp], (h, c))
+                try:
+                    atn, lgprob, _, val, (h, c) , hidns = policy( x = obs[samp],  state  = (h, c)) # this will feed into the reccurrent wrapper 
+                except ValueError as e:
+                    print(e)
+                    print( len(policy(obs[samp] ,  ( h , c) ) ))
+                    print( policy(obs[samp] ,  ( h , c) ).keys())
+                    print( policy(obs[samp] ,  ( h , c) ) )
                 lstm_state[0][:, samp] = h
                 lstm_state[1][:, samp] = c
             else:
