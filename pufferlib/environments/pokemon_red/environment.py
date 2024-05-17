@@ -15,14 +15,17 @@ def env_creator(name='pokemon_red'):
 
 def make(name:str="pokemon_red", headless: bool = True, state_path=None , 
          punish_wipe_out:bool =True  ,
-         framestack:int = 4
+         framestack:int = -1,
          ):
     '''Pokemon Red'''
     env = Environment(headless=headless, 
                       state_path=state_path , 
                         punish_wipe_out=punish_wipe_out
                       )
-    if framestack != -1:
+    if framestack > 1:
+      # Flatten the observation space
+      flattened_obs = env.observation_space.sample()
+      print(f"Flattening observation space from {env.observation_space} to {flattened_obs}")
       env = gymnasium.wrappers.FrameStack(env, framestack)
     return pufferlib.emulation.GymnasiumPufferEnv(env=env,
         postprocessor_cls=pufferlib.emulation.BasicPostprocessor)
