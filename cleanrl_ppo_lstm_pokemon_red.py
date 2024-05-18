@@ -13,6 +13,7 @@ import torch.optim as optim
 import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
+import pdb
 
 from stable_baselines3.common.atari_wrappers import (  # isort:skip
     ClipRewardEnv,
@@ -33,11 +34,11 @@ class Args:
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
     """if toggled, cuda will be enabled by default"""
-    track: bool = False
+    track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL"
+    wandb_project_name: str = "pufferlib"
     """the wandb's project name"""
-    wandb_entity: str = None
+    wandb_entity: str = "compress_rl"
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
@@ -53,7 +54,7 @@ class Args:
     """the number of parallel game environments"""
     num_steps: int = 128
     """the number of steps to run in each environment per policy rollout"""
-    anneal_lr: bool = True
+    anneal_lr: bool = False
     """Toggle learning rate annealing for policy and value networks"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -155,10 +156,10 @@ class Agent(nn.Module):
 
         # LSTM logic
         batch_size = lstm_state[0].shape[1]
-        hidden = hidden.reshape((-1, batch_size, self.lstm.input_size))
+        hidden_reshape = hidden.reshape((-1, batch_size, self.lstm.input_size))
         done = done.reshape((-1, batch_size))
         new_hidden = []
-        for h, d in zip(hidden, done):
+        for h, d in zip(hidden_reshape, done):
             h, lstm_state = self.lstm(
                 h.unsqueeze(0),
                 (
@@ -168,19 +169,19 @@ class Agent(nn.Module):
             )
             new_hidden += [h]
         new_hidden = torch.flatten(torch.cat(new_hidden), 0, 1)
-        return new_hidden, lstm_state
+        return new_hidden, lstm_state , hidden
 
     def get_value(self, x, lstm_state, done):
-        hidden, _ = self.get_states(x, lstm_state, done)
+        hidden, _ , _ = self.get_states(x, lstm_state, done)
         return self.critic(hidden)
 
     def get_action_and_value(self, x, lstm_state, done, action=None):
-        hidden, lstm_state = self.get_states(x, lstm_state, done)
-        logits = self.actor(hidden)
+        lstm_hidden, lstm_state , hidden = self.get_states(x, lstm_state, done)
+        logits = self.actor(lstm_hidden)
         probs = Categorical(logits=logits)
         if action is None:
             action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden), lstm_state
+        return action, probs.log_prob(action), probs.entropy(), self.critic(lstm_hidden), lstm_state , lstm_hidden , hidden 
 
 
 if __name__ == "__main__":
@@ -236,6 +237,7 @@ if __name__ == "__main__":
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    hiddens = torch.zeros((args.num_steps, args.num_envs , 512)).to(device)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
@@ -263,10 +265,11 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state, next_done)
+                action, logprob, _, value, next_lstm_state , lstmhidden , hidden = agent.get_action_and_value(next_obs, next_lstm_state, next_done)
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
+            hiddens[step] = hidden
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
@@ -309,6 +312,16 @@ if __name__ == "__main__":
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
+        b_hiddens = hiddens.reshape(args.num_steps , -1)
+        assert hiddens.shape == ( args.num_steps , args.num_envs , 512)
+        # Take the average of the number of dead nueorns in the hiddesn states
+        #pdb.set_trace()
+        #dead_nuerons = ( (b_hiddens == 0).sum(dim=1).sum() / args.num_envs).sum().item()
+        dead_neurons = [None] * args.num_steps
+        for i in range(args.num_steps):
+            dead_neurons[i] = (b_hiddens[i] == 0 ).sum().item() /  args.num_envs
+        dead_neurons = np.mean(dead_neurons)
+        assert dead_neurons >= 0 , pdb.set_trace()
 
         # Optimizing the policy and value network
         assert args.num_envs % args.num_minibatches == 0
@@ -323,7 +336,7 @@ if __name__ == "__main__":
                 mbenvinds = envinds[start:end]
                 mb_inds = flatinds[:, mbenvinds].ravel()  # be really careful about the index
 
-                _, newlogprob, entropy, newvalue, _ = agent.get_action_and_value(
+                _, newlogprob, entropy, newvalue, _ , _ , _ = agent.get_action_and_value(
                     b_obs[mb_inds],
                     (initial_lstm_state[0][:, mbenvinds], initial_lstm_state[1][:, mbenvinds]),
                     b_dones[mb_inds],
@@ -369,6 +382,7 @@ if __name__ == "__main__":
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
+                
 
             if args.target_kl is not None and approx_kl > args.target_kl:
                 break
@@ -376,7 +390,8 @@ if __name__ == "__main__":
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
-
+        #writer.add_scalar('charts/dead_neuron_in_hiddnes"', 
+        writer.add_scalar('charts/dead_neuron_in_hiddnes', dead_neurons, global_step)
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
         writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
