@@ -322,6 +322,7 @@ if __name__ == "__main__":
             dead_neurons[i] = (b_hiddens[i] == 0 ).sum().item() /  args.num_envs
         dead_neurons = np.mean(dead_neurons)
         assert dead_neurons >= 0 , pdb.set_trace()
+        assert dead_neurons == (b_hiddens == 0).mean(dim=1).mean().item()
 
         # Optimizing the policy and value network
         assert args.num_envs % args.num_minibatches == 0
