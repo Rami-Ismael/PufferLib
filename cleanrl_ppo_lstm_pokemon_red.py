@@ -34,7 +34,7 @@ class Args:
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
     """if toggled, cuda will be enabled by default"""
-    track: bool = True
+    track: bool = False 
     """if toggled, this experiment will be tracked with Weights and Biases"""
     wandb_project_name: str = "pufferlib"
     """the wandb's project name"""
@@ -283,6 +283,20 @@ if __name__ == "__main__":
                         print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+            try :
+                assert isinstance(infos , list)
+                for index , element in enumerate( infos):
+                    if isinstance(element , dict):
+                        for key , value in element.items():
+                            if "mask"!=key and "episode"!=key and not isinstance(value , np.ndarray) and not isinstance(value , dict):
+                                writer.add_scalar(f"stats/{key}", value, global_step)
+            except Exception as e:
+                print(e)
+                pdb.set_trace()
+                
+                
+            
+            
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -317,12 +331,12 @@ if __name__ == "__main__":
         # Take the average of the number of dead nueorns in the hiddesn states
         #pdb.set_trace()
         #dead_nuerons = ( (b_hiddens == 0).sum(dim=1).sum() / args.num_envs).sum().item()
-        dead_neurons = [None] * args.num_steps
+        dead_neurons_list = [None] * args.num_steps
         for i in range(args.num_steps):
-            dead_neurons[i] = (b_hiddens[i] == 0 ).sum().item() /  args.num_envs
-        dead_neurons = np.mean(dead_neurons)
+            dead_neurons_list[i] = (b_hiddens[i] == 0 ).sum().item() /  args.num_envs
+        dead_neurons = np.mean(dead_neurons_list)
         assert dead_neurons >= 0 , pdb.set_trace()
-        assert dead_neurons == (b_hiddens == 0).mean(dim=1).mean().item()
+        assert dead_neurons == torch.div((b_hiddens == 0).float().sum(dim=1) , args.num_envs).mean().item() , pdb.set_trace()
 
         # Optimizing the policy and value network
         assert args.num_envs % args.num_minibatches == 0
