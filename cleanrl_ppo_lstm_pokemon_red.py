@@ -281,6 +281,7 @@ if __name__ == "__main__":
             actions[step] = action
             logprobs[step] = logprob
             hiddens[step] = hidden
+            
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
@@ -304,6 +305,10 @@ if __name__ == "__main__":
             except Exception as e:
                 print(e)
                 pdb.set_trace()
+            
+            # Track the variance of the onp policy rollout for the critic / value neural network
+            writer.add_histogram("average_state_value" , values.mean().cpu() , global_step)
+            writer.add_histogram("std_state_value" , values.std().cpu() , global_step)
                 
                 
             

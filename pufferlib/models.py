@@ -160,7 +160,6 @@ class RecurrentWrapper(Policy):
 
             hidden = hidden.transpose(0, 1)
             hidden = hidden.reshape(B*TT, self.hidden_size)
-
         elif state is None:
             state = self.recurrent.get_state(x)  # dummy LSTM & state
 
