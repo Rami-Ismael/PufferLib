@@ -181,7 +181,10 @@ class Agent(nn.Module):
         probs = Categorical(logits=logits)
         if action is None:
             action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(lstm_hidden), lstm_state , lstm_hidden , hidden 
+        mean_policy = probs.probs.mean(dim=0)  # (A,) Mean across states for each action/policy_param.
+        policy_vars = probs.probs.var(dim=0)  # (A,) Variance across states for each action/policy_param.
+        policy_var = policy_vars.mean()  # Average variance of an action/parameter across states; policy variance.
+        return action, probs.log_prob(action), probs.entropy(), self.critic(lstm_hidden), lstm_state , lstm_hidden , hidden  ,  {"mean_policy": mean_policy , "policy_vars":policy_var , "policy_var": policy_var}
 
 
 if __name__ == "__main__":
@@ -265,8 +268,16 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                action, logprob, _, value, next_lstm_state , lstmhidden , hidden = agent.get_action_and_value(next_obs, next_lstm_state, next_done)
+                action, logprob, _, value, next_lstm_state , lstmhidden , hidden , policy_diversity = agent.get_action_and_value(next_obs, next_lstm_state, next_done)
                 values[step] = value.flatten()
+                try:
+                    # Make sure numpy array stay 1.12.5 # https://github.com/WongKinYiu/PyTorch_YOLOv4/issues/426 the .5 was a mistake it should have been .4 however i am to lazy
+                    writer.add_histogram("means_hist_wandb", policy_diversity["mean_policy"].cpu() , step)
+                    writer.add_histogram("policy_vars", policy_diversity["policy_vars"].cpu().numpy() , step)
+                    writer.add_histogram("policy_var", policy_diversity["policy_var"].cpu().numpy() , step)
+                except Exception as e:
+                    print(e)
+                    pdb.set_trace()
             actions[step] = action
             logprobs[step] = logprob
             hiddens[step] = hidden
@@ -351,7 +362,7 @@ if __name__ == "__main__":
                 mbenvinds = envinds[start:end]
                 mb_inds = flatinds[:, mbenvinds].ravel()  # be really careful about the index
 
-                _, newlogprob, entropy, newvalue, _ , _ , _ = agent.get_action_and_value(
+                _, newlogprob, entropy, newvalue, _ , _ , _, _ = agent.get_action_and_value(
                     b_obs[mb_inds],
                     (initial_lstm_state[0][:, mbenvinds], initial_lstm_state[1][:, mbenvinds]),
                     b_dones[mb_inds],
