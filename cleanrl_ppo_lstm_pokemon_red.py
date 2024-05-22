@@ -307,8 +307,8 @@ if __name__ == "__main__":
                 pdb.set_trace()
             
             # Track the variance of the onp policy rollout for the critic / value neural network
-            writer.add_histogram("average_state_value" , values.mean().cpu() , global_step)
-            writer.add_histogram("std_state_value" , values.std().cpu() , global_step)
+            writer.add_scaler("average_state_value" , values.mean().cpu() , global_step)
+            writer.add_scaler("std_state_value" , values.std().cpu() , global_step)
                 
                 
             
