@@ -273,8 +273,10 @@ if __name__ == "__main__":
                 try:
                     # Make sure numpy array stay 1.12.5 # https://github.com/WongKinYiu/PyTorch_YOLOv4/issues/426 the .5 was a mistake it should have been .4 however i am to lazy
                     writer.add_histogram("means_hist_wandb", policy_diversity["mean_policy"].cpu() , step)
-                    writer.add_histogram("policy_vars", policy_diversity["policy_vars"].cpu().numpy() , step)
-                    writer.add_histogram("policy_var", policy_diversity["policy_var"].cpu().numpy() , step)
+                    #writer.add_histogram("policy_vars", policy_diversity["policy_vars"].cpu().numpy() , step)
+                    #writer.add_histogram("policy_var", policy_diversity["policy_var"].cpu().numpy() , step)
+                    # Hidden shape if (num_agents , hidden_shape_size which)
+                    writer.add_scalar("feature_stats/norm_feature" , torch.norm(hiddens , dim = -1).mean(dim=-1))
                 except Exception as e:
                     print(e)
                     pdb.set_trace()
@@ -309,8 +311,6 @@ if __name__ == "__main__":
             # Track the variance of the onp policy rollout for the critic / value neural network
             writer.add_scalar("average_state_value" , values.mean().cpu() , global_step)
             writer.add_scalar("std_state_value" , values.std().cpu() , global_step)
-                
-                
             
             
 
