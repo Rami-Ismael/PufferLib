@@ -276,7 +276,7 @@ if __name__ == "__main__":
                     #writer.add_histogram("policy_vars", policy_diversity["policy_vars"].cpu().numpy() , step)
                     #writer.add_histogram("policy_var", policy_diversity["policy_var"].cpu().numpy() , step)
                     # Hidden shape if (num_agents , hidden_shape_size which)
-                    writer.add_scalar("feature_stats/norm_feature" , torch.norm(hiddens , dim = -1).mean(dim=-1))
+                    writer.add_scalar("feature_stats/norm_feature" , torch.norm(hidden , dim = -1).mean(dim=-1))
                 except Exception as e:
                     print(e)
                     pdb.set_trace()
