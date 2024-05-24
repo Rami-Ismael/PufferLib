@@ -132,3 +132,10 @@ dmypy.json
 
 # ROMs
 *.gb
+# Tensors
+*.pt*
+*elo*
+**tfevents**
+**wandb**
+**video-episode**
+**mpy4**
