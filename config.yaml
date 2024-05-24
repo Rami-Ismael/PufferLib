@@ -13,7 +13,7 @@ default:
     seed: 1
     torch_deterministic: True
     cpu_offload: False
-    device: cuda
+    device: cpu 
     total_timesteps: 10_000_000
     learning_rate: 2.5e-4
     num_steps: 128
@@ -750,6 +750,8 @@ pokedebug:
     batch_size: 2048
     minibatch_size: 256
     compile: False
+    device: cpu
+  
  
 links_awaken:
   package: links_awaken

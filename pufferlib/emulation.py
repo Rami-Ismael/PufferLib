@@ -9,15 +9,18 @@ import inspect
 import pufferlib
 import pufferlib.spaces
 from pufferlib import utils, exceptions
-from pufferlib.extensions import emulate, nativize
-
+from pufferlib.extensions import  nativize
 from pufferlib.spaces import Discrete, Tuple, Dict
 
 
 def _emulate(arr, sample):
     if isinstance(sample, dict):
         for k, v in sample.items():
-            _emulate(arr[k], v)
+            try:
+                _emulate(arr[k], v)
+            except ValueError as e:
+                print("The error is", e)
+                T()
     elif isinstance(sample, tuple):
         for i, v in enumerate(sample):
             _emulate(arr[f'f{i}'], v)

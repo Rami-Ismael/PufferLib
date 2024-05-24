@@ -9,12 +9,6 @@ from torch.distributions import Categorical
 import pufferlib.emulation
 import pufferlib.pytorch
 import pufferlib.spaces
-
-import math
-
-import math
-
-
 class Default(nn.Module):
     '''Default PyTorch policy. Flattens obs and applies a linear layer.
 
@@ -152,7 +146,11 @@ class Convolutional(nn.Module):
 
     def encode_observations(self, observations):
         if self.channels_last:
-            observations = observations.permute(0, 3, 1, 2)
+            try:
+                observations = observations.permute(0, 3, 1, 2)
+            except Exception as e:
+                print(e)
+                T()
         if self.downsample > 1:
             observations = observations[:, :, ::self.downsample, ::self.downsample]
         return self.network(observations.float() / 255.0), None
