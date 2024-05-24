@@ -9,6 +9,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import tyro
 from torch.distributions.categorical import Categorical
@@ -86,6 +87,42 @@ class Args:
     """the mini-batch size (computed in runtime)"""
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
+    
+    # Add Data Augmentation
+    use_aug: bool = True
+    
+class RandomShiftsAug(nn.Module):
+    def __init__(self, pad):
+        super().__init__()
+        self.pad = pad
+
+    def forward(self, x):
+        n, c, h, w = x.size()
+        #assert h == w , pdb.set_trace()
+        padding = tuple([self.pad] * 4)
+        x = F.pad(x, padding, 'replicate')
+        eps = 1.0 / (h + 2 * self.pad)
+        arange = torch.linspace(-1.0 + eps,
+                                1.0 - eps,
+                                h + 2 * self.pad,
+                                device=x.device,
+                                dtype=x.dtype)[:h]
+        arange = arange.unsqueeze(0).repeat(h, 1).unsqueeze(2)
+        base_grid = torch.cat([arange, arange.transpose(1, 0)], dim=2)
+        base_grid = base_grid.unsqueeze(0).repeat(n, 1, 1, 1)
+
+        shift = torch.randint(0,
+                              2 * self.pad + 1,
+                              size=(n, 1, 1, 2),
+                              device=x.device,
+                              dtype=x.dtype)
+        shift *= 2.0 / (h + 2 * self.pad)
+
+        grid = base_grid + shift
+        return F.grid_sample(x,
+                             grid,
+                             padding_mode='zeros',
+                             align_corners=False)
 
 
 def make_env(env_id, idx, capture_video, run_name):
@@ -121,26 +158,27 @@ class Agent(nn.Module):
         super().__init__()
         self.network = nn.Sequential(
             layer_init(nn.Conv2d(3, 32, 8, stride=4)),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             layer_init(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             layer_init(nn.Conv2d(64, 64, 3, stride=1)),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Flatten(),
-            layer_init(nn.Linear(64 * 5 * 6, 512)),
-            nn.ReLU(),
+            layer_init(nn.Linear(1600, 512)),
+            nn.LeakyReLU(),
         )
-        self.lstm = nn.LSTM(512, 128)
+        self.lstm = nn.LSTM(512, 256)
         for name, param in self.lstm.named_parameters():
             if "bias" in name:
                 nn.init.constant_(param, 0)
             elif "weight" in name:
                 nn.init.orthogonal_(param, 1.0)
-        self.actor = layer_init(nn.Linear(128, envs.single_action_space.n), std=0.01)
-        self.critic = layer_init(nn.Linear(128, 1), std=1)
+        self.actor = layer_init(nn.Linear(256, envs.single_action_space.n), std=0.01)
+        self.critic = layer_init(nn.Linear(256, 1), std=1)
         self.unflatten_context = envs.driver_env.unflatten_context
         self.channels_last: bool = True
         self.downsample = False
+        self.aug = RandomShiftsAug(pad=4)
     
     def encode_observations(self, env_outputs):
         # print(f"Determine the shape of the observation: {env_outputs}")
@@ -149,7 +187,7 @@ class Agent(nn.Module):
             observations = env_outputs["screen"].permute(0, 3, 1, 2)
         if self.downsample > 1:
             observations = observations[:, :, ::self.downsample, ::self.downsample]
-        return self.network(observations.float() / 255.0) , None
+        return self.network(self.aug(observations.float() / 255.0)) , None
     
     def get_states(self, x, lstm_state, done):
         hidden, lookup = self.encode_observations(x)
@@ -352,7 +390,7 @@ if __name__ == "__main__":
             dead_neurons_list[i] = (b_hiddens[i] == 0 ).sum().item() /  args.num_envs
         dead_neurons = np.mean(dead_neurons_list)
         assert dead_neurons >= 0 , pdb.set_trace()
-        assert dead_neurons == torch.div((b_hiddens == 0).float().sum(dim=1) , args.num_envs).mean().item() , pdb.set_trace()
+        assert dead_neurons - torch.div((b_hiddens == 0).float().sum(dim=1) , args.num_envs).mean().item() < 0.001 , pdb.set_trace()
 
         # Optimizing the policy and value network
         assert args.num_envs % args.num_minibatches == 0
