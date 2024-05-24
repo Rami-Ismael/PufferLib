@@ -125,6 +125,7 @@ class Agent(nn.Module):
             layer_init(nn.Conv2d(64, 64, 3, stride=1)),
             nn.ReLU(),
             nn.Flatten(),
+            nn.LayerNorm(512),
             layer_init(nn.Linear(64 * 7 * 7, 512)),
             nn.ReLU(),
         )
