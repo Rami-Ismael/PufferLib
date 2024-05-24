@@ -1,2 +1,5 @@
-from pufferlib.models import Default as Policy
-from pufferlib.models import RecurrentWrapper as Recurrent
+from functools import partial
+import pufferlib.models
+
+Recurrent = pufferlib.models.LSTMWrapper
+Policy = pufferlib.models.Default

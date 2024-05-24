@@ -1,135 +1,206 @@
 from pdb import set_trace as T
+import functools
 import argparse
 import shutil
+import yaml
+import uuid
 import sys
 import os
 
-import importlib
-import inspect
-import yaml
-
 import pufferlib
 import pufferlib.utils
+import pufferlib.vector
+
+from rich_argparse import RichHelpFormatter
+from rich.traceback import install
 
 import clean_pufferl
 from rich import print
 
 
-def load_from_config(env):
-    with open('config.yaml') as f:
+def load_config(parser, config_path='config.yaml'):
+    '''Just a fancy config loader. Populates argparse from
+    yaml + env/policy fn signatures to give you a nice
+    --help menu + some limited validation of the config'''
+    args, _ = parser.parse_known_args()
+    env_name, pkg_name = args.env, args.pkg
+
+    with open(config_path) as f:
         config = yaml.safe_load(f)
+    if 'default' not in config:
+        raise ValueError('Deleted default config section?')
+    if env_name not in config:
+        raise ValueError(f'{env_name} not in config\n'
+            'It might be available through a parent package, e.g.\n'
+            '--config atari --env MontezumasRevengeNoFrameskip-v4.')
 
-    assert env in config, f'"{env}" not found in config.yaml. Uncommon environments that are part of larger packages may not have their own config. Specify these manually using the parent package, e.g. --config atari --env MontezumasRevengeNoFrameskip-v4.'
+    default = config['default']
+    env_config = config[env_name or pkg_name]
+    pkg_name = pkg_name or env_config.get('package', env_name)
+    pkg_config = config[pkg_name]
+    # TODO: Check if actually installed
+    env_module = pufferlib.utils.install_and_import(
+        f'pufferlib.environments.{pkg_name}')
+    make_name = env_config.get('env_name', None)
+    make_env_args = [make_name] if make_name else []
+    make_env = env_module.env_creator(*make_env_args)
+    make_env_args = pufferlib.utils.get_init_args(make_env)
+    policy_args = pufferlib.utils.get_init_args(env_module.Policy)
+    rnn_args = pufferlib.utils.get_init_args(env_module.Recurrent)
+    fn_sig = dict(env=make_env_args, policy=policy_args, rnn=rnn_args)
+    config = vars(parser.parse_known_args()[0])
 
-    default_keys = 'env train policy recurrent sweep_metadata sweep_metric sweep'.split()
-    defaults = {key: config.get(key, {}) for key in default_keys}
-
-    # Package and subpackage (environment) configs
-    env_config = config[env]
-    pkg = env_config['package']
-    pkg_config = config[pkg]
-
-    combined_config = {}
-    for key in default_keys:
+    valid_keys = 'env policy rnn train sweep'.split()
+    for key in valid_keys:
+        fn_subconfig = fn_sig.get(key, {})
         env_subconfig = env_config.get(key, {})
         pkg_subconfig = pkg_config.get(key, {})
+        # Priority env->pkg->default->fn config
+        config[key] = {**fn_subconfig, **default[key],
+            **pkg_subconfig, **env_subconfig}
 
-        # Override first with pkg then with env configs
-        combined_config[key] = {**defaults[key], **pkg_subconfig, **env_subconfig}
+    for name in valid_keys:
+        sub_config = config[name]
+        for key, value in sub_config.items():
+            data_key = f'{name}.{key}'
+            cli_key = f'--{data_key}'.replace('_', '-')
+            if isinstance(value, bool) and value is False:
+                parser.add_argument(cli_key, default=value, action='store_true')
+            elif isinstance(value, bool) and value is True:
+                data_key = f'{name}.no_{key}'
+                cli_key = f'--{data_key}'.replace('_', '-')
+                parser.add_argument(cli_key, default=value, action='store_false')
+            else:
+                parser.add_argument(cli_key, default=value, type=type(value))
 
-    return pkg, pufferlib.namespace(**combined_config)
+            config[name][key] = getattr(parser.parse_known_args()[0], data_key)
+        config[name] = pufferlib.namespace(**config[name])
+
+    pufferlib.utils.validate_args(make_env.func if isinstance(make_env, functools.partial) else make_env, config['env'])
+    pufferlib.utils.validate_args(env_module.Policy, config['policy'])
+
+    if 'use_rnn' in env_config:
+        config['use_rnn'] = env_config['use_rnn']
+    elif 'use_rnn' in pkg_config:
+        config['use_rnn'] = pkg_config['use_rnn']
+    else:
+        config['use_rnn'] = default['use_rnn']
+
+    parser.add_argument('--use_rnn', default=False, action='store_true',
+        help='Wrap policy with an RNN')
+    config['use_rnn'] = config['use_rnn'] or parser.parse_known_args()[0].use_rnn
+    parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='show this help message and exit')
+    parser.parse_args()
+    wandb_name = make_name or env_name
+    config['env_name'] = env_name
+    config['train'].exp_id = args.exp_id or args.env + '-' + str(uuid.uuid4())[:8]
+    return wandb_name, pkg_name, pufferlib.namespace(**config), env_module, make_env, make_policy
    
 def make_policy(env, env_module, args):
     policy = env_module.Policy(env, **args.policy)
-    if args.force_recurrence or env_module.Recurrent is not None:
-        policy = env_module.Recurrent(env, policy, **args.recurrent)
+    if args.use_rnn:
+        policy = env_module.Recurrent(env, policy, **args.rnn)
         policy = pufferlib.frameworks.cleanrl.RecurrentPolicy(policy)
     else:
         policy = pufferlib.frameworks.cleanrl.Policy(policy)
 
     return policy.to(args.train.device)
 
-def init_wandb(args, env_module, name=None, resume=True):
+def init_wandb(args, name, id=None, resume=True):
     #os.environ["WANDB_SILENT"] = "true"
-
     import wandb
-    return wandb.init(
-        id=args.exp_name or wandb.util.generate_id(),
+    wandb.init(
+        id=id or wandb.util.generate_id(),
         project=args.wandb_project,
         entity=args.wandb_entity,
         group=args.wandb_group,
         config={
-            'cleanrl': args.train,
-            'env': args.env,
-            'policy': args.policy,
-            'recurrent': args.recurrent,
+            'cleanrl': dict(args.train),
+            'env': dict(args.env),
+            'policy': dict(args.policy),
+            #'recurrent': args.recurrent,
         },
-        name=name or args.config,
+        name=name,
         monitor_gym=True,
         save_code=True,
         resume=resume,
     )
+    return wandb
 
-def sweep(args, env_module, make_env):
+def sweep(args, wandb_name, env_module, make_env):
     import wandb
-    #sweep_id = wandb.sweep(sweep=args.sweep, project="pufferlib")
-    #print(f"Sweep ID: {sweep_id}")
+    sweep_id = wandb.sweep(
+        sweep=dict(args.sweep),
+        project="pufferlib",
+    )
 
     def main():
         try:
-            args.exp_name = init_wandb(args, env_module)
-            if hasattr(wandb.config, 'train'):
-                # TODO: Add update method to namespace
-                print(args.train.__dict__)
-                print(wandb.config.train)
-                args.train.__dict__.update(dict(wandb.config.train))
+            args.exp_name = init_wandb(args, wandb_name, id=args.exp_id)
+            # TODO: Add update method to namespace
+            print(wandb.config.train)
+            args.train.__dict__.update(dict(wandb.config.train))
+            args.track = True
             train(args, env_module, make_env)
         except Exception as e:
             import traceback
             traceback.print_exc()
 
-    wandb.agent(sweep_id = "0ftsqqbh", 
-                project="pufferlib",
-                function = main, 
-                count=40)
-
-def get_init_args(fn):
-    if fn is None:
-        return {}
-
-    sig = inspect.signature(fn)
-    args = {}
-    for name, param in sig.parameters.items():
-        if name in ('self', 'env', 'policy'):
-            continue
-        if param.kind == inspect.Parameter.VAR_POSITIONAL:
-            continue
-        elif param.kind == inspect.Parameter.VAR_KEYWORD:
-            continue
-        else:
-            args[name] = param.default if param.default is not inspect.Parameter.empty else None
-    return args
+    wandb.agent(sweep_id, main, count=20)
 
 def train(args, env_module, make_env):
+    args.wandb = None
+    if args.track:
+        args.wandb = init_wandb(args, wandb_name, id=args.exp_id)
+
+    vec = args.vec
+    if vec == 'serial':
+        vec = pufferlib.vector.Serial
+    elif vec == 'multiprocessing':
+        vec = pufferlib.vector.Multiprocessing
+    elif vec == 'ray':
+        vec = pufferlib.vector.Ray
+    else:
+        raise ValueError(f'Invalid --vector (serial/multiprocessing/ray).')
+
+    vecenv = pufferlib.vector.make(
+        make_env,
+        env_kwargs=args.env,
+        num_envs=args.train.num_envs,
+        num_workers=args.train.num_workers,
+        batch_size=args.train.env_batch_size,
+        zero_copy=args.train.zero_copy,
+        backend=vec,
+    )
+    policy = make_policy(vecenv.driver_env, env_module, args)
+
+    train_config = args.train 
+    train_config.track = args.track
+    train_config.device = args.train.device
+    train_config.env = args.env_name
+
     if args.backend == 'clean_pufferl':
-        data = clean_pufferl.create(
-            config=args.train,
-            agent_creator=make_policy,
-            agent_kwargs={'env_module': env_module, 'args': args},
-            env_creator=make_env,
-            env_creator_kwargs=args.env,
-            vectorization=args.vectorization,
-            exp_name=args.exp_name,
-            track=args.track,
-        )
+        data = clean_pufferl.create(train_config, vecenv, policy, wandb=args.wandb)
 
-        while not clean_pufferl.done_training(data):
-            clean_pufferl.evaluate(data)
-            clean_pufferl.train(data)
+        '''
+        import time
+        import torch
+        with torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ]
+        ) as p:
+        '''
 
-        print('Done training. Saving data...')
-        clean_pufferl.close(data)
-        print('Run complete')
+        while data.global_step < args.train.total_timesteps:
+            try:
+                clean_pufferl.evaluate(data)
+                clean_pufferl.train(data)
+            except KeyboardInterrupt:
+                clean_pufferl.close(data)
+                exit(0)
+
     elif args.backend == 'sb3':
         from stable_baselines3 import PPO
         from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
@@ -148,102 +219,50 @@ def train(args, env_module, make_env):
         model.learn(total_timesteps=args.train.total_timesteps)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Parse environment argument', add_help=False)
+    install(show_locals=False) # Rich tracebacks
+    # TODO: Add check against old args like --config to demo
+    parser = argparse.ArgumentParser(
+            description=f':blowfish: PufferLib [bright_cyan]{pufferlib.__version__}[/]'
+        ' demo options. Shows valid args for your env and policy',
+        formatter_class=RichHelpFormatter, add_help=False)
+    assert 'config' not in sys.argv, '--config deprecated. Use --env'
+    parser.add_argument('--env', '--environment', type=str,
+        default='pokemon_red', help='Name of specific environment to run')
+    parser.add_argument('--pkg', '--package', type=str, default=None, help='Configuration in config.yaml to use')
     parser.add_argument('--backend', type=str, default='clean_pufferl', help='Train backend (clean_pufferl, sb3)')
-    parser.add_argument('--config', type=str, default='pokemon_red', help='Configuration in config.yaml to use')
-    parser.add_argument('--env', type=str, default=None, help='Name of specific environment to run')
-    parser.add_argument('--mode', type=str, default='train', choices='train sweep evaluate'.split())
+    parser.add_argument('--mode', type=str, default='train', choices='train evaluate sweep autotune baseline profile'.split())
     parser.add_argument('--eval-model-path', type=str, default=None, help='Path to model to evaluate')
     parser.add_argument('--baseline', action='store_true', help='Baseline run')
     parser.add_argument('--no-render', action='store_true', help='Disable render during evaluate')
-    parser.add_argument('--exp-name', type=str, default=None, help="Resume from experiment")
-    parser.add_argument('--vectorization', type=str, default='serial', choices='serial multiprocessing ray'.split())
-    parser.add_argument('--wandb-entity', type=str, default='compress_rl', help='WandB entity')
+    parser.add_argument('--vec', '--vector', '--vectorization', type=str,
+        default='serial', choices='serial multiprocessing ray'.split())
+    parser.add_argument('--exp-id', type=str, default=None, help="Resume from experiment")
+    parser.add_argument('--wandb-entity', type=str, default='jsuarez', help='WandB entity')
     parser.add_argument('--wandb-project', type=str, default='pufferlib', help='WandB project')
     parser.add_argument('--wandb-group', type=str, default='debug', help='WandB group')
     parser.add_argument('--track', action='store_true', help='Track on WandB')
-    parser.add_argument('--force-recurrence', action='store_true', help='Force model to be recurrent, regardless of defaults')
+    wandb_name, pkg, args, env_module, make_env, make_policy = load_config(parser)
 
-    clean_parser = argparse.ArgumentParser(parents=[parser])
-    args = parser.parse_known_args()[0].__dict__
-    pkg, config = load_from_config(args['config'])
-
-    try:
-        env_module = importlib.import_module(f'pufferlib.environments.{pkg}')
-    except:
-        pufferlib.utils.install_requirements(pkg)
-        env_module = importlib.import_module(f'pufferlib.environments.{pkg}')
-
-    # Get the make function for the environment
-    env_name = args['env'] or config.env.pop('name')
-    make_env = env_module.env_creator(env_name)
-
-    # Update config with environment defaults
-    config.env = {**get_init_args(make_env), **config.env}
-    config.policy = {**get_init_args(env_module.Policy.__init__), **config.policy}
-    config.recurrent = {**get_init_args(env_module.Recurrent.__init__), **config.recurrent}
-
-    # Generate argparse menu from config
-    for name, sub_config in config.items():
-        args[name] = {}
-        for key, value in sub_config.items():
-            data_key = f'{name}.{key}'
-            cli_key = f'--{data_key}'.replace('_', '-')
-            if isinstance(value, bool) and value is False:
-                action = 'store_false'
-                parser.add_argument(cli_key, default=value, action='store_true')
-                clean_parser.add_argument(cli_key, default=value, action='store_true')
-            elif isinstance(value, bool) and value is True:
-                data_key = f'{name}.no_{key}'
-                cli_key = f'--{data_key}'.replace('_', '-')
-                parser.add_argument(cli_key, default=value, action='store_false')
-                clean_parser.add_argument(cli_key, default=value, action='store_false')
-            else:
-                parser.add_argument(cli_key, default=value, type=type(value))
-                clean_parser.add_argument(cli_key, default=value, metavar='', type=type(value))
-
-            args[name][key] = getattr(parser.parse_known_args()[0], data_key)
-        args[name] = pufferlib.namespace(**args[name])
-
-    clean_parser.parse_args(sys.argv[1:])
-    args = pufferlib.namespace(**args)
-
-    vec = args.vectorization
-    if vec == 'serial':
-        args.vectorization = pufferlib.vectorization.Serial
-    elif vec == 'multiprocessing':
-        args.vectorization = pufferlib.vectorization.Multiprocessing
-    elif vec == 'ray':
-        args.vectorization = pufferlib.vectorization.Ray
-    else:
-        raise ValueError(f'Invalid --vectorization (serial/multiprocessing/ray).')
-
-    if args.mode == 'sweep':
-        args.track = True
-    elif args.track:
-        args.exp_name = init_wandb(args, env_module).id
-    elif args.baseline:
+    if args.baseline:
+        # TODO: fix train/eval split
         args.track = True
         version = '.'.join(pufferlib.__version__.split('.')[:2])
-        args.exp_name = f'puf-{version}-{args.config}'
+        args.exp_id = f'puf-{version}-{args.env_name}'
         args.wandb_group = f'puf-{version}-baseline'
-        shutil.rmtree(f'experiments/{args.exp_name}', ignore_errors=True)
-        run = init_wandb(args, env_module, name=args.exp_name, resume=False)
+        shutil.rmtree(f'experiments/{args.exp_id}', ignore_errors=True)
+        run = init_wandb(args, args.exp_id, resume=False)
         if args.mode == 'evaluate':
-            model_name = f'puf-{version}-{args.config}_model:latest'
+            model_name = f'puf-{version}-{args.env_name}_model:latest'
             artifact = run.use_artifact(model_name)
             data_dir = artifact.download()
             model_file = max(os.listdir(data_dir))
             args.eval_model_path = os.path.join(data_dir, model_file)
-
-    if args.mode == 'train':
+        else:
+            train(args, env_module, make_env)
+    elif args.mode == 'train':
         train(args, env_module, make_env)
-        exit(0)
-    elif args.mode == 'sweep':
-        sweep(args, env_module, make_env)
-        exit(0)
-    elif args.mode == 'evaluate' and pkg != 'pokemon_red':
-        rollout(
+    elif args.mode == 'evaluate':
+        clean_pufferl.rollout(
             make_env,
             args.env,
             agent_creator=make_policy,
@@ -251,6 +270,17 @@ if __name__ == '__main__':
             model_path=args.eval_model_path,
             device=args.train.device
         )
+    elif args.mode == 'sweep':
+        sweep(args, wandb_name, env_module, make_env)
+    elif args.mode == 'autotune':
+        pufferlib.vector.autotune(make_env, batch_size=args.train.env_batch_size)
+    elif args.mode == 'profile':
+        import cProfile
+        cProfile.run('train(args, env_module, make_env)', 'stats.profile')
+        import pstats
+        from pstats import SortKey
+        p = pstats.Stats('stats.profile')
+        p.sort_stats(SortKey.TIME).print_stats(10)
     elif args.mode == 'evaluate' and pkg == 'pokemon_red':
         import pokemon_red_eval
         pokemon_red_eval.rollout(
@@ -261,5 +291,3 @@ if __name__ == '__main__':
             model_path=args.eval_model_path,
             device=args.train.device,
         )
-    elif pkg != 'pokemon_red':
-        raise ValueError('Mode must be one of train, sweep, or evaluate')

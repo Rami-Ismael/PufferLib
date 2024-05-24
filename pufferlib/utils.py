@@ -17,12 +17,52 @@ import psutil
 import warnings
 from functools import wraps
 
+import functools
 import inspect
 import importlib
 
-import pettingzoo
-import gym
+def validate_args(fn, kwargs):
+    fn_kwargs = get_init_args(fn)
+    for param, val in kwargs.items():
+        if param not in fn_kwargs:
+            raise ValueError(
+                f'Invalid argument\n{param}\nto\n{fn}\n'
+                f'which takes \n{fn_kwargs}\n'
+                f'Double check your config'
+            )
 
+def get_init_args(fn):
+    if fn is None:
+        return {}
+
+    if isinstance(fn, functools.partial):
+        return fn.keywords
+
+    sig = inspect.signature(fn)
+    kwargs = {}
+    for name, param in sig.parameters.items():
+        if name in ['env', 'policy']:
+            # Hack to avoid duplicate kwargs
+            continue
+        if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            continue
+        elif param.kind == inspect.Parameter.VAR_KEYWORD:
+            continue
+        else:
+            kwargs[name] = param.default if param.default is not inspect.Parameter.empty else None
+    return kwargs
+
+
+def unroll_nested_dict(d):
+    if not isinstance(d, dict):
+        return d
+
+    for k, v in d.items():
+        if isinstance(v, dict):
+            for k2, v2 in unroll_nested_dict(v):
+                yield f"{k}/{k2}", v2
+        else:
+            yield k, v
 
 def install_requirements(env):
     '''Pip install dependencies for specified environment'''
@@ -30,6 +70,16 @@ def install_requirements(env):
     proc = subprocess.run(pip_install_cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"Error installing requirements: {proc.stderr}")
+
+def install_and_import(package):
+    '''Install and import a package'''
+    try:
+        module = importlib.import_module(package)
+    except ImportError:
+        install_requirements(package)
+        module = importlib.import_module(package)
+
+    return module
 
 def silence_warnings(original_func, category=DeprecationWarning):
     @wraps(original_func)
@@ -137,6 +187,8 @@ def is_dict_space(space):
     return type(space).__name__ == 'Dict'
 
 def is_multiagent(env):
+    import pettingzoo
+    import gym
     if inspect.isclass(env):
         env_cls = env
     else:

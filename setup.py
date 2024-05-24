@@ -1,8 +1,9 @@
 from setuptools import find_packages, setup
 from Cython.Build import cythonize
 from itertools import chain
+import numpy
 
-VERSION = '0.7.3'
+VERSION = '1.0.0'
 
 # Default Gym/Gymnasium/PettingZoo versions
 # Gym:
@@ -33,7 +34,7 @@ cleanrl = [
     'torch',
     'wandb==0.13.7',
     'psutil==5.9.5',
-    'tyro',
+    'gputil',
 ]
 
 rllib = [
@@ -41,6 +42,21 @@ rllib = [
     'setproctitle==1.1.10',
     'service-identity==21.1.0',
     'pydantic==1.9',
+]
+
+pokemon_red = [
+    f'gym=={GYM_VERSION}',
+    f'gymnasium=={GYMNASIUM_VERSION}',
+    'einops==0.6.1',
+    'matplotlib',
+    'scikit-image==0.21.0',
+    'pyboy<2.0.0',
+    'hnswlib==0.7.0',
+    'mediapy',
+    'pandas==2.0.2',
+    'pettingzoo',
+    'GPUtil',
+    'websockets',
 ]
 
 environments = {
@@ -74,6 +90,7 @@ environments = {
         f'gymnasium=={GYMNASIUM_VERSION}',
     ],
     'crafter': [
+        SHIMMY,
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
         'crafter==1.8.3',
@@ -122,11 +139,13 @@ environments = {
         'minigrid==2.3.1',
     ],
     'minihack': [
+        SHIMMY,
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
         'minihack==0.1.5',
     ],
     'nethack': [
+        SHIMMY,
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
         'nle==0.9.0',
@@ -154,6 +173,9 @@ environments = {
         'hnswlib==0.7.0',
         'mediapy',
         'pandas==2.0.2',
+        'pettingzoo',
+        'GPUtils',
+        'websockets',
     ],
     'procgen': [
         f'gym=={GYM_VERSION}',
@@ -208,6 +230,12 @@ setup(
         'numpy==1.23.3',
         'opencv-python==3.4.17.63',
         'cython>=3.0.0',
+        'rich',
+        'rich_argparse',
+        'gym',
+        'gymnasium',
+        # *cleanrl,
+        # *environments['pokemon_red'],
     ],
     extras_require={
         'docs': docs,
@@ -217,6 +245,7 @@ setup(
         **environments,
     },
     ext_modules = cythonize("pufferlib/extensions.pyx"),
+    include_dirs=[numpy.get_include()],
     python_requires=">=3.8",
     license="MIT",
     author="Joseph Suarez",

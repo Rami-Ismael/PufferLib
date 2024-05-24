@@ -1,155 +1,152 @@
-train:
-  seed: 1
-  torch_deterministic: True
-  device: cuda 
-  total_timesteps: 5_000_000
-  learning_rate: 2.5e-4
-  num_steps: 128
-  anneal_lr: False
-  gamma: 0.99
-  gae_lambda: 0.95
-  num_minibatches: 4
-  update_epochs: 4
-  norm_adv: True
-  clip_coef: 0.1
-  clip_vloss: True
-  ent_coef: 0.01
-  vf_coef: 0.5
-  max_grad_norm: 0.5
-  target_kl: ~
+### PufferLib demo environments
+# Package parameters override defaults.
+# Parameters for specific envs override packages
+# You cannot specify any deeper than that.
+default:
+  package: ~
+  env_name: ~
+  env: {}
+  policy: {}
+  use_rnn: False
+  rnn: {}
+  train:
+    seed: 1
+    torch_deterministic: True
+    cpu_offload: False
+    device: cuda
+    total_timesteps: 10_000_000
+    learning_rate: 2.5e-4
+    num_steps: 128
+    anneal_lr: True
+    gamma: 0.99
+    gae_lambda: 0.95
+    num_minibatches: 4
+    update_epochs: 4
+    norm_adv: True
+    clip_coef: 0.1
+    clip_vloss: True
+    ent_coef: 0.01
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+    target_kl: ~
 
-  num_envs: 8
-  envs_per_worker: 1
-  envs_per_batch: ~
-  env_pool: True
-  verbose: True
-  data_dir: experiments
-  checkpoint_interval: 200
-  pool_kernel: [0]
-  batch_size: 1024
-  batch_rows: 32
-  bptt_horizon: 16 #8
-  vf_clip_coef: 0.1
-  compile: True  # superceded by pokemon_red package`` 
-  compile_mode: reduce-overhead
+    num_envs: 8
+    num_workers: 8
+    env_batch_size: 8
+    zero_copy: True
+    verbose: True
+    data_dir: experiments
+    checkpoint_interval: 200
+    pool_kernel: [0]
+    batch_size: 1024
+    minibatch_size: 512
+    bptt_horizon: 16
+    vf_clip_coef: 0.1
+    compile: False
+    compile_mode: reduce-overhead
 
-sweep:
-  method: bayes
-  name: sweep
-  early_terminate:
-    type: hyperband
-    min_iter: 2  
-  metric:
-    goal: maximize
-    name: stats/number_of_uniqiue_coordinate_it_explored 
-  parameters:
-    train:
-      parameters:
-        learning_rate: {
-          'distribution': 'uniform',
-          'min': 1e-5,
-          'max': 1e-2,
-        }
-        update_epochs: {
-          "distribution": "int_uniform",
-          "min": 3 ,
-          "max": 9
-        }
-        clip_coef: {
-          "distribution": "uniform",
-          "min": .1,
-          "max": .9
-        }
-        ent_coef: {
-          "distribution": "uniform" , 
-          "min" : .01,
-          "max" : 1
-        }
-        anneal_lr: 
-          values: [True , False]
-        adding_noise_lineay_layer:
-          values: [ True , False]
-        num_envs: 
-          values: [ 8 , 16 , 32 , 64, 128]
+  sweep:
+    method: random
+    name: sweep
+    metric:
+      goal: maximize
+      name: environment/episode_return
+    # Nested parameters name required by WandB API
+    parameters:
+      train:
+        parameters:
+          learning_rate: {
+            'distribution': 'log_uniform_values',
+            'min': 1e-4,
+            'max': 1e-1,
+          }
+          batch_size: {
+            'values': [512, 1024, 2048],
+          }
+          minibatch_size: {
+            'values': [128, 256, 512],
+          }
+          bptt_horizon: {
+            'values': [4, 8, 16],
+          }
+
 ### Arcade Learning Environment suite
 # Convenience wrappers provided for common test environments
 atari:
-  package: atari
-  env:
-    name: BreakoutNoFrameskip-v4
+  env_name: BreakoutNoFrameskip-v4
 beamrider:
   package: atari
-  env:
-    name: BeamRiderNoFrameskip-v4
+  env_name: BeamRiderNoFrameskip-v4
 beam_rider:
   package: atari
-  env:
-    name: BeamRiderNoFrameskip-v4
+  env_name: BeamRiderNoFrameskip-v4
 beam-rider:
   package: atari
-  env:
-    name: BeamRiderNoFrameskip-v4
+  env_name: BeamRiderNoFrameskip-v4
 breakout:
   package: atari
-  env:
-    name: BreakoutNoFrameskip-v4
+  env_name: BreakoutNoFrameskip-v4
 enduro:
   package: atari
-  env:
-    name: EnduroNoFrameskip-v4
+  env_name: EnduroNoFrameskip-v4
 pong:
   package: atari
-  env:
-    name: PongNoFrameskip-v4
+  env_name: PongNoFrameskip-v4
 qbert:
   package: atari
-  env:
-    name: QbertNoFrameskip-v4
+  env_name: QbertNoFrameskip-v4
 seaquest:
   package: atari
-  env:
-    name: SeaquestNoFrameskip-v4
+  env_name: SeaquestNoFrameskip-v4
 spaceinvaders:
   package: atari
-  env:
-    name: SpaceInvadersNoFrameskip-v4
+  env_name: SpaceInvadersNoFrameskip-v4
 space_invaders:
   package: atari
-  env:
-    name: SpaceInvadersNoFrameskip-v4
+  env_name: SpaceInvadersNoFrameskip-v4
 space-invaders:
   package: atari
-  env:
-    name: SpaceInvadersNoFrameskip-v4
+  env_name: SpaceInvadersNoFrameskip-v4
 
+pong-max:
+  package: atari
+  env_name: PongNoFrameskip-v4
+  train:
+    num_envs: 96
+    num_workers: 24
+    env_batch_size: 48
+    zero_copy: False
+    batch_size: 65536
+    minibatch_size: 2048
+ 
 box2d:
   package: box2d
 
 ### Procgen Suite
 # Shared hyperparams (best for all envs)
 # Per-env hyperparams from CARBS
+# Note: These need to be updated for 1.0
+# batch sizes likely wrong
 procgen:
-  package: procgen
+  env_name: bigfish
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0005
     num_cores: 1
     num_envs: 1
     batch_size: 16384
-    batch_rows: 8
-    bptt_horizon: 256
+    minibatch_size: 5321
     gamma: 0.999
     update_epochs: 3
     anneal_lr: False
     clip_coef: 0.2
     vf_clip_coef: 0.2
-  env:
-    name: bigfish
   policy:
     cnn_width: 16
     mlp_width: 256
 bigfish:
   package: procgen
+  env_name: bigfish
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0001901266338648
@@ -158,22 +155,22 @@ bigfish:
     vf_coef: 1.1732211834792117
     gae_lambda: 0.8620630095238284
     clip_coef: 0.4104603426698214
-    num_cores: 1
     num_envs: 1
+    num_workers: 1
     batch_size: 53210
-    batch_rows: 5321
+    minibatch_size: 5321
     bptt_horizon: 1
     update_epochs: 3
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: bigfish
     num_envs: 24
   policy:
     cnn_width: 22
     mlp_width: 327
 bossfight:
   package: procgen
+  env_name: bossfight
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0001391202716783
@@ -185,19 +182,19 @@ bossfight:
     num_cores: 1
     num_envs: 1
     batch_size: 48520
-    batch_rows: 6065
+    minibatch_size: 6065
     bptt_horizon: 1
     update_epochs: 2
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: bossfight
     num_envs: 186
   policy:
     cnn_width: 34
     mlp_width: 83
 caveflyer:
   package: procgen
+  env_name: caveflyer
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0003922570060721
@@ -209,19 +206,19 @@ caveflyer:
     num_cores: 1
     num_envs: 1
     batch_size: 32308
-    batch_rows: 8077
+    minibatch_size: 8077
     bptt_horizon: 1
     update_epochs: 2
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: caveflyer
     num_envs: 96
   policy:
     cnn_width: 17
     mlp_width: 242
 chaser:
   package: procgen
+  env_name: chaser
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0003508035442326
@@ -233,19 +230,19 @@ chaser:
     num_cores: 1
     num_envs: 1
     batch_size: 17456
-    batch_rows: 2182
+    minibatch_size: 2182
     bptt_horizon: 1
     update_epochs: 1
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: chaser
     num_envs: 89
   policy:
     cnn_width: 37
     mlp_width: 198
 climber:
   package: procgen
+  env_name: climber
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0001217047694837
@@ -257,19 +254,19 @@ climber:
     num_cores: 1
     num_envs: 1
     batch_size: 113288
-    batch_rows: 3332
+    batch_rows: 3332 # ?
     bptt_horizon: 256
     update_epochs: 2
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: climber
     num_envs: 207
   policy:
     cnn_width: 29
     mlp_width: 134
 coinrun:
   package: procgen
+  env_name: coinrun
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0002171100540455
@@ -281,19 +278,19 @@ coinrun:
     num_cores: 1
     num_envs: 1
     batch_size: 184170
-    batch_rows: 6139
+    minibatch_size: 6139
     bptt_horizon: 1
     update_epochs: 2
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: coinrun
     num_envs: 246
   policy:
     cnn_width: 16
     mlp_width: 384
 dodgeball:
   package: procgen
+  env_name: dodgeball
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0002471773711262
@@ -305,19 +302,19 @@ dodgeball:
     num_cores: 1
     num_envs: 1
     batch_size: 233026
-    batch_rows: 4958
+    minibatch_size: 4958
     bptt_horizon: 1
     update_epochs: 2
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: dodgeball
     num_envs: 385
   policy:
     cnn_width: 24
     mlp_width: 538
 fruitbot:
   package: procgen
+  env_name: fruitbot
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0005426317191531
@@ -329,19 +326,19 @@ fruitbot:
     num_cores: 1
     num_envs: 1
     batch_size: 25344
-    batch_rows: 4224
+    minibatch_size: 4224
     bptt_horizon: 1
     update_epochs: 1
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: fruitbot
     num_envs: 184
   policy:
     cnn_width: 24
     mlp_width: 600
 heist:
   package: procgen
+  env_name: heist
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0001460588554421
@@ -353,19 +350,19 @@ heist:
     num_cores: 1
     num_envs: 1
     batch_size: 162233
-    batch_rows: 3061
+    minibatch_size: 3061
     bptt_horizon: 1
     update_epochs: 1
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: heist
     num_envs: 999
   policy:
     cnn_width: 60
     mlp_width: 154
 jumper:
   package: procgen
+  env_name: jumper
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0002667825838749
@@ -377,19 +374,19 @@ jumper:
     num_cores: 1
     num_envs: 1
     batch_size: 76925
-    batch_rows: 3077
+    minibatch_size: 3077
     bptt_horizon: 1
     update_epochs: 3
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: jumper
     num_envs: 320
   policy:
     cnn_width: 24
     mlp_width: 190
 leaper:
   package: procgen
+  env_name: leaper
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.000238551194954
@@ -401,19 +398,18 @@ leaper:
     num_cores: 1
     num_envs: 1
     batch_size: 19380
-    batch_rows: 6460
-    bptt_horizon: 1
+    minibatch_size: 6460
     update_epochs: 2
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: leaper
     num_envs: 252
   policy:
     cnn_width: 28
     mlp_width: 100
 maze:
   package: procgen
+  env_name: maze
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0001711754945436
@@ -425,19 +421,19 @@ maze:
     num_cores: 1
     num_envs: 1
     batch_size: 116008
-    batch_rows: 6834
+    minibatch_size: 6834
     bptt_horizon: 1
     update_epochs: 2
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: maze
     num_envs: 820
   policy:
     cnn_width: 28
     mlp_width: 526
 miner:
   package: procgen
+  env_name: miner
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.000328692228852
@@ -449,19 +445,19 @@ miner:
     num_cores: 1
     num_envs: 1
     batch_size: 154512
-    batch_rows: 2088
+    minibatch_size: 2088
     bptt_horizon: 1
     update_epochs: 3
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: miner
     num_envs: 343
   policy:
     cnn_width: 38
     mlp_width: 175
 ninja:
   package: procgen
+  env_name: ninja
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0002649776171804
@@ -473,19 +469,19 @@ ninja:
     num_cores: 1
     num_envs: 1
     batch_size: 45246
-    batch_rows: 7541
+    minibatch_size: 7541
     bptt_horizon: 1
     update_epochs: 2
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: ninja
     num_envs: 293
   policy:
     cnn_width: 25
     mlp_width: 317
 plunder:
   package: procgen
+  env_name: plunder
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0002630139944456
@@ -497,19 +493,19 @@ plunder:
     num_cores: 1
     num_envs: 1
     batch_size: 26304
-    batch_rows: 4384
+    minibatch_size: 4384
     bptt_horizon: 1
     update_epochs: 2
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: plunder
     num_envs: 127
   policy:
     cnn_width: 30
     mlp_width: 288
 starpilot:
   package: procgen
+  env_name: starpilot
   train:
     total_timesteps: 8_000_000
     learning_rate: 0.0004257280551714
@@ -521,13 +517,12 @@ starpilot:
     num_cores: 1
     num_envs: 1
     batch_size: 107440
-    batch_rows: 6715
+    minibatch_size: 6715
     bptt_horizon: 1
     update_epochs: 2
     anneal_lr: False
     vf_clip_coef: 0.2
   env:
-    name: starpilot
     num_envs: 320
   policy:
     cnn_width: 25
@@ -535,23 +530,19 @@ starpilot:
 
 bsuite:
   package: bsuite
+  env_name: bandit/0
   train:
     total_timesteps: 1_000_000
     num_envs: 1
-  env:
-    name: bandit/0
 
 butterfly:
   package: butterfly
-  env:
-    name: cooperative_pong_v5
+  env_name: cooperative_pong_v5
 
 classic_control:
-  package: classic_control
+  env_name: cartpole
   train:
     num_envs: 16
-  env:
-    name: cartpole
 classic-control:
   package: classic_control
 classiccontrol:
@@ -561,8 +552,14 @@ cartpole:
 
 crafter:
   package: crafter
-  env:
-    name: CrafterReward-v1
+  env_name: CrafterReward-v1
+  train:
+    num_envs: 96
+    num_workers: 24
+    env_batch_size: 48 
+    zero_copy: False
+    batch_size: 6144
+    compile: True
 
 dm_control:
   package: dm_control
@@ -584,145 +581,158 @@ dml:
 
 griddly:
   package: griddly
-  env:
-    name: GDY-Spiders-v0
+  env_name: GDY-Spiders-v0
 
 magent:
   package: magent
-  env:
-    name: battle_v4
+  env_name: battle_v4
 
 microrts:
-  package: microrts
-  env:
-    name: GlobalAgentCombinedRewardEnv
+  env_name: GlobalAgentCombinedRewardEnv
 
 minerl:
-  package: minerl
-  env:
-    name: MineRLNavigateDense-v0
+  env_name: MineRLNavigateDense-v0
 
 minigrid:
-  package: minigrid
-  env:
-    name: MiniGrid-LavaGapS7-v0
+  env_name: MiniGrid-LavaGapS7-v0
+  train:
+    total_timesteps: 1_000_000
+    num_envs: 48
+    num_workers: 6
+    env_batch_size: 48
+    batch_size: 6144
+    minibatch_size: 768
+    ent_coef: 0.05
+    anneal_lr: False
 
 minihack:
-  package: minihack
-  env:
-    name: MiniHack-River-v0
+  env_name: MiniHack-River-v0
 
 nethack:
-  package: nethack
-  env:
-    name: NetHackScore-v0
+  env_name: NetHackScore-v0
+  train:
+    num_envs: 72
+    num_workers: 24
+    env_batch_size: 48
+    zero_copy: False
+    batch_size: 6144
+    update_epochs: 1
+    compile: True
 
 nmmo:
-  package: nmmo
   train:
     num_envs: 1
-    envs_per_batch: 1
-    envs_per_worker: 1
     batch_size: 4096
-    batch_rows: 128
-  env:
-    name: nmmo
+    minibatch_size: 2048
 
 nmmo3:
-  package: nmmo3
+  train:
+    total_timesteps: 10_000_000
+    #total_timesteps: 10_000_000_000
+    num_envs: 72
+    num_workers: 24
+    env_batch_size: 24
+    update_epochs: 1
+    gamma: 0.998
+    #batch_size: 32768
+    batch_size: 196608
+    minibatch_size: 16384
+    #compile: True
   env:
-    name: nmmo3
+    num_envs: 1 # NMMO3 provides its own fast multienv
+    #num_envs: 8 # NMMO3 provides its own fast multienv
+    #
+nmmo3laptop:
+  package: nmmo3
+  train:
+    total_timesteps: 500_000
+    num_envs: 18
+    envpool_batch_size: 6
+    update_epochs: 1
+    gamma: 0.998
+    batch_size: 32768
+    minibatch_size: 4096
+    compile: False
+
+nmmo3debug:
+  package: nmmo3
+  train:
+    total_timesteps: 100_000
+    num_envs: 1
+    update_epochs: 1
+    gamma: 0.998
+    batch_size: 4096
+    minibatch_size: 2048
+    compile: False
+
 
 # Ocean: PufferAI's first party environment suite
 ocean:
-  package: ocean
+  env_name: squared
+  use_rnn: True
   train:
     total_timesteps: 30_000
     learning_rate: 0.017
     num_envs: 8
-    batch_rows: 32
+    num_workers: 2
+    minibatch_size: 128
     bptt_horizon: 4
     device: cpu
-  env:
-    name: squared
 bandit:
   package: ocean
-  env:
-    name: bandit
 memory:
   package: ocean
-  env:
-    name: memory
 multiagent:
   package: ocean
-  env:
-    name: multiagent
 password:
   package: ocean
-  env:
-    name: password
 performance:
   package: ocean
-  env:
-    name: performance
 spaces:
   package: ocean
-  env:
-    name: spaces
 squared:
   package: ocean
-  env:
-    name: squared
 stochastic:
   package: ocean
-  env:
-    name: stochastic
 
 open_spiel:
-  package: open_spiel
+  env_name: connect_four
   train:
     pool_kernel: [0, 1, 1, 0]
     num_envs: 32
     batch_size: 4096
-  env:
-    name: connect_four
 open-spiel:
   package: open_spiel
 openspiel:
   package: open_spiel
 connect_four:
   package: open_spiel
-  env:
-    name: connect_four
+  env_name: connect_four
 connect-four:
   package: open_spiel
-  env:
-    name: connect_four
+  env_name: connect_four
 connectfour:
   package: open_spiel
-  env:
-    name: connect_four
+  env_name: connect_four
 connect4:
   package: open_spiel
-  env:
-    name: connect_four
+  env_name: connect_four
 
 pokemon_red:
-  package: pokemon_red
+  use_rnn: True
   train:
-    total_timesteps: 100_000_000
-    num_envs: 512
-    envs_per_worker: 4
-    envs_per_batch: 128 # must be divisible by envs_per_worker
+    total_timesteps: 1_000_000
+    num_envs: 96 
+    num_workers: 24
+    env_batch_size: 32
+    zero_copy: False
     update_epochs: 3
     gamma: 0.998
-    batch_size: 65536 
-    batch_rows: 512
-    compile: True 
-    device: cuda
-    compile_mode: reduce-overhead
-  env:
-    name: pokemon_red
+    batch_size: 65536
+    minibatch_size: 2048
+    compile: True
+    learning_rate: 2.0e-4
+    anneal_lr: False
 pokemon-red:
   package: pokemon_red
 pokemonred:
@@ -731,22 +741,16 @@ pokemon:
   package: pokemon_red
 pokegym:
   package: pokemon_red
-local_test_pokemon_red:
+pokedebug:
   package: pokemon_red
   train:
-    total_timesteps: 100_000_000
-    num_envs: 32
-    envs_per_worker: 4
-    envs_per_batch: 32
-    update_epochs: 4
-    gamma: 0.998
-    batch_size: 1024
-    batch_rows: 64
+    num_envs: 4
+    num_workers: 4
+    env_batch_size: 2
+    batch_size: 2048
+    minibatch_size: 256
     compile: False
-    device: cpu
-
-  env:
-    name: pokemon_red
+ 
 links_awaken:
   package: links_awaken
 links-awaken:
@@ -756,17 +760,12 @@ linksawaken:
 zelda:
   package: links_awaken
 
-smac:
-  package: smac
-  env:
-    name: smac
+smac: {}
 starcraft:
   package: smac
 
 stable_retro:
-  package: stable_retro
-  env:
-    name: Airstriker-Genesis
+  env_name: Airstriker-Genesis
 stable-retro:
   package: stable_retro
 stableretro:

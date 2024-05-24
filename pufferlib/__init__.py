@@ -4,6 +4,10 @@ __version__ = version.__version__
 import os
 import sys
 
+# Silence noisy dependencies
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 # Silence noisy packages
 original_stdout = sys.stdout
 original_stderr = sys.stderr
@@ -21,3 +25,4 @@ sys.stderr = original_stderr
 
 from pufferlib.namespace import namespace, dataclass
 from pufferlib import frameworks, environments
+from pufferlib.environment import PufferEnv
