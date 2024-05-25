@@ -21,6 +21,8 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
     NoopResetEnv,
 )
 
+import pufferlib.vector
+
 
 @dataclass
 class Args:
@@ -181,9 +183,14 @@ if __name__ == "__main__":
     # PufferLib vectorization makes CleanRL ~65% faster!
     import pufferlib.vectorization
     import pufferlib.environments.atari
-    envs = pufferlib.vectorization.Multiprocessing(
-        env_creator = pufferlib.environments.atari.env_creator(args.env_id),
-        env_kwargs={'framestack': 4},
+    env_creators = [pufferlib.environments.atari.env_creator(args.env_id) for _ in range(args.num_envs)]
+    env_args = ["" for _ in range(args.num_envs)]
+    env_kwargs = [{'framestack': 4} for _ in range(args.num_envs)]
+
+    envs = pufferlib.vector.Serial(
+        env_creators=env_creators,
+        env_args=env_args,
+        env_kwargs=env_kwargs,
         num_envs=args.num_envs,
     )
 
@@ -201,7 +208,7 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    next_obs, _, _, _ = envs.reset(seed=args.seed)
+    next_obs, _ = envs.reset(seed=args.seed) # 
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
@@ -225,7 +232,7 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminations, truncations, infos, _, _ = envs.step(action.cpu().numpy())
+            next_obs, reward, terminations, truncations, infos  = envs.step(action.cpu().numpy())
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
