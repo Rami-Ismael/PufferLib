@@ -210,9 +210,7 @@ class Agent(nn.Module):
                 nn.init.orthogonal_(param, 1.0)
         self.actor = layer_init(nn.Linear(256, envs.single_action_space.n), std=0.01)
         self.critic = layer_init(nn.Linear(256, 1), std=1)
-        self.emulated = envs.emulated
-        print(f"The emulated environment is {self.emulated}")
-        self.dtype = pufferlib.pytorch.nativize_dtype(self.emulated)
+        self.dtype = pufferlib.pytorch.nativize_dtype(envs.emulated)
         print(f"The dtype is {self.dtype}")
         self.channels_last: bool = True
         self.downsample = False
@@ -221,9 +219,9 @@ class Agent(nn.Module):
     def encode_observations(self, env_outputs):
         # print(f"Determine the shape of the observation: {env_outputs}")
         #env_outputs = pufferlib.emulation.unpack_batched_obs(env_outputs, self.unflatten_context)
-        
         env_outputs = pufferlib.pytorch.nativize_tensor(env_outputs, 
                                                         self.dtype)
+        pdb.set_trace()
         if self.channels_last:
             observations = env_outputs["screen"].permute(0, 3, 1, 2)
         if self.downsample > 1:
@@ -303,13 +301,14 @@ if __name__ == "__main__":
     # PufferLib vectorization makes CleanRL ~65% faster!
     import pufferlib.vectorization
     import pufferlib.environments.pokemon_red
-    env_creators = [ pufferlib.environments.pokemon_red.env_creator () for _ in range(args.num_envs)]
-    envs_args: list[str] = [ "" for _ in range(args.num_envs)]
-    env_kwargs = [ {} for _ in range(args.num_envs)]
-    envs = pufferlib.vector.Serial(
-        env_creators = env_creators,
-        env_args = envs_args,
-        env_kwargs = env_kwargs,
+    #env_creators = [ pufferlib.environments.pokemon_red.env_creator () for _ in range(args.num_envs)]
+    #envs_args: list[str] = [ "" for _ in range(args.num_envs)]
+    #env_kwargs = [ {} for _ in range(args.num_envs)]
+    envs = pufferlib.vector.make(
+        env_creator_or_creators = pufferlib.environments.pokemon_red.env_creator() , 
+        env_args = None , 
+        env_kwargs = None ,
+        backend = pufferlib.vector.Multiprocessing, 
         num_envs = args.num_envs,
     )
     
