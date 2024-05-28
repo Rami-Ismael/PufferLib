@@ -18,7 +18,6 @@ VERSION = '1.0.0'
 GYMNASIUM_VERSION = '0.29.1'
 GYM_VERSION = '0.23'
 PETTINGZOO_VERSION = '1.24.1'
-SHIMMY = 'shimmy[gym-v21]'
 
 docs = [
     'sphinx==5.0.0',
@@ -30,11 +29,13 @@ docs = [
 ]
 
 cleanrl = [
+    'stable_baselines3==2.1.0',
     'tensorboard==2.11.2',
     'torch',
     'wandb==0.13.7',
     'psutil==5.9.5',
     'gputil',
+    'tyro==0.5.10',
 ]
 
 rllib = [
@@ -90,7 +91,6 @@ environments = {
         f'gymnasium=={GYMNASIUM_VERSION}',
     ],
     'crafter': [
-        SHIMMY,
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
         'crafter==1.8.3',
@@ -139,13 +139,11 @@ environments = {
         'minigrid==2.3.1',
     ],
     'minihack': [
-        SHIMMY,
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
         'minihack==0.1.5',
     ],
     'nethack': [
-        SHIMMY,
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
         'nle==0.9.0',
@@ -161,7 +159,6 @@ environments = {
         f'gymnasium=={GYMNASIUM_VERSION}',
         'open_spiel==1.3',
         'pettingzoo==1.19.0',
-        SHIMMY,
     ],
     'pokemon_red': [
         f'gym=={GYM_VERSION}',
@@ -232,8 +229,11 @@ setup(
         'cython>=3.0.0',
         'rich',
         'rich_argparse',
-        'gym',
-        'gymnasium',
+        # TODO: need better way to override gym version
+        f'gym<=0.23',
+        f'gymnasium<=0.29.1',
+        f'pettingzoo<=1.24.1',
+        'shimmy[gym-v21]',
         # *cleanrl,
         # *environments['pokemon_red'],
     ],
