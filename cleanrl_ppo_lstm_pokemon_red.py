@@ -25,7 +25,9 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
     NoopResetEnv,
 )
 
+import pufferlib.pytorch
 import pufferlib.vector
+from rich import print
 
 
 @dataclass
@@ -92,7 +94,7 @@ class Args:
     """the number of iterations (computed in runtime)"""
     
     # Add Data Augmentation
-    use_aug: bool = True
+    use_aug: bool = False
     
 class RandomShiftsAug(nn.Module):
     def __init__(self, pad):
@@ -154,7 +156,37 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
+class ResnetBlock(torch.nn.Module):
+    def __init__(self, in_planes, img_size=(80, 72)):
+        super().__init__()
+        self.model = torch.nn.Sequential(
+            torch.nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=1, padding=1),
+            torch.nn.LayerNorm((in_planes, *img_size)), # type: ignore
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=1, padding=1),
+            torch.nn.LayerNorm((in_planes, *img_size)), # type: ignore
+        )
 
+    def forward(self, x):
+        out = self.model(x)
+        out += x
+        return out
+class Pixel_Screen_observation(torch.nn.Module):
+    def __init__(self, output_size):
+        super().__init__()
+        self.resnet_pixel_screen = ResnetBlock(3)
+        self.tile_conv_1 = torch.nn.Conv2d(64, 32, 3)
+        self.tile_conv_2 = torch.nn.Conv2d(32, 8, 3)
+        self.tile_fc = torch.nn.Linear(8 * 11 * 11, output_size)
+        self.tile_norm = torch.nn.LayerNorm(output_size)
+    def forward(self, pixel_observation_screen):
+        x = self.resnet_pixel_screen(pixel_observation_screen)
+        x = self.tile_conv_1(x)
+        x = self.tile_conv_2(x)
+        x = x.view(-1, 8 * 11 * 11)
+        x = self.tile_fc(x)
+        x = self.tile_norm(x)
+        return x
 
 class Agent(nn.Module):
     def __init__(self, envs):
@@ -167,7 +199,7 @@ class Agent(nn.Module):
             layer_init(nn.Conv2d(64, 64, 3, stride=1)),
             nn.LeakyReLU(),
             nn.Flatten(),
-            layer_init(nn.Linear(1600, 512)),
+            layer_init(nn.Linear(1920, 512)),
             nn.LeakyReLU(),
         )
         self.lstm = nn.LSTM(512, 256)
@@ -178,19 +210,25 @@ class Agent(nn.Module):
                 nn.init.orthogonal_(param, 1.0)
         self.actor = layer_init(nn.Linear(256, envs.single_action_space.n), std=0.01)
         self.critic = layer_init(nn.Linear(256, 1), std=1)
-        self.unflatten_context = envs.driver_env.unflatten_context
+        self.emulated = envs.emulated
+        print(f"The emulated environment is {self.emulated}")
+        self.dtype = pufferlib.pytorch.nativize_dtype(self.emulated)
+        print(f"The dtype is {self.dtype}")
         self.channels_last: bool = True
         self.downsample = False
-        self.aug = RandomShiftsAug(pad=4)
+        #self.aug = RandomShiftsAug(pad=4)
     
     def encode_observations(self, env_outputs):
         # print(f"Determine the shape of the observation: {env_outputs}")
-        env_outputs = pufferlib.emulation.unpack_batched_obs(env_outputs, self.unflatten_context)
+        #env_outputs = pufferlib.emulation.unpack_batched_obs(env_outputs, self.unflatten_context)
+        
+        env_outputs = pufferlib.pytorch.nativize_tensor(env_outputs, 
+                                                        self.dtype)
         if self.channels_last:
             observations = env_outputs["screen"].permute(0, 3, 1, 2)
         if self.downsample > 1:
             observations = observations[:, :, ::self.downsample, ::self.downsample]
-        return self.network(self.aug(observations.float() / 255.0)) , None
+        return self.network(observations.float() / 255.0) , None
     
     def get_states(self, x, lstm_state, done):
         hidden, lookup = self.encode_observations(x)
@@ -234,6 +272,7 @@ if __name__ == "__main__":
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    print(f"The size of the batch size is {args.batch_size}")
     if args.track:
         import wandb
 
