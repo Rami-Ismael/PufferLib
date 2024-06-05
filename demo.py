@@ -14,8 +14,11 @@ import pufferlib.frameworks.cleanrl
 
 from rich_argparse import RichHelpFormatter
 from rich.traceback import install
+from rich import print as print
+from rich.pretty import pprint as pprint
 
 import clean_pufferl
+
 
 
 def load_config(parser, config_path='config.yaml'):
@@ -180,6 +183,8 @@ def train(args, env_module, make_env):
     train_config.device = args.train.device
     train_config.env = args.env_name
 
+    #policy  = torch.load(model_path, map_location = train_config.device)
+    
     if args.backend == 'clean_pufferl':
         data = clean_pufferl.create(train_config, vecenv, policy, wandb=args.wandb)
 
@@ -194,7 +199,7 @@ def train(args, env_module, make_env):
         ) as p:
         '''
 
-        while data.global_step < args.train.total_timesteps:
+        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0:
             try:
                 clean_pufferl.evaluate(data)
                 clean_pufferl.train(data)
@@ -243,6 +248,7 @@ if __name__ == '__main__':
     parser.add_argument('--wandb-group', type=str, default='debug', help='WandB group')
     parser.add_argument('--track', action='store_true', help='Track on WandB')
     wandb_name, pkg, args, env_module, make_env, make_policy = load_config(parser)
+    pprint( args)
 
     if args.baseline:
         assert args.mode in ('train', 'eval', 'evaluate')
