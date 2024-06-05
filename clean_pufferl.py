@@ -169,7 +169,12 @@ def evaluate(data):
 
             if len(infos['pokemon_exploration_map']) > 0:
                 rendered = data.map_updater(data.pokemon_map)
-                data.stats['Media/exploration_map'] = data.wandb.Image(rendered)
+                assert rendered is not None, T()
+                try:
+                    data.stats['Media/exploration_map'] = data.wandb.Image(rendered)
+                except Exception as e:
+                    print(e)
+                    T()
 
         for k, v in infos.items():
             try: # TODO: Better checks on log data types
@@ -464,6 +469,8 @@ class Experience:
         self.dones_np = np.asarray(self.dones)
         self.truncateds_np = np.asarray(self.truncateds)
         self.values_np = np.asarray(self.values)
+        
+        # Hidden Features
 
         self.lstm_h = self.lstm_c = None
         if lstm is not None:
@@ -475,7 +482,7 @@ class Experience:
         num_minibatches = batch_size / minibatch_size
         self.num_minibatches = int(num_minibatches)
         if self.num_minibatches != num_minibatches:
-            raise ValueError('batch_size must be divisible by minibatch_size')
+            raise ValueError('batch_size must be divisible by minibatch_size and currently batch_size=%d minibatch_size=%d' % (batch_size, minibatch_size))
 
         minibatch_rows = minibatch_size / bptt_horizon
         self.minibatch_rows = int(minibatch_rows)
