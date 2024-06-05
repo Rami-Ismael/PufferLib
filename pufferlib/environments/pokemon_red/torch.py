@@ -12,6 +12,20 @@ class Recurrent(pufferlib.models.LSTMWrapper):
             input_size=512, hidden_size=512, num_layers=1):
         super().__init__(env, policy,
             input_size, hidden_size, num_layers)
+class ResnetBlock(torch.nn.Module):
+    def __init__(self, in_planes, img_size=(15, 15)):
+        super().__init__()
+        self.model = torch.nn.Sequential(
+            pufferlib.pytorch.layer_init(torch.nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=1, padding=1)),
+            torch.nn.LayerNorm((in_planes, *img_size)),
+            torch.nn.ReLU(),
+            pufferlib.pytorch.layer_init(torch.nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=1, padding=1)),
+            torch.nn.LayerNorm((in_planes, *img_size)),
+        )
+    def forward(self, x):
+        out = self.model(x)
+        out += x
+        return out
 
 class Policy(nn.Module):
     def __init__(self, env, *args, framestack, flat_size,
@@ -29,16 +43,13 @@ class Policy(nn.Module):
         print(f"The emulated environment is {self.emulated}")
         self.dtype = pufferlib.pytorch.nativize_dtype(self.emulated)
         print(f"The dtype is {self.dtype}")
-        self.network= nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Conv2d(3, 32, 8, stride=4)),
-            nn.ReLU(),
-            pufferlib.pytorch.layer_init(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            pufferlib.pytorch.layer_init(nn.Conv2d(64, 64, 3, stride=1)),
-            nn.ReLU(),
+        self.network = nn.Sequential(
+            ResnetBlock( in_planes = 3 , img_size = (72, 80) ),
+            nn.LeakyReLU(),
             nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear(1920, hidden_size)),
-            nn.ReLU(),
+            pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size)),
+            nn.LayerNorm(hidden_size),
+            nn.LeakyReLU(),
         )
         self.actor = pufferlib.pytorch.layer_init(
             nn.Linear(hidden_size, env.single_action_space.n), std=0.01)
@@ -48,7 +59,7 @@ class Policy(nn.Module):
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)
         actions, value = self.decode_actions(hidden, lookup)
-        return actions, value
+        return actions, value , hidden
 
     def encode_observations(self, observations):
         env_outputs = pufferlib.pytorch.nativize_tensor(observations, self.dtype)
@@ -63,4 +74,4 @@ class Policy(nn.Module):
     def decode_actions(self, flat_hidden, lookup, concat=None):
         action = self.actor(flat_hidden)
         value = self.value_fn(flat_hidden)
-        return action, value
+        return action, value 
