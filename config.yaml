@@ -724,13 +724,12 @@ pokemon_red:
     total_timesteps: 1_000_000
     num_envs: 96 
     num_workers: 24
-    env_batch_size: 32
     zero_copy: False
     update_epochs: 3
     gamma: 0.998
     batch_size: 65536
     minibatch_size: 2048
-    compile: True
+    compile: False 
     learning_rate: 2.0e-4
     anneal_lr: False
 pokemon-red:
@@ -750,7 +749,53 @@ pokedebug:
     batch_size: 2048
     minibatch_size: 256
     compile: False
- 
+    device: cpu
+local_cpu_pokemon:
+  package: pokemon_red
+  use_rnn: True
+  train:
+    num_envs: 256
+    num_workers: 4
+    batch_size: 8192
+    zero_copy: True
+    env_batch_size: 128
+
+    minibatch_size: 128
+
+    clip_vloss: True
+    vf_clip_coef: 0.4
+    vf_coef: 0.8
+
+
+    ent_coef: 0.2
+    clip_coef: 0.25
+
+    num_steps: 8192
+
+
+
+    total_timesteps: 1_000_000_000
+    update_epochs: 8
+    gamma: 0.998
+    anneal_lr: False
+    learning_rate: 3e-4
+    compile: False
+    device: cpu
+  sweep:
+      method: bayes
+      name: sweep
+      metric:
+        goal: maximize
+        name: environment/number_of_uniqiue_coordinate_it_explored
+      # Nested parameters name required by WandB API
+      parameters:
+        train:
+          parameters:
+            learning_rate: {
+              'distribution': 'log_uniform_values',
+              'min': 1e-5,
+              'max': 3e-4,
+            }
 links_awaken:
   package: links_awaken
 links-awaken:
