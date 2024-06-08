@@ -805,14 +805,14 @@ puffertank_pokemon_red:
       #num_minibatches: 4
       update_epochs: 4
       norm_adv: True
-      clip_coef: 0.1
+      clip_coef: 0.05
       ent_coef: 0.01
       vf_coef: 0.5
       clip_vloss: True
-      vf_clip_coef: 0.4
+      vf_clip_coef: 0.3
       max_grad_norm: 0.5
       target_kl: ~
-      #num_envs: 256
+      num_envs: 768
       num_workers: 24
       batch_size: 65536
       zero_copy: False
