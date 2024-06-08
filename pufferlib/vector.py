@@ -121,7 +121,7 @@ class Serial:
                 rewards = np.zeros(self.agents_per_batch, dtype=np.float32),
                 terminals = np.zeros(self.agents_per_batch, dtype=bool),
                 truncations = np.zeros(self.agents_per_batch, dtype=bool),
-                masks = np.zeros(self.agents_per_batch, dtype=bool),
+                masks = np.ones(self.agents_per_batch, dtype=bool),
             )
             self._assign_buffers(self.buf)
 
@@ -167,6 +167,7 @@ class Serial:
 
 def _worker_process(env_creators, env_args, env_kwargs, num_envs,
         num_workers, worker_idx, send_pipe, recv_pipe, shm):
+
     envs = Serial(env_creators, env_args, env_kwargs, num_envs)
     obs_shape = envs.single_observation_space.shape
     obs_dtype = envs.single_observation_space.dtype
@@ -185,6 +186,7 @@ def _worker_process(env_creators, env_args, env_kwargs, num_envs,
         truncations=np.ndarray(shape, dtype=bool, buffer=shm.truncateds)[worker_idx],
         masks=np.ndarray(shape, dtype=bool, buffer=shm.masks)[worker_idx],
     )
+    buf.masks[:] = True
     envs._assign_buffers(buf)
 
     semaphores=np.ndarray(num_workers, dtype=np.uint8, buffer=shm.semaphores)
@@ -323,7 +325,6 @@ class Multiprocessing:
         self.initialized = False
         self.zero_copy = zero_copy
 
-    #@profile
     def recv(self):
         recv_precheck(self)
         while True:
@@ -403,10 +404,10 @@ class Multiprocessing:
 
         agent_ids = self.agent_ids[w_slice].ravel()
         m = buf.masks[w_slice].ravel()
+        self.batch_mask = m
 
         return o, r, d, t, infos, agent_ids, m
 
-    #@profile
     def send(self, actions):
         actions = send_precheck(self, actions).reshape(self.atn_batch_shape)
         # TODO: What shape?
@@ -578,6 +579,9 @@ def make(env_creator_or_creators, env_args=None, env_kwargs=None, backend=Serial
 
         if 'batch_size' in kwargs:
             batch_size = kwargs['batch_size']
+            if batch_size is None:
+                batch_size = num_envs
+
             if batch_size % envs_per_worker != 0:
                 raise APIUsageError(
                     'batch_size must be divisible by (num_envs / num_workers)')
@@ -612,6 +616,11 @@ def make(env_creator_or_creators, env_args=None, env_kwargs=None, backend=Serial
     # Keeps batch size consistent when debugging with Serial backend
     if backend is Serial and 'batch_size' in kwargs:
         num_envs = kwargs['batch_size']
+
+    # Sanity check args
+    for k in kwargs:
+        if k not in ['num_workers', 'batch_size', 'zero_copy','backend']:
+            raise APIUsageError(f'Invalid argument: {k}')
 
     # TODO: First step action space check
     
@@ -650,6 +659,7 @@ def check_envs(envs, driver):
 def autotune(env_creator, batch_size, max_envs=1024, model_forward_s=0.0,
         max_env_ram_gb=16, max_batch_vram_gb=0.05, time_per_test=5): 
     '''Determine the optimal vectorization parameters for your system'''
+    # TODO: fix multiagent
     if max_envs < batch_size:
         raise ValueError('max_envs < min_batch_size')
 
@@ -662,7 +672,12 @@ def autotune(env_creator, batch_size, max_envs=1024, model_forward_s=0.0,
     env = env_creator()
     env.reset()
     obs_space = env.single_observation_space
-    actions = [env.action_space.sample() for _ in range(1000)]
+    actions = [
+        np.array([env.single_action_space.sample()
+            for _ in range(env.num_agents)])
+        for _ in range(1000)
+    ]
+
     num_agents = env.num_agents
     steps = 0
     step_times = []

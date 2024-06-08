@@ -1,6 +1,5 @@
 from setuptools import find_packages, setup
 from Cython.Build import cythonize
-from itertools import chain
 import numpy
 
 VERSION = '1.0.0'
@@ -34,30 +33,12 @@ cleanrl = [
     'torch',
     'wandb==0.13.7',
     'psutil==5.9.5',
-    'gputil',
     'tyro==0.5.10',
+    'pynvml'
 ]
 
-rllib = [
-    'ray[all]==2.0.0',
-    'setproctitle==1.1.10',
-    'service-identity==21.1.0',
-    'pydantic==1.9',
-]
-
-pokemon_red = [
-    f'gym=={GYM_VERSION}',
-    f'gymnasium=={GYMNASIUM_VERSION}',
-    'einops==0.6.1',
-    'matplotlib',
-    'scikit-image==0.21.0',
-    'pyboy<2.0.0',
-    'hnswlib==0.7.0',
-    'mediapy',
-    'pandas==2.0.2',
-    'pettingzoo',
-    'GPUtil',
-    'websockets',
+ray = [
+    'ray==2.23.0',
 ]
 
 environments = {
@@ -109,8 +90,8 @@ environments = {
     'griddly': [
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
-        'imageio==2.23.0',
         'griddly==1.6.7',
+        'imageio',
     ],
     'magent': [
         f'gym=={GYM_VERSION}',
@@ -152,7 +133,7 @@ environments = {
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
         f'pettingzoo=={PETTINGZOO_VERSION}',
-        'nmmo>=2.0',
+        'nmmo>=2.1',
     ],
     'open_spiel': [
         f'gym=={GYM_VERSION}',
@@ -163,23 +144,21 @@ environments = {
     'pokemon_red': [
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
+        'pokegym>=0.2.0',
         'einops==0.6.1',
         'matplotlib',
-        'scikit-image==0.21.0',
+        'scikit-image',
         'pyboy<2.0.0',
         'hnswlib==0.7.0',
         'mediapy',
         'pandas==2.0.2',
         'pettingzoo',
-        'GPUtils',
         'websockets',
     ],
     'procgen': [
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
-        # Danijar mirrored for Python 3.11 and 3.12 support
-        'procgen-mirror==0.10.7',
-        #'procgen==0.10.7',
+        'procgen-mirror==0.10.7', # Procgen mirror for 3.11 and 3.12 support
     ],
     #'smac': [
     #    'git+https://github.com/oxwhirl/smac.git',
@@ -229,17 +208,14 @@ setup(
         'cython>=3.0.0',
         'rich',
         'rich_argparse',
-        # TODO: need better way to override gym version
-        f'gym<=0.23',
-        f'gymnasium<=0.29.1',
-        f'pettingzoo<=1.24.1',
+        f'gym<={GYM_VERSION}',
+        f'gymnasium<={GYMNASIUM_VERSION}',
+        f'pettingzoo<={PETTINGZOO_VERSION}',
         'shimmy[gym-v21]',
-        # *cleanrl,
-        # *environments['pokemon_red'],
     ],
     extras_require={
         'docs': docs,
-        'rllib': rllib,
+        'ray': ray,
         'cleanrl': cleanrl,
         'common': common,
         **environments,

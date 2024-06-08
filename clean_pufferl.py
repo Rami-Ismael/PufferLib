@@ -1,18 +1,22 @@
 from pdb import set_trace as T
 import numpy as np
-import contextlib
 
 import os
 import random
+import psutil
 import time
 
-from collections import defaultdict
+from threading import Thread
+from collections import defaultdict, deque
+
+import rich
+from rich.console import Console
+from rich.table import Table
 
 import torch
 
 import pufferlib
 import pufferlib.utils
-import pufferlib.policy_pool
 import pufferlib.pytorch
 
 torch.set_float32_matmul_precision('high')
@@ -23,24 +27,14 @@ pyximport.install(setup_args={"include_dirs": np.get_include()})
 from c_gae import compute_gae
 
 
-def optimize(data, config, loss):
-    #data.optimizer.zero_grad()
-    loss.backward()
-    torch.nn.utils.clip_grad_norm_(data.policy.parameters(), config.max_grad_norm)
-    data.optimizer.step()
-    if config.device == 'cuda':
-        torch.cuda.synchronize()
-
-
-def create(config, vecenv, policy, optimizer=None, wandb=None, policy_pool=False,
-        policy_selector=pufferlib.policy_pool.random_selector):
+def create(config, vecenv, policy, optimizer=None, wandb=None):
     seed_everything(config.seed, config.torch_deterministic)
     profile = Profile()
     losses = make_losses()
 
+    utilization = Utilization()
     msg = f'Model Size: {abbreviate(count_params(policy))} parameters'
-    # TODO: Check starting point in term and draw from there with no clear
-    print_dashboard(config.env, 0, 0, profile, losses, {}, msg, clear=True)
+    print_dashboard(config.env, utilization, 0, 0, profile, losses, {}, msg, clear=True)
 
     vecenv.async_reset(config.seed)
     obs_shape = vecenv.single_observation_space.shape
@@ -60,18 +54,6 @@ def create(config, vecenv, policy, optimizer=None, wandb=None, policy_pool=False
     optimizer = torch.optim.Adam(policy.parameters(),
         lr=config.learning_rate, eps=1e-5)
 
-    # Wraps the policy for self-play
-    if policy_pool:
-        policy = pufferlib.policy_pool.PolicyPool(
-            policy=policy,
-            total_agents=vecenv.agents_per_batch,
-            atn_shape=vecenv.single_action_space.shape,
-            device=config.device,
-            data_dir=config.data_dir,
-            kernel=config.pool_kernel,
-            policy_selector=policy_selector,
-        )
-
     return pufferlib.namespace(
         config=config,
         vecenv=vecenv,
@@ -86,8 +68,8 @@ def create(config, vecenv, policy, optimizer=None, wandb=None, policy_pool=False
         epoch=0,
         stats={},
         msg=msg,
-        #optimize=optimize,
-        #optim=optim
+        last_log_time=time.time(),
+        utilization=utilization,
     )
 
 @pufferlib.utils.profile
@@ -96,11 +78,8 @@ def evaluate(data):
 
     with profile.eval_misc:
         policy = data.policy
-        #policy.update_policies()
-        agent_steps = 0
         infos = defaultdict(list)
         lstm_h, lstm_c = experience.lstm_h, experience.lstm_c
-
 
     while not experience.full:
         with profile.env:
@@ -112,14 +91,8 @@ def evaluate(data):
 
             o = torch.as_tensor(o)
             o_device = o.to(config.device)
-
             r = torch.as_tensor(r)
             d = torch.as_tensor(d)
-            #i = data.policy.update_scores(i, "return")
-
-            # TODO: Update this for policy pool
-            #for ii, ee  in zip(i['learner'], env_id):
-            #    ii['env_id'] = ee
 
         with profile.eval_forward, torch.no_grad():
             # TODO: In place-update should be faster. Leaking 7% speed max
@@ -143,21 +116,18 @@ def evaluate(data):
             o = o if config.cpu_offload else o_device
             experience.store(o, value, actions, logprob, r, d, env_id, mask)
 
-            # Really neeed to look at policy pool soon
             for i in info:
                 for k, v in pufferlib.utils.unroll_nested_dict(i):
                     infos[k].append(v)
 
         with profile.env:
             data.vecenv.send(actions)
-        #prof.step()
-    #prof.export_chrome_trace('no-compile-profile.json')
 
     with profile.eval_misc:
         data.stats = {}
-        #infos = infos['learner']
 
-        # Moves into models... maybe. Definitely moves. You could also just return infos and have it in demo
+        # Moves into models... maybe. Definitely moves.
+        # You could also just return infos and have it in demo
         if 'pokemon_exploration_map' in infos:
             for pmap in infos['pokemon_exploration_map']:
                 if not hasattr(data, 'pokemon_map'):
@@ -172,32 +142,16 @@ def evaluate(data):
                 data.stats['Media/exploration_map'] = data.wandb.Image(rendered)
 
         for k, v in infos.items():
+            if '_map' in k and data.wandb is not None:
+                data.stats[f'Media/{k}'] = data.wandb.Image(v[0])
+                continue
+
             try: # TODO: Better checks on log data types
                 data.stats[k] = np.mean(v)
             except:
                 continue
 
-
     return data.stats, infos
-
-def compute_advantages(batch_size, idxs, dones, values, rewards, gamma, gae_lambda):
-    advantages = np.zeros(batch_size)
-    lastgaelam = 0
-    for t in reversed(range(batch_size-1)):
-        i, i_nxt = idxs[t], idxs[t + 1]
-
-        nextnonterminal = 1.0 - dones[i_nxt]
-        nextvalues = values[i_nxt]
-        delta = (
-            rewards[i_nxt]
-            + gamma * nextvalues * nextnonterminal
-            - values[i]
-        )
-        advantages[t] = lastgaelam = (
-            delta + gamma * gae_lambda * nextnonterminal * lastgaelam
-        )
-
-    return advantages
 
 @pufferlib.utils.profile
 def train(data):
@@ -218,106 +172,90 @@ def train(data):
     # Optimizing the policy and value network
     mean_pg_loss, mean_v_loss, mean_entropy_loss = 0, 0, 0
     mean_old_kl, mean_kl, mean_clipfrac = 0, 0, 0
-    '''
-    with torch.profiler.profile(
-        activities=[
-            torch.profiler.ProfilerActivity.CPU,
-            torch.profiler.ProfilerActivity.CUDA,
-        ],
-        with_stack=True,
-        with_modules=True,
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=5, repeat=1),
-    ) as prof:
-    '''
-    with contextlib.nullcontext():
-        for epoch in range(config.update_epochs):
-            lstm_state = None
-            for mb in range(experience.num_minibatches):
-                with profile.train_misc:
-                    obs = experience.b_obs[mb]
-                    obs = obs.to(config.device)
-                    atn = experience.b_actions[mb]
-                    log_probs = experience.b_logprobs[mb]
-                    val = experience.b_values[mb]
-                    adv = experience.b_advantages[mb]
-                    ret = experience.b_returns[mb]
+    for epoch in range(config.update_epochs):
+        lstm_state = None
+        for mb in range(experience.num_minibatches):
+            with profile.train_misc:
+                obs = experience.b_obs[mb]
+                obs = obs.to(config.device)
+                atn = experience.b_actions[mb]
+                log_probs = experience.b_logprobs[mb]
+                val = experience.b_values[mb]
+                adv = experience.b_advantages[mb]
+                ret = experience.b_returns[mb]
 
-                with profile.train_forward:
-                    if experience.lstm_h is not None:
-                        _, newlogprob, entropy, newvalue, lstm_state = data.policy(
-                            obs, state=lstm_state, action=atn)
-                        lstm_state = (lstm_state[0].detach(), lstm_state[1].detach())
-                    else:
-                        _, newlogprob, entropy, newvalue = data.policy(
-                            obs.reshape(-1, *data.vecenv.single_observation_space.shape),
-                            action=atn,
-                        )
-
-                    if config.device == 'cuda':
-                        torch.cuda.synchronize()
-
-                with profile.train_misc:
-                    logratio = newlogprob - log_probs.reshape(-1)
-                    ratio = logratio.exp()
-
-                    with torch.no_grad():
-                        # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                        old_approx_kl = (-logratio).mean()
-                        approx_kl = ((ratio - 1) - logratio).mean()
-                        clipfrac = ((ratio - 1.0).abs() > config.clip_coef).float().mean()
-
-                    adv = adv.reshape(-1)
-                    if config.norm_adv:
-                        adv = (adv - adv.mean()) / (adv.std() + 1e-8)
-
-                    # Policy loss
-                    pg_loss1 = -adv * ratio
-                    pg_loss2 = -adv * torch.clamp(
-                        ratio, 1 - config.clip_coef, 1 + config.clip_coef
+            with profile.train_forward:
+                if experience.lstm_h is not None:
+                    _, newlogprob, entropy, newvalue, lstm_state = data.policy(
+                        obs, state=lstm_state, action=atn)
+                    lstm_state = (lstm_state[0].detach(), lstm_state[1].detach())
+                else:
+                    _, newlogprob, entropy, newvalue = data.policy(
+                        obs.reshape(-1, *data.vecenv.single_observation_space.shape),
+                        action=atn,
                     )
-                    pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
-                    # Value loss
-                    newvalue = newvalue.view(-1)
-                    if config.clip_vloss:
-                        v_loss_unclipped = (newvalue - ret) ** 2
-                        v_clipped = val + torch.clamp(
-                            newvalue - val,
-                            -config.vf_clip_coef,
-                            config.vf_clip_coef,
-                        )
-                        v_loss_clipped = (v_clipped - ret) ** 2
-                        v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-                        v_loss = 0.5 * v_loss_max.mean()
-                    else:
-                        v_loss = 0.5 * ((newvalue - ret) ** 2).mean()
+                if config.device == 'cuda':
+                    torch.cuda.synchronize()
 
-                    entropy_loss = entropy.mean()
-                    loss = pg_loss - config.ent_coef * entropy_loss + v_loss * config.vf_coef
+            with profile.train_misc:
+                logratio = newlogprob - log_probs.reshape(-1)
+                ratio = logratio.exp()
 
-                with profile.learn:
-                    data.optimizer.zero_grad()
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(data.policy.parameters(), config.max_grad_norm)
-                    data.optimizer.step()
-                    if config.device == 'cuda':
-                        torch.cuda.synchronize()
-                    #data.optim(data, config, loss)
+                with torch.no_grad():
+                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                    old_approx_kl = (-logratio).mean()
+                    approx_kl = ((ratio - 1) - logratio).mean()
+                    clipfrac = ((ratio - 1.0).abs() > config.clip_coef).float().mean()
 
-                with profile.train_misc:
-                    losses.policy_loss += pg_loss.item() / experience.num_minibatches
-                    losses.value_loss += v_loss.item() / experience.num_minibatches
-                    losses.entropy += entropy_loss.item() / experience.num_minibatches
-                    losses.old_approx_kl += old_approx_kl.item() / experience.num_minibatches
-                    losses.approx_kl += approx_kl.item() / experience.num_minibatches
-                    losses.clipfrac += clipfrac.item() / experience.num_minibatches
+                adv = adv.reshape(-1)
+                if config.norm_adv:
+                    adv = (adv - adv.mean()) / (adv.std() + 1e-8)
 
-            if config.target_kl is not None:
-                if approx_kl > config.target_kl:
-                    break
-            #prof.step()
-    #prof.export_chrome_trace('no-compile-train-profile.json')
+                # Policy loss
+                pg_loss1 = -adv * ratio
+                pg_loss2 = -adv * torch.clamp(
+                    ratio, 1 - config.clip_coef, 1 + config.clip_coef
+                )
+                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
+                # Value loss
+                newvalue = newvalue.view(-1)
+                if config.clip_vloss:
+                    v_loss_unclipped = (newvalue - ret) ** 2
+                    v_clipped = val + torch.clamp(
+                        newvalue - val,
+                        -config.vf_clip_coef,
+                        config.vf_clip_coef,
+                    )
+                    v_loss_clipped = (v_clipped - ret) ** 2
+                    v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                    v_loss = 0.5 * v_loss_max.mean()
+                else:
+                    v_loss = 0.5 * ((newvalue - ret) ** 2).mean()
+
+                entropy_loss = entropy.mean()
+                loss = pg_loss - config.ent_coef * entropy_loss + v_loss * config.vf_coef
+
+            with profile.learn:
+                data.optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(data.policy.parameters(), config.max_grad_norm)
+                data.optimizer.step()
+                if config.device == 'cuda':
+                    torch.cuda.synchronize()
+
+            with profile.train_misc:
+                losses.policy_loss += pg_loss.item() / experience.num_minibatches
+                losses.value_loss += v_loss.item() / experience.num_minibatches
+                losses.entropy += entropy_loss.item() / experience.num_minibatches
+                losses.old_approx_kl += old_approx_kl.item() / experience.num_minibatches
+                losses.approx_kl += approx_kl.item() / experience.num_minibatches
+                losses.clipfrac += clipfrac.item() / experience.num_minibatches
+
+        if config.target_kl is not None:
+            if approx_kl > config.target_kl:
+                break
 
     with profile.train_misc:
         if config.anneal_lr:
@@ -333,15 +271,12 @@ def train(data):
         data.epoch += 1
 
         done_training = data.global_step >= config.total_timesteps
-        if data.epoch % config.checkpoint_interval == 0 or done_training:
-            save_checkpoint(data)
-            data.msg = f'Checkpoint saved at update {data.epoch}'
-
         if profile.update(data) or done_training:
-            print_dashboard(config.env, data.global_step, data.epoch,
+            print_dashboard(config.env, data.utilization, data.global_step, data.epoch,
                 profile, data.losses, data.stats, data.msg)
 
-            if data.wandb is not None and data.global_step > 0:
+            if data.wandb is not None and data.global_step > 0 and time.time() - data.last_log_time > 5.0:
+                data.last_log_time = time.time()
                 data.wandb.log({
                     '0verview/SPS': profile.SPS,
                     '0verview/agent_steps': data.global_step,
@@ -349,15 +284,15 @@ def train(data):
                     **{f'environment/{k}': v for k, v in data.stats.items()},
                     **{f'losses/{k}': v for k, v in data.losses.items()},
                     **{f'performance/{k}': v for k, v in data.profile},
-                    #**{f'skillrank/{policy}': elo
-                    #    for policy, elo in data.policy.ranker.ratings.items()},
                 })
 
-        if done_training:
-            close(data)
+        if data.epoch % config.checkpoint_interval == 0 or done_training:
+            save_checkpoint(data)
+            data.msg = f'Checkpoint saved at update {data.epoch}'
 
 def close(data):
     data.vecenv.close()
+    data.utilization.stop()
     config = data.config
     if data.wandb is not None:
         artifact_name = f"{config.exp_id}_model"
@@ -542,6 +477,31 @@ class Experience:
         self.b_values = self.b_values[b_flat]
         self.b_returns = self.b_advantages + self.b_values
 
+class Utilization(Thread):
+    def __init__(self, delay=1, maxlen=20):
+        super().__init__()
+        self.cpu_mem = deque(maxlen=maxlen)
+        self.cpu_util = deque(maxlen=maxlen)
+        self.gpu_util = deque(maxlen=maxlen)
+        self.gpu_mem = deque(maxlen=maxlen)
+
+        self.delay = delay
+        self.stopped = False
+        self.start()
+
+    def run(self):
+        while not self.stopped:
+            self.cpu_util.append(psutil.cpu_percent())
+            mem = psutil.virtual_memory()
+            self.cpu_mem.append(mem.active / mem.total)
+            self.gpu_util.append(torch.cuda.utilization())
+            free, total = torch.cuda.mem_get_info()
+            self.gpu_mem.append(free / total)
+            time.sleep(self.delay)
+
+    def stop(self):
+        self.stopped = True
+
 def save_checkpoint(data):
     config = data.config
     path = os.path.join(config.data_dir, config.exp_id)
@@ -587,56 +547,48 @@ def count_params(policy):
 
 def rollout(env_creator, env_kwargs, agent_creator, agent_kwargs,
         model_path=None, device='cuda', verbose=True):
-    env = env_creator(**env_kwargs)
+    # We are just using Serial vecenv to give a consistent
+    # single-agent/multi-agent API for evaluation
+    try:
+        env = pufferlib.vector.make(env_creator,
+            env_kwargs={'render_mode': 'rgb_array', **env_kwargs})
+    except:
+        env = pufferlib.vector.make(env_creator, env_kwargs=env_kwargs)
+
     if model_path is None:
         agent = agent_creator(env, **agent_kwargs)
     else:
         agent = torch.load(model_path, map_location=device)
 
-    terminal = truncated = True
- 
+    ob, info = env.reset()
+    driver = env.driver_env
+    os.system('clear')
+    state = None
+
     while True:
-        if terminal or truncated:
-            if verbose:
-                print('---  Reset  ---')
-
-            ob, info = env.reset()
-            state = None
-            step = 0
-            reward = 0
-            terminal = False
-            truncated = False
-            return_val = 0
-        else:
-            ob, reward, terminal, truncated, _ = env.step(action.item())
-
-        ob = torch.tensor(ob).unsqueeze(0).to(device)
-        with torch.no_grad():
-            if hasattr(agent, 'lstm'):
-                action, _, _, _, state = agent(ob, state)
-            else:
-                action, _, _, _ = agent(ob)
-
-        return_val += reward
-
-        render = env.render()
-        if env.render_mode == 'ansi':
-            print("\033c", end="")
-            print(render)
-            time.sleep(0.5)
-        elif env.render_mode == 'rgb_array':
+        render = driver.render()
+        if driver.render_mode == 'ansi':
+            print('\033[0;0H' + render + '\n')
+            time.sleep(0.6)
+        elif driver.render_mode == 'rgb_array':
             import cv2
             render = cv2.cvtColor(render, cv2.COLOR_RGB2BGR)
             cv2.imshow('frame', render)
             cv2.waitKey(1)
             time.sleep(1/24)
-        elif env.render_mode == 'human':
-            pass
 
-        if verbose:
-            print(f'Step: {step} Reward: {reward:.4f} Return: {return_val:.2f}')
+        with torch.no_grad():
+            ob = torch.from_numpy(ob).to(device)
+            if hasattr(agent, 'lstm'):
+                action, _, _, _, state = agent(ob, state)
+            else:
+                action, _, _, _ = agent(ob)
 
-        step += 1
+            action = action.cpu().numpy().reshape(env.action_space.shape)
+
+        ob, reward = env.step(action)[:2]
+        reward = reward.mean()
+        print(f'Reward: {reward:.4f}')
 
 def seed_everything(seed, torch_deterministic):
     random.seed(seed)
@@ -644,13 +596,6 @@ def seed_everything(seed, torch_deterministic):
     if seed is not None:
         torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = torch_deterministic
-
-import psutil
-import GPUtil
-
-import rich
-from rich.console import Console
-from rich.table import Table
 
 ROUND_OPEN = rich.box.Box(
     "╭──╮\n"
@@ -688,13 +633,13 @@ def duration(seconds):
     s = seconds % 60
     return f"{b2}{h}{c2}h {b2}{m}{c2}m {b2}{s}{c2}s" if h else f"{b2}{m}{c2}m {b2}{s}{c2}s" if m else f"{b2}{s}{c2}s"
 
-
 def fmt_perf(name, time, uptime):
     percent = 0 if uptime == 0 else int(100*time/uptime - 1e-5)
     return f'{c1}{name}', duration(time), f'{b2}{percent:2d}%'
 
 # TODO: Add env name to print_dashboard
-def print_dashboard(env_name, global_step, epoch, profile, losses, stats, msg, clear=False, max_stats=[0]):
+def print_dashboard(env_name, utilization, global_step, epoch,
+        profile, losses, stats, msg, clear=False, max_stats=[0]):
     console = Console()
     if clear:
         console.clear()
@@ -704,18 +649,17 @@ def print_dashboard(env_name, global_step, epoch, profile, losses, stats, msg, c
 
     table = Table(box=None, expand=True, show_header=False)
     dashboard.add_row(table)
-    cpu_percent = psutil.cpu_percent()
-    dram_percent = psutil.virtual_memory().percent
-    gpus = GPUtil.getGPUs()
-    gpu_percent = gpus[0].load * 100 if gpus else 0
-    vram_percent = gpus[0].memoryUtil * 100 if gpus else 0
+    cpu_percent = np.mean(utilization.cpu_util)
+    dram_percent = np.mean(utilization.cpu_mem)
+    gpu_percent = np.mean(utilization.gpu_util)
+    vram_percent = np.mean(utilization.gpu_mem)
     table.add_column(justify="left", width=30)
     table.add_column(justify="center", width=12)
     table.add_column(justify="center", width=12)
-    table.add_column(justify="center", width=12)
-    table.add_column(justify="right", width=12)
+    table.add_column(justify="center", width=13)
+    table.add_column(justify="right", width=13)
     table.add_row(
-        f':blowfish: {c1}PufferLib {b2}1.0.0{c1}: {env_name}',
+        f':blowfish: {c1}PufferLib {b2}1.0.0',
         f'{c1}CPU: {c3}{cpu_percent:.1f}%',
         f'{c1}GPU: {c3}{gpu_percent:.1f}%',
         f'{c1}DRAM: {c3}{dram_percent:.1f}%',
@@ -725,6 +669,7 @@ def print_dashboard(env_name, global_step, epoch, profile, losses, stats, msg, c
     s = Table(box=None, expand=True)
     s.add_column(f"{c1}Summary", justify='left', vertical='top', width=16)
     s.add_column(f"{c1}Value", justify='right', vertical='top', width=8)
+    s.add_row(f'{c2}Environment', f'{b2}{env_name}')
     s.add_row(f'{c2}Agent Steps', abbreviate(global_step))
     s.add_row(f'{c2}SPS', abbreviate(profile.SPS))
     s.add_row(f'{c2}Epoch', abbreviate(epoch))

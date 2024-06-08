@@ -1,3 +1,5 @@
+from pdb import set_trace as T
+
 class GymToGymnasium:
     def __init__(self, env):
         self.env = env
@@ -25,6 +27,10 @@ class PettingZooTruncatedWrapper:
         self.observation_space = env.observation_space
         self.action_space = env.action_space
         self.render = env.render
+
+    @property
+    def render_mode(self):
+        return self.env.render_mode
 
     @property
     def possible_agents(self):
