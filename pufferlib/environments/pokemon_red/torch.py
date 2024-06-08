@@ -18,7 +18,7 @@ class ResnetBlock(torch.nn.Module):
         self.model = torch.nn.Sequential(
             pufferlib.pytorch.layer_init(torch.nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=1, padding=1)),
             torch.nn.LayerNorm((in_planes, *img_size)),
-            torch.nn.ReLU(),
+            torch.nn.Mish(),
             pufferlib.pytorch.layer_init(torch.nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=1, padding=1)),
             torch.nn.LayerNorm((in_planes, *img_size)),
         )
@@ -43,18 +43,27 @@ class Policy(nn.Module):
         print(f"The emulated environment is {self.emulated}")
         self.dtype = pufferlib.pytorch.nativize_dtype(self.emulated)
         print(f"The dtype is {self.dtype}")
-        self.network = nn.Sequential(
+        self.screen_network = nn.Sequential(
             ResnetBlock( in_planes = 3 , img_size = (72, 80) ),
-            nn.LeakyReLU(),
+            nn.Mish(),
             nn.Flatten(),
             pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size)),
             nn.LayerNorm(hidden_size),
-            nn.LeakyReLU(),
+            nn.Mish(),
+        )
+        
+        self.encode_linear = nn.Sequential(
+            nn.Linear( 518 , hidden_size),
+            nn.Mish(),
         )
         self.actor = pufferlib.pytorch.layer_init(
             nn.Linear(hidden_size, env.single_action_space.n), std=0.01)
         self.value_fn = pufferlib.pytorch.layer_init(
             nn.Linear(output_size, 1), std=1)
+        
+                # pokemon has 0xF7 map ids
+        # Lets start with 4 dims for now. Could try 8
+        self.map_embeddings = torch.nn.Embedding(0xF7, 4, dtype=torch.float32)
 
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)
@@ -63,13 +72,28 @@ class Policy(nn.Module):
 
     def encode_observations(self, observations):
         env_outputs = pufferlib.pytorch.nativize_tensor(observations, self.dtype)
+        try:
+            map_id = self.map_embeddings(env_outputs["map_id"].long())
+        except Exception as e:
+            print(e)
+            pdb.set_trace()
         #pdb.set_trace()
         if self.channels_last:
             #observations = env_outputs["screen"].permute(0, 3, 1, 2)
             observations = env_outputs["screen"].permute(0, 3, 1, 2)
         if self.downsample > 1:
             observations = observations[:, :, ::self.downsample, ::self.downsample]
-        return self.network(observations.float() / 255.0), None
+        return self.encode_linear(
+            torch.cat(
+                (
+                (self.screen_network(observations.float() / 255.0).squeeze(1)) , 
+                env_outputs["x"].float() // 444,
+                env_outputs["y"].float() // 436,
+                map_id.squeeze(1),
+                ) ,
+                dim = -1
+            )
+        ) , None
 
     def decode_actions(self, flat_hidden, lookup, concat=None):
         action = self.actor(flat_hidden)
