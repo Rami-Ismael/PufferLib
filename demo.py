@@ -14,6 +14,7 @@ import pufferlib.frameworks.cleanrl
 
 from rich_argparse import RichHelpFormatter
 from rich.traceback import install
+from rich.console import Console
 from rich import print as print
 from rich.pretty import pprint as pprint
 
@@ -149,7 +150,7 @@ def sweep(args, wandb_name, env_module, make_env):
             import traceback
             traceback.print_exc()
 
-    wandb.agent(sweep_id, main, count=20)
+    wandb.agent(sweep_id, main, count=100)
 
 def train(args, env_module, make_env):
     args.wandb = None
@@ -177,7 +178,6 @@ def train(args, env_module, make_env):
         backend=vec,
     )
     policy = make_policy(vecenv.driver_env, env_module, args)
-
     train_config = args.train 
     train_config.track = args.track
     train_config.device = args.train.device
@@ -199,13 +199,19 @@ def train(args, env_module, make_env):
         ) as p:
         '''
 
-        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0:
+        while data.global_step < args.train.total_timesteps:
             try:
                 clean_pufferl.evaluate(data)
                 clean_pufferl.train(data)
             except KeyboardInterrupt:
                 clean_pufferl.close(data)
-                exit(0)
+                os._exit(0)
+            except Exception:
+                Console().print_exception()
+                os._exit(0)
+
+        clean_pufferl.evaluate(data)
+        clean_pufferl.close(data)
 
     elif args.backend == 'sb3':
         from stable_baselines3 import PPO
@@ -233,7 +239,7 @@ if __name__ == '__main__':
         formatter_class=RichHelpFormatter, add_help=False)
     assert 'config' not in sys.argv, '--config deprecated. Use --env'
     parser.add_argument('--env', '--environment', type=str,
-        default='pokemon_red', help='Name of specific environment to run')
+        default='squared', help='Name of specific environment to run')
     parser.add_argument('--pkg', '--package', type=str, default=None, help='Configuration in config.yaml to use')
     parser.add_argument('--backend', type=str, default='clean_pufferl', help='Train backend (clean_pufferl, sb3)')
     parser.add_argument('--mode', type=str, default='train', choices='train eval evaluate sweep autotune baseline profile'.split())
@@ -278,7 +284,7 @@ if __name__ == '__main__':
                 device=args.train.device
             )
         except KeyboardInterrupt:
-            exit(0)
+            os._exit(0)
     elif args.mode == 'sweep':
         sweep(args, wandb_name, env_module, make_env)
     elif args.mode == 'autotune':

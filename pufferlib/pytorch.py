@@ -1,5 +1,7 @@
 import sys
+from pdb import set_trace as T
 from typing import Dict, List, Tuple, Union
+import contextlib
 
 import numpy as np
 import torch
@@ -50,12 +52,18 @@ def nativize_dtype(emulated: pufferlib.namespace) -> NativeDType:
 
     # the observation represents (could be dict, tuple, box, etc.)
     structured_dtype: np.dtype = emulated.emulated_observation_dtype
-    return _nativize_dtype(sample_dtype, structured_dtype)
+    subviews, dtype, shape, offset, delta = _nativize_dtype(sample_dtype, structured_dtype)
+    if subviews is None:
+        return (dtype, shape, offset, delta)
+    else:
+        return subviews
 
+def round_to(x, base):
+    return int(base * np.ceil(x/base))
 
-def _nativize_dtype(
-    sample_dtype: np.dtype, structured_dtype: np.dtype, offset: int = 0
-) -> NativeDType:
+def _nativize_dtype(sample_dtype: np.dtype,
+        structured_dtype: np.dtype,
+        offset: int = 0) -> NativeDType:
     if structured_dtype.fields is None:
         if structured_dtype.subdtype is not None:
             dtype, shape = structured_dtype.subdtype
@@ -63,22 +71,31 @@ def _nativize_dtype(
             dtype = structured_dtype
             shape = (1,)
 
-        delta = int((np.prod(shape) * dtype.itemsize) // sample_dtype.base.itemsize)
-        return (numpy_to_torch_dtype_dict[dtype], shape, offset, delta)
+        delta = int(np.prod(shape))
+        if sample_dtype.base.itemsize == 1:
+            offset = round_to(offset, dtype.alignment)
+            delta *= dtype.itemsize
+        else:
+            assert dtype.itemsize == sample_dtype.base.itemsize
+
+        return None, numpy_to_torch_dtype_dict[dtype], shape, offset, delta
     else:
         subviews = {}
+        start_offset = offset
+        all_delta = 0
         for name, (dtype, _) in structured_dtype.fields.items():
-            returns = _nativize_dtype(sample_dtype, dtype, offset)
-            subviews[name] = returns
-            # this offset is to account for the number of bytes we need to move
-            # the buffer forward due to alignment
-            offset += int(
-                structured_dtype.alignment
-                * np.ceil(dtype.itemsize / structured_dtype.alignment).astype(np.int32)
-                // sample_dtype.base.itemsize
-            )
+            views, dtype, shape, offset, delta = _nativize_dtype(
+                sample_dtype, dtype, offset)
 
-        return subviews
+            if views is not None:
+                subviews[name] = views
+            else:
+                subviews[name] = (dtype, shape, offset, delta)
+
+            offset += delta
+            all_delta += delta
+
+        return subviews, dtype, shape, start_offset, all_delta
 
 
 def nativize_tensor(
@@ -184,3 +201,58 @@ class LSTM(nn.LSTM):
     def __init__(self, input_size=128, hidden_size=128, num_layers=1):
         super().__init__(input_size, hidden_size, num_layers)
         layer_init(self)
+
+def cycle_selector(sample_idx, num_policies):
+    return sample_idx % num_policies
+
+class PolicyPool(torch.nn.Module):
+    def __init__(self, vecenv, policies, learner_mask, device,
+            policy_selector=cycle_selector):
+        '''Experimental utility for running multiple different policies'''
+        super().__init__()
+        assert len(learner_mask) == len(policies)
+        self.policy_map = torch.tensor([policy_selector(i, len(policies))
+            for i in range(vecenv.num_agents)])
+        self.learner_mask = learner_mask
+        self.policies = torch.nn.ModuleList(policies)
+        self.vecenv = vecenv
+
+        # Assumes that all policies have the same LSTM or no LSTM
+        self.lstm = policies[0].lstm if hasattr(policies[0], 'lstm') else None
+
+        # Allocate buffers
+        self.actions = torch.zeros(vecenv.num_agents,
+            *vecenv.single_action_space.shape, dtype=int).to(device)
+        self.logprobs = torch.zeros(vecenv.num_agents).to(device)
+        self.entropy = torch.zeros(vecenv.num_agents).to(device)
+        self.values = torch.zeros(vecenv.num_agents).to(device)
+
+    def forward(self, obs, state=None, action=None):
+        policy_map = self.policy_map[self.vecenv.batch_mask]
+        for policy_idx in range(len(self.policies)):
+            policy = self.policies[policy_idx]
+            is_learner = self.learner_mask[policy_idx]
+            samp_mask = policy_map == policy_idx
+
+            context = torch.no_grad() if is_learner else contextlib.nullcontext()
+            with context:
+                ob = obs[samp_mask]
+                if len(ob) == 0:
+                    continue
+
+                if state is not None:
+                    lstm_h, lstm_c = state
+                    h = lstm_h[:, samp_mask]
+                    c = lstm_c[:, samp_mask]
+                    atn, lgprob, entropy, val, (h, c) = policy(ob, (h, c))
+                    lstm_h[:, samp_mask] = h
+                    lstm_c[:, samp_mask] = c
+                else:
+                    atn, lgprob, _, val = policy(ob)
+
+            self.actions[samp_mask] = atn
+            self.logprobs[samp_mask] = lgprob
+            self.entropy[samp_mask] = entropy
+            self.values[samp_mask] = val.flatten()
+
+        return self.actions, self.logprobs, self.entropy, self.values, (lstm_h, lstm_c)

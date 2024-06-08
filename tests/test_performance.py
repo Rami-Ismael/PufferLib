@@ -2,6 +2,7 @@ from pdb import set_trace as T
 import time
 from tqdm import tqdm
 import importlib
+import random
 import sys
 
 import pufferlib
@@ -20,10 +21,37 @@ import time
 import psutil
 import gymnasium
 
-DEFAULT_TIMEOUT = 10
+DEFAULT_TIMEOUT = 60
 
+import time
+from functools import wraps
 
-def profile_environment(env_creator, timeout=DEFAULT_TIMEOUT):
+class TimedEnv:
+    def __init__(self, env):
+        self._env = env
+        self.reset_times = []
+        self.step_times = []
+
+    def __getattr__(self, name):
+        return getattr(self._env, name)
+
+    def step(self, *args, **kwargs):
+        start = time.time()
+        result = self._env.step(*args, **kwargs)
+        end = time.time()
+        elapsed = end - start
+        self.step_times.append(elapsed)
+        return result
+
+    def reset(self, *args, **kwargs):
+        start = time.time()
+        result = self._env.reset(*args, **kwargs)
+        end = time.time()
+        elapsed = end - start
+        self.reset_times.append(elapsed)
+        return result
+
+def profile_emulation(env_creator, timeout=DEFAULT_TIMEOUT, seed=42):
     reset_times = []
     step_times = []
     agent_step_count = 0
@@ -31,14 +59,18 @@ def profile_environment(env_creator, timeout=DEFAULT_TIMEOUT):
     truncated = False
     reset = True
 
+    random.seed(seed)
+    np.random.seed(seed)
+
     env = env_creator()
+    env.env = TimedEnv(env.env)
     multiagent = callable(env.action_space)
 
     start = time.time()
     while time.time() - start < timeout:
         if reset:
             s = time.time()
-            ob, info = env.reset()
+            ob, info = env.reset(seed=seed)
             reset_times.append(time.time() - s)
 
         if multiagent:
@@ -54,42 +86,59 @@ def profile_environment(env_creator, timeout=DEFAULT_TIMEOUT):
 
         reset = (multiagent and len(env.agents) == 0) or terminal or truncated
 
-    total_reset = sum(reset_times)
-    total_step = sum(step_times)
-    reset_mean = np.mean(reset_times)
-    step_mean = np.mean(step_times)
-    step_std = np.std(step_times)
+    env.close()
 
-    return pufferlib.namespace(
-        sps=len(step_times) / (total_step + total_reset),
-        percent_reset=100 * total_reset / (total_reset + total_step),
-        reset_mean=reset_mean,
-        percent_step_std=100 * step_std / step_mean,
-        step_mean=step_mean,
-        step_std=step_std,
-    )
+    puf_total_reset = sum(reset_times)
+    puf_total_step = sum(step_times)
+    puf_reset_mean = np.mean(reset_times)
+    puf_step_mean = np.mean(step_times)
+    puf_step_std = np.std(step_times)
 
-def profile_emulation(puf_creator, timeout=DEFAULT_TIMEOUT):
-    raw_creator = lambda: puf_creator().env
+    raw_total_reset = sum(env.env.reset_times)
+    raw_total_step = sum(env.env.step_times)
+    raw_reset_mean = np.mean(env.env.reset_times)
+    raw_step_mean = np.mean(env.env.step_times)
+    raw_step_std = np.std(env.env.step_times)
 
-    raw = profile_environment(raw_creator, timeout)
-    puf = profile_environment(puf_creator, timeout)
+    env_sps = agent_step_count / (puf_total_step + puf_total_reset)
+    env_percent_reset = 100 * puf_total_reset / (puf_total_reset + puf_total_step)
+    env_percent_step_std = 100 * puf_step_std / puf_step_mean
+    env_overhead = 100 * (puf_total_step - raw_total_step + puf_total_reset - raw_total_reset) / (puf_total_step + puf_total_reset)
 
-    overhead = 100 * (raw.sps - puf.sps) / raw.sps
-    print(f'{puf.sps:.1f}/{raw.sps:.1f} SPS (puf/raw) | {overhead:.2g}% Overhead')
-    print('  Emulation')
-    print(f'    Raw Reset  : {raw.reset_mean:.3g} ({raw.percent_reset:.2g})%')
-    print(f'    Puf Reset  : {puf.reset_mean:.3g} ({puf.percent_reset:.2g})%')
-    print(f'    Raw Step   : {raw.step_mean:.3g} +/- {raw.step_std:.3g} ({raw.percent_step_std:.2f})%')
-    print(f'    Puf Step   : {puf.step_mean:.3g} +/- {puf.step_std:.3g} ({puf.percent_step_std:.2f})%')
 
-    return pufferlib.namespace(raw=raw, puf=puf)
+    print(f'    SPS        : {env_sps:.1f}')
+    print(f'    Overhead   : {env_overhead:.2g}%')
+    print(f'    Reset      : {env_percent_reset:.3g}%')
+    print(f'    Step STD   : {env_percent_step_std:.3g}%')
 
-def profile_vec(vecenv, timeout=DEFAULT_TIMEOUT):
+def profile_puffer(env_creator, timeout=DEFAULT_TIMEOUT, **kwargs):
+    vecenv = make(env_creator, **kwargs)
     actions = [vecenv.action_space.sample() for _ in range(1000)]
+
+    agent_steps = 0
     vecenv.reset()
+    start = time.time()
+    while time.time() - start < timeout:
+        vecenv.send(actions[agent_steps%1000])
+        o, r, d, t, i, env_id, mask = vecenv.recv()
+        agent_steps += sum(mask)
+
+    sps = agent_steps / (time.time() - start)
+    vecenv.close()
+
+    backend = kwargs.get('backend', Serial)
+    if backend == Multiprocessing and 'batch_size' in kwargs:
+        print(f'    Puffer     : {(sps):.1f} - Pool')
+    else:
+        print(f'    Puffer     : {(sps):.1f} - {backend.__name__}')
+    return sps
+
+def profile_gymnasium_vec(env_creator, num_envs, timeout=DEFAULT_TIMEOUT):
+    vecenv = gymnasium.vector.AsyncVectorEnv([env_creator] * num_envs)
+    actions = [vecenv.action_space.sample() for _ in range(1000)]
 
     steps = 0
+    vecenv.reset()
     start = time.time()
     while time.time() - start < timeout:
         vecenv.step(actions[steps%1000])
@@ -97,172 +146,158 @@ def profile_vec(vecenv, timeout=DEFAULT_TIMEOUT):
 
     sps = steps * vecenv.num_envs / (time.time() - start)
     vecenv.close()
-    return sps
 
-def profile_puffer(env_creator, timeout=DEFAULT_TIMEOUT, **kwargs):
-    env = make(env_creator, **kwargs)
-    sps = profile_vec(env, timeout)
-    backend = kwargs.get('backend', Serial)
-    print(f'    Puffer     : {(sps):.3f} - {backend.__name__}')
-    return sps
-
-def profile_gymnasium_vec(env_creator, num_envs, timeout=DEFAULT_TIMEOUT):
-    env = gymnasium.vector.AsyncVectorEnv([env_creator] * num_envs)
-    sps = profile_vec(env, timeout)
-    print(f'    Gymnasium  : {(sps):.3f}')
+    print(f'    Gymnasium  : {(sps):.1f}')
     return sps
 
 def profile_sb3_vec(env_creator, num_envs, timeout=DEFAULT_TIMEOUT):
     with pufferlib.utils.Suppress():
         from stable_baselines3.common.vec_env import SubprocVecEnv
-        env = SubprocVecEnv([env_creator] * num_envs)
-        sps = profile_vec(env, timeout)
+        vecenv = SubprocVecEnv([env_creator] * num_envs)
+        actions = [[vecenv.action_space.sample() for _ in range(num_envs)]
+            for _ in range(1000)]
 
-    print(f'    SB3        : {(sps):.3f}')
+        steps = 0
+        vecenv.reset()
+        start = time.time()
+        while time.time() - start < timeout:
+            vecenv.step(actions[steps%1000])
+            steps += 1
+
+        sps = steps * vecenv.num_envs / (time.time() - start)
+        vecenv.close()
+
+    print(f'    SB3        : {(sps):.1f}')
     return sps
 
-def sanity_check(env_creator, timeout=5):
-    profile_emulation(env_creator, timeout)
-    for backend in [Serial, Multiprocessing]:#, Ray]:
-        profile_puffer(env_creator, backend=backend, timeout=timeout)
-    #profile_gymnasium_vec(env_creator, num_envs=1, timeout=timeout)
-    #profile_sb3_vec(env_creator, num_envs=1, timeout=timeout)
+def profile_all(name, env_creator, num_envs, num_workers=24,
+        env_batch_size=None, zero_copy=True, timeout=DEFAULT_TIMEOUT):
+    if env_batch_size is None:
+        env_batch_size = num_envs
+
+    print(name)
+    profile_emulation(env_creator, timeout=timeout)
+    profile_puffer(env_creator, num_envs=env_batch_size,
+        backend=Multiprocessing, timeout=timeout,
+        num_workers=min(num_workers, env_batch_size),
+    )
+    if env_batch_size is not None and env_batch_size != num_envs:
+        profile_puffer(env_creator, num_envs=num_envs,
+            backend=Multiprocessing, timeout=timeout, num_workers=num_workers,
+            batch_size=env_batch_size, zero_copy=zero_copy
+        )
+    profile_gymnasium_vec(env_creator, num_envs=env_batch_size, timeout=timeout)
+    profile_sb3_vec(env_creator, num_envs=env_batch_size, timeout=timeout)
+    print()
 
 if __name__ == '__main__':
-    '''
-    from pufferlib.environments import pokemon_red
-    env_creator = pokemon_red.env_creator('pokemon_red')
-    print('Sanity: Pokemon Red')
-    sanity_check(env_creator)
-    autotune(env_creator, batch_size=32, max_envs=96)
-    exit(0)
-
-    from pufferlib.environments import classic_control
-    env_creator = classic_control.env_creator()
-    print('Sanity: Classic Control')
-    sanity_check(env_creator)
-
-    from pufferlib.environments import ocean
-    env_creator = ocean.env_creator('spaces')
-    print('Sanity: Ocean Spaces')
-    sanity_check(env_creator)
-
-    from pufferlib.environments import atari
-    env_creator = atari.env_creator('BreakoutNoFrameskip-v4')
-    print('Sanity: Atari Breakout')
-    sanity_check(env_creator)
-    autotune(env_creator, batch_size=48, max_envs=192)
-    exit(0)
-
-    from pufferlib.environments import crafter
-    env_creator = crafter.env_creator()
-    print('Sanity: Crafter')
-    sanity_check(env_creator)
-
-    from pufferlib.environments import minigrid
-    env_creator = minigrid.env_creator()
-    print('Sanity: MiniGrid')
-    sanity_check(env_creator)
-    '''
+    from pufferlib.environments import nmmo
+    print('Neural MMO')
+    env_creator = nmmo.env_creator()
+    profile_emulation(env_creator)
+    profile_puffer(env_creator, num_envs=8, backend=Multiprocessing)
+    profile_puffer(env_creator, num_envs=24,
+        batch_size=8, backend=Multiprocessing)
+    print()
 
     from pufferlib.environments import nethack
-    env_creator = nethack.env_creator()
-    print('Sanity: NetHack')
-    autotune(env_creator, batch_size=48)
-    sanity_check(env_creator)
-    exit(0)
+    profile_all('NetHack', nethack.env_creator(), num_envs=48)
 
-    from pufferlib.environments import nmmo3
-    env_creator = nmmo3.env_creator()
-    print('Sanity: NMMO3')
-    sanity_check(env_creator)
- 
-    exit(0)
+    from pufferlib.environments import minihack
+    profile_all('MiniHack', minihack.env_creator(), num_envs=48)
 
-    #from pufferlib.environments import nmmo3
-    #env_creators.nmmo3 = nmmo3.env_creator()
+    from pufferlib.environments import pokemon_red
+    profile_all('Pokemon Red', pokemon_red.env_creator(),
+        num_envs=144, env_batch_size=48, zero_copy=False)
 
-    #result = profile_puffer(env_creators.nmmo3, num_envs=1, timeout=10)
-    #print(f'    Puffer Serial: {(result):.3f}')
-    #profile_vec(env_creators.nmmo3, 
-        #num_envs=18, num_workers=6, batch_size=6, timeout=10)
-    #exit(0)
- 
-    #profile_vec(env_creators.nmmo3, 
-    #    num_envs=1, num_workers=1, batch_size=1, timeout=10)
-    #exit(0)
-    #profile_vec(env_creators.nmmo3, 2, 10, 1000)
+    from pufferlib.environments import procgen
+    profile_all('ProcGen', procgen.env_creator('bigfish'),
+        num_envs=144, env_batch_size=48, num_workers=24, zero_copy=False)
 
-    #from pufferlib.environments import pokemon_red
-    #env_creators.pokemon_red = pokemon_red.env_creator('pokemon_red')
-    #profile_vec(env_creators.pokemon_red,
-    #    num_envs=1, num_workers=1, batch_size=1, timeout=10)
-
-    #exit(0)
-
-    # 20k on Nethack on laptop via 1 worker per batch
-    # not triggering a giant copy
-    #from pufferlib.environments import nethack
-    #env_creators.nethack = nethack.env_creator()
-    #profile_vec(env_creators.nethack, num_envs=6,
-    #    num_workers=6, batch_size=1, timeout=10)
-    #    num_workers=6, batch_size=1, timeout=10)
-    #exit(0)
-    #profile_vec(env_creators.nethack, 1, 10, 20000)
-
+    from pufferlib.environments import classic_control
+    profile_all('Classic Control', classic_control.env_creator(),
+        num_envs=1152, env_batch_size=48)
 
     from pufferlib.environments import ocean
-    env_creators.ocean_spaces = ocean.env_creator('spaces')
-    result = profile_puffer(env_creators.ocean_spaces, num_envs=1, timeout=10)
-    result = profile_gymnasium_vec(env_creators.ocean_spaces, num_envs=1, timeout=10)
-    exit(0)
+    profile_all('Ocean Squared', ocean.env_creator('squared'),
+        num_envs=1152, env_batch_size=48)
 
-    from functools import partial
-    env_creators.test = partial(
-        ocean.env_creator('performance_empiric'),
-        count_n=20_000, bandwidth=208_000,
-    )
+    from pufferlib.environments import atari
+    profile_all('Atari Breakout', atari.env_creator('BreakoutNoFrameskip-v4'),
+        num_envs=144, env_batch_size=48, zero_copy=False)
 
+    from pufferlib.environments import crafter
+    profile_all('Crafter', crafter.env_creator(),
+        num_envs=24, env_batch_size=8, zero_copy=False)
 
-    profile_vec(env_creators.test,
-        num_envs=3, num_workers=3, batch_size=1, timeout=5)
-
-
-    '''
-    import cProfile
-    cProfile.run('profile_vec(env_creators.nmmo3, 6, 3, 1)', 'profile')
-    import pstats
-    from pstats import SortKey
-    p = pstats.Stats('profile')
-    p.sort_stats(SortKey.TIME).print_stats(10)
-    T()
-    '''
-
-    #profile_environment(env_creators.nmmo3, 5)
-    #profile_vec(env_creators.nmmo3, 1, 10, 1)
-    #profile_vec(env_creators.nethack, 5, 10, 1)
-
+    from pufferlib.environments import minigrid
+    profile_all('MiniGrid', minigrid.env_creator(),
+        num_envs=192, env_batch_size=48, zero_copy=False)
 
     exit(0)
 
-    from functools import partial
-    counts = [1e5, 1e6, 1e7, 1e8]
-    delays = [0, 0.1, 0.25, 0.5, 1]
-    bandwidth = [1, 1e4, 1e5, 1e6]
+    '''
+    # Small scale version for laptop
+    from pufferlib.environments import nmmo
+    print('Neural MMO')
+    env_creator = nmmo.env_creator()
+    profile_emulation(env_creator)
+    profile_puffer(env_creator, num_envs=4, num_workers=4, backend=Multiprocessing)
+    profile_puffer(env_creator, num_envs=12, num_workers=6,
+        batch_size=4, backend=Multiprocessing)
+    print()
+
+    from pufferlib.environments import nethack
+    profile_all('NetHack', nethack.env_creator(), num_envs=12, num_workers=6)
+
+    from pufferlib.environments import minihack
+    profile_all('MiniHack', minihack.env_creator(), num_envs=12, num_workers=6)
+
+    from pufferlib.environments import pokemon_red
+    profile_all('Pokemon Red', pokemon_red.env_creator(),
+        num_envs=36, num_workers=6, env_batch_size=12, zero_copy=False)
+
+    from pufferlib.environments import classic_control
+    profile_all('Classic Control', classic_control.env_creator(),
+        num_envs=36, num_workers=6, env_batch_size=12, zero_copy=False)
+
+    from pufferlib.environments import ocean
+    profile_all('Ocean Squared', ocean.env_creator('squared'),
+        num_envs=36, num_workers=6, env_batch_size=12, zero_copy=False)
+
+    from pufferlib.environments import atari
+    profile_all('Atari Breakout', atari.env_creator('BreakoutNoFrameskip-v4'),
+        num_envs=36, num_workers=6, env_batch_size=12, zero_copy=False)
+
+    from pufferlib.environments import crafter
+    profile_all('Crafter', crafter.env_creator(),
+        num_envs=12, num_workers=6, env_batch_size=4, zero_copy=False)
+
+    from pufferlib.environments import minigrid
+    profile_all('MiniGrid', minigrid.env_creator(),
+        num_envs=36, num_workers=6, env_batch_size=12, zero_copy=False)
+
+    exit(0)
+    '''
+
+    #from functools import partial
+    #counts = [1e5, 1e6, 1e7, 1e8]
+    #delays = [0, 0.1, 0.25, 0.5, 1]
+    #bandwidth = [1, 1e4, 1e5, 1e6]
 
     
-    synthetic_creators = {}
-    for count in counts:
-        name = f'test_delay_{count}'
+    #synthetic_creators = {}
+    #for count in counts:
+    #    name = f'test_delay_{count}'
 
-    env_creators.test = partial(
-        ocean.env_creator('performance_empiric'),
-        count_n=270_000, bandwidth=150_000
-    )
+    #env_creators.test = partial(
+    #    ocean.env_creator('performance_empiric'),
+    #    count_n=270_000, bandwidth=150_000
+    #)
 
-    timeout = 60
-    cores = psutil.cpu_count(logical=False)
-    for key, creator in env_creators.items():
-        prof = profile_emulation(creator, timeout)
-        #profile_vec(creator, cores, timeout, prof.puf.sps)
-        print()
+    #timeout = 60
+    #cores = psutil.cpu_count(logical=False)
+    #for key, creator in env_creators.items():
+    #    prof = profile_emulation(creator, timeout)
+    #    profile_vec(creator, cores, timeout, prof.puf.sps)
+    #    print()
