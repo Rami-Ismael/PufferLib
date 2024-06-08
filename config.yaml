@@ -789,6 +789,66 @@ local_cpu_pokemon:
               'min': 1e-5,
               'max': 3e-4,
             }
+puffertank_pokemon_red:
+    package: pokemon_red
+    use_rnn: True
+    train:
+      seed: 1
+      torch_deterministic: True
+      cpu_offload: False
+      device: cuda
+      total_timesteps: 1_000_000_000
+      #num_steps: 8192
+      anneal_lr: False
+      gamma: 0.99
+      gae_lambda: 0.95
+      #num_minibatches: 4
+      update_epochs: 4
+      norm_adv: True
+      clip_coef: 0.1
+      ent_coef: 0.01
+      vf_coef: 0.5
+      clip_vloss: True
+      vf_clip_coef: 0.4
+      max_grad_norm: 0.5
+      target_kl: ~
+      #num_envs: 256
+      num_workers: 24
+      batch_size: 65536
+      zero_copy: False
+      env_batch_size: 512
+      env_pool: True
+
+      save_checkpoint: False
+      pool_kernel: [0]
+
+
+      num_minibatches: 8
+
+
+      learning_rate: 2.5e-4
+      wegiht_decay: 0.01
+
+
+
+      batch_rows: 128
+      bptt_horizon: 16
+    sweep:
+        method: bayes
+        name: sweep
+        metric:
+          goal: maximize
+          name: environment/number_of_uniqiue_coordinate_it_explored
+        # Nested parameters name required by WandB API
+        parameters:
+          train:
+            parameters:
+              learning_rate: {
+                'distribution': 'log_uniform_values',
+                'min': 1e-5,
+                'max': 3e-4,
+              }
+
 links_awaken:
   package: links_awaken
 links-awaken:

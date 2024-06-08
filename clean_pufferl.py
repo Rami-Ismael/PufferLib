@@ -52,7 +52,8 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
         policy = torch.compile(policy, mode=config.compile_mode)
 
     optimizer = torch.optim.Adam(policy.parameters(),
-        lr=config.learning_rate, eps=1e-5)
+        lr=config.learning_rate, eps=1e-5 , 
+        weight_decay = config.weight_decay)
 
     return pufferlib.namespace(
         config=config,

@@ -110,7 +110,7 @@ def make_policy(env, env_module, args):
 
     return policy.to(args.train.device)
 
-def init_wandb(args, name, id=None, resume=True):
+def init_wandb(args, name, id=None, resume=False):
     #os.environ["WANDB_SILENT"] = "true"
     import wandb
     wandb.init(
