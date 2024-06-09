@@ -255,6 +255,7 @@ if __name__ == '__main__':
     parser.add_argument('--track', action='store_true', help='Track on WandB')
     wandb_name, pkg, args, env_module, make_env, make_policy = load_config(parser)
     pprint( args.__dict__ )
+    pprint(args.train.__dict__)
 
     if args.baseline:
         assert args.mode in ('train', 'eval', 'evaluate')
