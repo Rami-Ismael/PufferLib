@@ -53,7 +53,7 @@ class Policy(nn.Module):
         )
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 524 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 532 , hidden_size)),
             nn.LayerNorm(hidden_size),
             nn.Mish(),
         )
@@ -70,7 +70,6 @@ class Policy(nn.Module):
         hidden, lookup = self.encode_observations(observations)
         actions, value = self.decode_actions(hidden, lookup)
         return actions, value , hidden
-
     def encode_observations(self, observations):
         env_outputs = pufferlib.pytorch.nativize_tensor(observations, self.dtype)
         try:
@@ -92,7 +91,11 @@ class Policy(nn.Module):
                     env_outputs["x"].float() // 444,
                     env_outputs["y"].float() // 436,
                     map_id.squeeze(1),
-                    self.map_music_sound_bank_embeddings(env_outputs["map_music_sound_bank"].long()).squeeze(1)
+                    self.map_music_sound_bank_embeddings(env_outputs["map_music_sound_bank"].long()).squeeze(1) , 
+                    env_outputs["party_size"].float() / 6.0,
+                    env_outputs["each_pokemon_level"].float() / 100.0,
+                    env_outputs["total_party_level"].float() / 100.0  , 
+                    #env_outputs["total_party_level"].float() / env_outputs["party_size"].float() # average level of party
                     ) ,
                     dim = -1
                 )
