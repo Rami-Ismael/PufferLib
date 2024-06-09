@@ -772,7 +772,7 @@ local_cpu_pokemon:
     update_epochs: 8
     gamma: 0.998
     anneal_lr: False
-    learning_rate: 3e-4
+    learning_rate: 2e-4
     compile: False
     device: cpu
   sweep:
@@ -787,8 +787,8 @@ local_cpu_pokemon:
           parameters:
             learning_rate: {
               'distribution': 'log_uniform_values',
-              'min': 1e-5,
-              'max': 3e-4,
+              'min': 3e-5,
+              'max': 2e-4,
             }
 puffertank_pokemon_red:
     package: pokemon_red
@@ -828,7 +828,7 @@ puffertank_pokemon_red:
 
 
       learning_rate: 2.5e-4
-      weight_decay: 0.01
+      weight_decay: 0.001
 
 
 
@@ -845,9 +845,9 @@ puffertank_pokemon_red:
           train:
             parameters:
               learning_rate: {
-                'distribution': 'log_uniform_values',
-                'min': 1e-5,
-                'max': 3e-4,
+                'distribution': 'uniform',
+                'min': 8e-5,
+                'max': 8e-4,
               }
 
 links_awaken:
