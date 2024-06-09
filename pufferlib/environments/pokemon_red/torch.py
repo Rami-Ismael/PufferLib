@@ -53,7 +53,8 @@ class Policy(nn.Module):
         )
         
         self.encode_linear = nn.Sequential(
-            nn.Linear( 518 , hidden_size),
+            pufferlib.pytorch.layer_init(nn.Linear( 524 , hidden_size)),
+            nn.LayerNorm(hidden_size),
             nn.Mish(),
         )
         self.actor = pufferlib.pytorch.layer_init(
@@ -64,7 +65,7 @@ class Policy(nn.Module):
                 # pokemon has 0xF7 map ids
         # Lets start with 4 dims for now. Could try 8
         self.map_embeddings = torch.nn.Embedding(0xF7, 4, dtype=torch.float32)
-
+        self.map_music_sound_bank_embeddings = torch.nn.Embedding(3, 6, dtype=torch.float32)
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)
         actions, value = self.decode_actions(hidden, lookup)
@@ -83,17 +84,22 @@ class Policy(nn.Module):
             observations = env_outputs["screen"].permute(0, 3, 1, 2)
         if self.downsample > 1:
             observations = observations[:, :, ::self.downsample, ::self.downsample]
-        return self.encode_linear(
-            torch.cat(
-                (
-                (self.screen_network(observations.float() / 255.0).squeeze(1)) , 
-                env_outputs["x"].float() // 444,
-                env_outputs["y"].float() // 436,
-                map_id.squeeze(1),
-                ) ,
-                dim = -1
-            )
-        ) , None
+        try:
+            return self.encode_linear(
+                torch.cat(
+                    (
+                    (self.screen_network(observations.float() / 255.0).squeeze(1)) , 
+                    env_outputs["x"].float() // 444,
+                    env_outputs["y"].float() // 436,
+                    map_id.squeeze(1),
+                    self.map_music_sound_bank_embeddings(env_outputs["map_music_sound_bank"].long()).squeeze(1)
+                    ) ,
+                    dim = -1
+                )
+            ) , None
+        except Exception as e:
+            print(e)
+            pdb.set_trace()
 
     def decode_actions(self, flat_hidden, lookup, concat=None):
         action = self.actor(flat_hidden)
