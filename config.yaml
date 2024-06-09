@@ -827,7 +827,7 @@ puffertank_pokemon_red:
 
 
       learning_rate: 2.5e-4
-      wegiht_decay: 0.01
+      weight_decay: 0.01
 
 
 
