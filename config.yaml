@@ -725,6 +725,7 @@ pokemon_red:
     compile: False 
     learning_rate: 2.0e-4
     anneal_lr: False
+    weight_decay: 0.01
 pokemon-red:
   package: pokemon_red
 pokemonred:
