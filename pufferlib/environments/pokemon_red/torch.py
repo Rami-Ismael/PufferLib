@@ -51,9 +51,24 @@ class Policy(nn.Module):
             nn.LayerNorm(hidden_size),
             nn.Mish(),
         )
+        self.visited_and_global_mask = nn.Sequential(
+            #nn.LazyConv2d(32, 8, stride=4),
+            pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 1 ,  out_channels = 16, kernel_size = 8, stride = 4)),
+            nn.Mish(),
+            #nn.LazyConv2d(64, 4, stride=2),
+            pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 16,  out_channels = 32, kernel_size = 4, stride = 2)),
+            nn.Mish(),
+            #nn.LazyConv2d(64, 3, stride=1),
+            pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 32,  out_channels = 32, kernel_size = 3, stride = 1)),
+            nn.Mish(),
+            nn.Flatten(),
+            pufferlib.pytorch.layer_init(nn.Linear( 2560, hidden_size - 20)),
+            nn.LayerNorm(hidden_size-20), 
+            nn.Mish(),
+        )
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 532 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 1026 , hidden_size)),
             nn.LayerNorm(hidden_size),
             nn.Mish(),
         )
@@ -87,15 +102,17 @@ class Policy(nn.Module):
             return self.encode_linear(
                 torch.cat(
                     (
-                    (self.screen_network(observations.float() / 255.0).squeeze(1)) , 
+                    (self.screen_network(observations.float() / 255.0).squeeze(1)) ,
+                    (self.visited_and_global_mask( torch.cat( (env_outputs["visited_mask"].permute(0, 3, 1, 2).float() , env_outputs["global_map"].permute(0, 3, 1, 2).float() ) , dim = -1) ).squeeze(1)),
                     env_outputs["x"].float() // 444,
                     env_outputs["y"].float() // 436,
                     map_id.squeeze(1),
                     self.map_music_sound_bank_embeddings(env_outputs["map_music_sound_bank"].long()).squeeze(1) , 
                     env_outputs["party_size"].float() / 6.0,
                     env_outputs["each_pokemon_level"].float() / 100.0,
-                    env_outputs["total_party_level"].float() / 100.0  , 
-                    #env_outputs["total_party_level"].float() / env_outputs["party_size"].float() # average level of party
+                    env_outputs["total_party_level"].float() / 600.0  , 
+                    env_outputs["number_of_turns_in_current_battle"].float() / 255.0 , 
+                    env_outputs["total_party_level"].float() / env_outputs["party_size"].float() # average level of party
                     ) ,
                     dim = -1
                 )
