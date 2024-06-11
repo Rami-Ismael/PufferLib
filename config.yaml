@@ -781,6 +781,9 @@ local_cpu_pokemon:
       metric:
         goal: maximize
         name: environment/number_of_uniqiue_coordinate_it_explored
+      early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
+          type: hyperband
+          min_iter: 3
       # Nested parameters name required by WandB API
       parameters:
         train:
@@ -810,7 +813,7 @@ puffertank_pokemon_red:
       ent_coef: 0.0001
       vf_coef: 0.2
       clip_vloss: True
-      vf_clip_coef: 0.10
+      vf_clip_coef: 0.1
       max_grad_norm: 0.5
       target_kl: ~
       num_envs: 768
@@ -825,6 +828,8 @@ puffertank_pokemon_red:
 
 
       num_minibatches: 4
+      minibatch_size: 8196 # if not set it will be 2048
+      num_steps: 2048
 
 
       learning_rate: 2.5e-4
@@ -832,7 +837,7 @@ puffertank_pokemon_red:
 
 
 
-      batch_rows: 256
+      batch_rows: 512
       bptt_horizon: 32
     sweep:
         method: bayes
@@ -840,6 +845,9 @@ puffertank_pokemon_red:
         metric:
           goal: maximize
           name: environment/number_of_uniqiue_coordinate_it_explored
+        early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
+          type: hyperband
+          min_iter: 3
         # Nested parameters name required by WandB API
         parameters:
           train:
