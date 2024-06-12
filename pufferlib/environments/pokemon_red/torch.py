@@ -70,10 +70,17 @@ class Policy(nn.Module):
         self.battle_results_embedding = nn.Embedding(4, 4, dtype=torch.float32)
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 1048 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 1080 , hidden_size)),
             nn.LayerNorm(hidden_size),
             nn.Mish(),
         )
+        
+        self.selected_move_id =  nn.Embedding(
+            166 , 
+            8 , 
+            dtype=torch.float32)
+        self.map_music_sound_id_emebedding = nn.Embedding(76, 16, dtype=torch.float32)
+        
         self.actor = pufferlib.pytorch.layer_init(
             nn.Linear(hidden_size, env.single_action_space.n), std=0.01)
         self.value_fn = pufferlib.pytorch.layer_init(
@@ -121,6 +128,9 @@ class Policy(nn.Module):
                     self.battle_results_embedding(env_outputs["battle_result"].long()).squeeze(1),
                     env_outputs["total_number_of_items"].float() / 64.0,
                     env_outputs["money"].float() / 999999.0,
+                    self.selected_move_id(env_outputs["player_selected_move_id"].long()).squeeze(1),
+                    self.selected_move_id(env_outputs["enemy_selected_move_id"].long()).squeeze(1) , 
+                    self.map_music_sound_id_emebedding(env_outputs["map_music_sound_id"].long()).squeeze(1)
                     ) ,
                     dim = -1
                 )
