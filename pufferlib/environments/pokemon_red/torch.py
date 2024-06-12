@@ -70,7 +70,7 @@ class Policy(nn.Module):
         self.battle_results_embedding = nn.Embedding(4, 4, dtype=torch.float32)
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 1046 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 1048 , hidden_size)),
             nn.LayerNorm(hidden_size),
             nn.Mish(),
         )
@@ -119,6 +119,8 @@ class Policy(nn.Module):
                     env_outputs["each_pokemon_max_health_points"].float() / 703.0 ,  # https://github.com/xinpw8/pokegym/blob/a8b75e4ad2694461f661acf5894d498b69d1a3fa/pokegym/bin/ram_reader/red_ram_api.py#L752
                     self.battle_stats_embedding(env_outputs["battle_stats"].long()).squeeze(1),
                     self.battle_results_embedding(env_outputs["battle_result"].long()).squeeze(1),
+                    env_outputs["total_number_of_items"].float() / 64.0,
+                    env_outputs["money"].float() / 999999.0,
                     ) ,
                     dim = -1
                 )
