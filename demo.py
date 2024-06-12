@@ -199,7 +199,7 @@ def train(args, env_module, make_env):
         ) as p:
         '''
 
-        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0.00:
+        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0.00 and (data.losses.value_loss == 0.00 or data.losses.value_loss >= 0.002):
             try:
                 clean_pufferl.evaluate(data)
                 clean_pufferl.train(data)
