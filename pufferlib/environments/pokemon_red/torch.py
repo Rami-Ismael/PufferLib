@@ -70,7 +70,7 @@ class Policy(nn.Module):
         self.battle_results_embedding = nn.Embedding(4, 4, dtype=torch.float32)
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 1086 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 1087 , hidden_size)),
             nn.LayerNorm(hidden_size),
             nn.ReLU(),
         )
