@@ -439,8 +439,7 @@ class Multiprocessing:
 class Ray():
     '''Runs environments in parallel on multiple processes using Ray
 
-    Use this module for distributed simulation on a cluster. It can also be
-    faster than multiprocessing on a single machine for specific environments.
+    Use this module for distributed simulation on a cluster.
     '''
     reset = reset
     step = step
@@ -458,6 +457,7 @@ class Ray():
         self.num_workers = num_workers
 
         driver_env = env_creators[0](*env_args[0], **env_kwargs[0])
+        self.driver_env = driver_env
         self.emulated = driver_env.emulated
         self.num_agents = num_agents = driver_env.num_agents * num_envs
         self.agents_per_batch = driver_env.num_agents * batch_size
@@ -660,6 +660,10 @@ def autotune(env_creator, batch_size, max_envs=1024, model_forward_s=0.0,
         max_env_ram_gb=16, max_batch_vram_gb=0.05, time_per_test=5): 
     '''Determine the optimal vectorization parameters for your system'''
     # TODO: fix multiagent
+
+    if batch_size is None:
+        raise ValueError('batch_size must not be None')
+
     if max_envs < batch_size:
         raise ValueError('max_envs < min_batch_size')
 
