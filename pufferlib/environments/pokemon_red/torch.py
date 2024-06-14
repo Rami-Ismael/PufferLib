@@ -18,7 +18,7 @@ class ResnetBlock(torch.nn.Module):
         self.model = torch.nn.Sequential(
             pufferlib.pytorch.layer_init(torch.nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=1, padding=1)),
             torch.nn.LayerNorm((in_planes, *img_size)),
-            torch.nn.Mish(),
+            torch.nn.ReLU(),
             pufferlib.pytorch.layer_init(torch.nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=1, padding=1)),
             torch.nn.LayerNorm((in_planes, *img_size)),
         )
@@ -45,34 +45,34 @@ class Policy(nn.Module):
         print(f"The dtype is {self.dtype}")
         self.screen_network = nn.Sequential(
             ResnetBlock( in_planes = 3 , img_size = (72, 80) ),
-            nn.Mish(),
+            nn.ReLU(),
             nn.Flatten(),
             pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size)),
             nn.LayerNorm(hidden_size),
-            nn.Mish(),
+            nn.ReLU(),
         )
         self.visited_and_global_mask = nn.Sequential(
             #nn.LazyConv2d(32, 8, stride=4),
             pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 1 ,  out_channels = 16, kernel_size = 8, stride = 4)),
-            nn.Mish(),
+            nn.ReLU(),
             #nn.LazyConv2d(64, 4, stride=2),
             pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 16,  out_channels = 32, kernel_size = 4, stride = 2)),
-            nn.Mish(),
+            nn.ReLU(),
             #nn.LazyConv2d(64, 3, stride=1),
             pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 32,  out_channels = 32, kernel_size = 3, stride = 1)),
-            nn.Mish(),
+            nn.ReLU(),
             nn.Flatten(),
             pufferlib.pytorch.layer_init(nn.Linear( 2560, hidden_size - 20)),
             nn.LayerNorm(hidden_size-20), 
-            nn.Mish(),
+            nn.ReLU(),
         )
         self.battle_stats_embedding = nn.Embedding(4 , 4, dtype=torch.float32)
         self.battle_results_embedding = nn.Embedding(4, 4, dtype=torch.float32)
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 1080 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 1086 , hidden_size)),
             nn.LayerNorm(hidden_size),
-            nn.Mish(),
+            nn.ReLU(),
         )
         
         self.selected_move_id =  nn.Embedding(
@@ -130,7 +130,9 @@ class Policy(nn.Module):
                     env_outputs["money"].float() / 999999.0,
                     self.selected_move_id(env_outputs["player_selected_move_id"].long()).squeeze(1),
                     self.selected_move_id(env_outputs["enemy_selected_move_id"].long()).squeeze(1) , 
-                    self.map_music_sound_id_emebedding(env_outputs["map_music_sound_id"].long()).squeeze(1)
+                    self.map_music_sound_id_emebedding(env_outputs["map_music_sound_id"].long()).squeeze(1) , 
+                    env_outputs["player_xp"].float() , 
+                    env_outputs["total_party_max_hit_points"].float()
                     ) ,
                     dim = -1
                 )

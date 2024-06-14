@@ -829,7 +829,7 @@ puffertank_pokemon_red:
 
       num_minibatches: 4
       minibatch_size: 16384  # if not set it will be 2048
-      num_steps: 2048
+      num_steps: 4096
 
 
       learning_rate: 2.5e-4
