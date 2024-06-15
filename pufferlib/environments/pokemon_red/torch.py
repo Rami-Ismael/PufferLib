@@ -70,7 +70,7 @@ class Policy(nn.Module):
         self.battle_results_embedding = nn.Embedding(4, 4, dtype=torch.float32)
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 1087 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 1088 , hidden_size)),
             nn.LayerNorm(hidden_size),
             nn.ReLU(),
         )
@@ -90,6 +90,11 @@ class Policy(nn.Module):
         # Lets start with 4 dims for now. Could try 8
         self.map_embeddings = torch.nn.Embedding(0xF7, 4, dtype=torch.float32)
         self.map_music_sound_bank_embeddings = torch.nn.Embedding(3, 6, dtype=torch.float32)
+        self.pokemon_seen_fc = nn.Sequential(
+            pufferlib.pytorch.layer_init(nn.Linear(19, 16)),
+            nn.ReLU(),
+            nn.LayerNorm(16),
+        )
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)
         actions, value = self.decode_actions(hidden, lookup)
@@ -132,7 +137,9 @@ class Policy(nn.Module):
                     self.selected_move_id(env_outputs["enemy_selected_move_id"].long()).squeeze(1) , 
                     self.map_music_sound_id_emebedding(env_outputs["map_music_sound_id"].long()).squeeze(1) , 
                     env_outputs["player_xp"].float() , 
-                    env_outputs["total_party_max_hit_points"].float()
+                    env_outputs["total_party_max_hit_points"].float() , 
+                    env_outputs["total_pokemon_seen"].float() / 151.0,
+                    #self.pokemon_seen_fc(env_outputs["pokemon_seen_in_the_pokedex"].float()).squeeze(1)
                     ) ,
                     dim = -1
                 )

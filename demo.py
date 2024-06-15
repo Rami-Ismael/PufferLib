@@ -20,6 +20,8 @@ from rich.pretty import pprint as pprint
 
 import clean_pufferl
 
+import torch
+
 
 
 def load_config(parser, config_path='config.yaml'):
@@ -212,6 +214,8 @@ def train(args, env_module, make_env):
 
         clean_pufferl.evaluate(data)
         clean_pufferl.close(data)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     elif args.backend == 'sb3':
         from stable_baselines3 import PPO
