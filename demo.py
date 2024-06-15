@@ -199,7 +199,7 @@ def train(args, env_module, make_env):
         ) as p:
         '''
 
-        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0.00 and (data.losses.value_loss == 0.00 or data.losses.value_loss >= 0.004):
+        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0.00 and (data.losses.value_loss == 0.00 or data.losses.value_loss >= 0.008):
             try:
                 clean_pufferl.evaluate(data)
                 clean_pufferl.train(data)
@@ -255,6 +255,7 @@ if __name__ == '__main__':
     parser.add_argument('--track', action='store_true', help='Track on WandB')
     wandb_name, pkg, args, env_module, make_env, make_policy = load_config(parser)
     pprint( args.__dict__ )
+    print(f"The arguments of of the trains is")
     pprint(args.train.__dict__)
 
     if args.baseline:
