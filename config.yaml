@@ -785,7 +785,7 @@ local_cpu_pokemon:
         name: environment/number_of_uniqiue_coordinate_it_explored
       early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
           type: hyperband
-          min_iter: 3
+          min_iter: 1
       # Nested parameters name required by WandB API
       parameters:
         train:
@@ -847,7 +847,7 @@ puffertank_pokemon_red:
           name: environment/number_of_uniqiue_coordinate_it_explored
         early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
           type: hyperband
-          min_iter: 3
+          min_iter: 1
         # Nested parameters name required by WandB API
         parameters:
           train:
