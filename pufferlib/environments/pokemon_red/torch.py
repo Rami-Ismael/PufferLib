@@ -70,7 +70,7 @@ class Policy(nn.Module):
         self.battle_results_embedding = nn.Embedding(4, 4, dtype=torch.float32)
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 1088 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 1120 , hidden_size)),
             nn.LayerNorm(hidden_size),
             nn.ReLU(),
         )
@@ -91,6 +91,11 @@ class Policy(nn.Module):
         self.map_embeddings = torch.nn.Embedding(0xF7, 4, dtype=torch.float32)
         self.map_music_sound_bank_embeddings = torch.nn.Embedding(3, 6, dtype=torch.float32)
         self.pokemon_seen_fc = nn.Sequential(
+            pufferlib.pytorch.layer_init(nn.Linear(19, 16)),
+            nn.ReLU(),
+            nn.LayerNorm(16),
+        )
+        self.pokemon_caught_fc = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Linear(19, 16)),
             nn.ReLU(),
             nn.LayerNorm(16),
@@ -139,7 +144,8 @@ class Policy(nn.Module):
                     env_outputs["player_xp"].float() , 
                     env_outputs["total_party_max_hit_points"].float() , 
                     env_outputs["total_pokemon_seen"].float() / 151.0,
-                    #self.pokemon_seen_fc(env_outputs["pokemon_seen_in_the_pokedex"].float()).squeeze(1)
+                    self.pokemon_seen_fc(env_outputs["pokemon_seen_in_the_pokedex"].float() / 255.0).squeeze(1) , 
+                    self.pokemon_caught_fc(env_outputs["byte_representation_of_caught_pokemon_in_the_pokedex"].float() / 255.0).squeeze(1) ,
                     ) ,
                     dim = -1
                 )
