@@ -70,7 +70,7 @@ class Policy(nn.Module):
         self.battle_results_embedding = nn.Embedding(4, 4, dtype=torch.float32)
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 1120 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 1121 , hidden_size)),
             nn.LayerNorm(hidden_size),
             nn.ReLU(),
         )
@@ -146,6 +146,7 @@ class Policy(nn.Module):
                     env_outputs["total_pokemon_seen"].float() / 151.0,
                     self.pokemon_seen_fc(env_outputs["pokemon_seen_in_the_pokedex"].float() / 255.0).squeeze(1) , 
                     self.pokemon_caught_fc(env_outputs["byte_representation_of_caught_pokemon_in_the_pokedex"].float() / 255.0).squeeze(1) ,
+                    env_outputs["low_health_alarm"].float()
                     ) ,
                     dim = -1
                 )
