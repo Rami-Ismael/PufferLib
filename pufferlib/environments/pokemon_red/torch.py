@@ -47,8 +47,8 @@ class Policy(nn.Module):
             ResnetBlock( in_planes = 3 , img_size = (72, 80) ),
             nn.ReLU(),
             nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size)),
-            nn.LayerNorm(hidden_size),
+            pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size - 114)),
+            nn.LayerNorm(hidden_size - 144 ),
             nn.ReLU(),
         )
         self.visited_and_global_mask = nn.Sequential(
@@ -67,7 +67,7 @@ class Policy(nn.Module):
         self.battle_results_embedding = nn.Embedding(4, 4, dtype=torch.float32)
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 1138 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 1024 , hidden_size)),
             nn.LayerNorm(hidden_size),
             nn.ReLU(),
         )
