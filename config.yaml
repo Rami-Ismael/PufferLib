@@ -858,7 +858,7 @@ puffertank_pokemon_red:
                 'max': 5e-3,
               }
               batch_size: {
-                'values': [4096, 8192, 16384 , 65536 , 131072],
+                'values': [16384 , 65536 , 131072],
               }
 
 links_awaken:
