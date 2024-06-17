@@ -52,13 +52,10 @@ class Policy(nn.Module):
             nn.ReLU(),
         )
         self.visited_and_global_mask = nn.Sequential(
-            #nn.LazyConv2d(32, 8, stride=4),
             pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 1 ,  out_channels = 16, kernel_size = 8, stride = 4)),
             nn.ReLU(),
-            #nn.LazyConv2d(64, 4, stride=2),
             pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 16,  out_channels = 32, kernel_size = 4, stride = 2)),
             nn.ReLU(),
-            #nn.LazyConv2d(64, 3, stride=1),
             pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 32,  out_channels = 32, kernel_size = 3, stride = 1)),
             nn.ReLU(),
             nn.Flatten(),
@@ -70,7 +67,7 @@ class Policy(nn.Module):
         self.battle_results_embedding = nn.Embedding(4, 4, dtype=torch.float32)
         
         self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 1122 , hidden_size)),
+            pufferlib.pytorch.layer_init(nn.Linear( 1138 , hidden_size)),
             nn.LayerNorm(hidden_size),
             nn.ReLU(),
         )
@@ -104,6 +101,11 @@ class Policy(nn.Module):
             pufferlib.pytorch.layer_init(nn.Linear(1, 2)),
             nn.ReLU(),
             nn.LayerNorm(2),
+        )
+        self.oppoents_pokemon_levels = nn.Sequential(
+            pufferlib.pytorch.layer_init(nn.Linear(6, 16)),
+            nn.ReLU(),
+            nn.LayerNorm(16),
         )
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)
@@ -152,6 +154,7 @@ class Policy(nn.Module):
                     self.pokemon_seen_fc(env_outputs["pokemon_seen_in_the_pokedex"].float() / 255.0).squeeze(1) , 
                     self.pokemon_caught_fc(env_outputs["byte_representation_of_caught_pokemon_in_the_pokedex"].float() / 255.0).squeeze(1) ,
                     self.pokemon_low_health_alarm(env_outputs["low_health_alarm"].float() / 255.0).squeeze(1) ,
+                    self.oppoents_pokemon_levels(env_outputs["opponent_pokemon_levels"].float()).squeeze(1) ,
                     ) ,
                     dim = -1
                 )
