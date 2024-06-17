@@ -857,6 +857,9 @@ puffertank_pokemon_red:
                 'min': 8e-5,
                 'max': 5e-3,
               }
+              batch_size: {
+                'values': [4096, 8192, 16384 , 65536 , 131072],
+              }
 
 links_awaken:
   package: links_awaken
