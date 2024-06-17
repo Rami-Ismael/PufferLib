@@ -48,7 +48,7 @@ class Policy(nn.Module):
             nn.ReLU(),
             nn.Flatten(),
             pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size - 114)),
-            nn.LayerNorm(hidden_size - 144 ),
+            nn.LayerNorm(hidden_size - 114 ),
             nn.ReLU(),
         )
         self.visited_and_global_mask = nn.Sequential(
