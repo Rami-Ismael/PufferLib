@@ -154,7 +154,7 @@ class Policy(nn.Module):
                     self.pokemon_seen_fc(env_outputs["pokemon_seen_in_the_pokedex"].float() / 255.0).squeeze(1) , 
                     self.pokemon_caught_fc(env_outputs["byte_representation_of_caught_pokemon_in_the_pokedex"].float() / 255.0).squeeze(1) ,
                     self.pokemon_low_health_alarm(env_outputs["low_health_alarm"].float() / 255.0).squeeze(1) ,
-                    self.oppoents_pokemon_levels(env_outputs["opponent_pokemon_levels"].float()).squeeze(1) ,
+                    self.oppoents_pokemon_levels(env_outputs["opponent_pokemon_levels"].float()/ 100.0).squeeze(1) ,
                     ) ,
                     dim = -1
                 )
