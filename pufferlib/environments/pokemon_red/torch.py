@@ -47,8 +47,8 @@ class Policy(nn.Module):
             ResnetBlock( in_planes = 3 , img_size = (72, 80) ),
             nn.ReLU(),
             nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size - 114)),
-            nn.LayerNorm(hidden_size - 114 ),
+            pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size - 114 - 7 )),
+            nn.LayerNorm(hidden_size - 114- 7 ),
             nn.ReLU(),
         )
         self.visited_and_global_mask = nn.Sequential(
@@ -155,6 +155,8 @@ class Policy(nn.Module):
                     self.pokemon_caught_fc(env_outputs["byte_representation_of_caught_pokemon_in_the_pokedex"].float() / 255.0).squeeze(1) ,
                     self.pokemon_low_health_alarm(env_outputs["low_health_alarm"].float() / 255.0).squeeze(1) ,
                     self.oppoents_pokemon_levels(env_outputs["opponent_pokemon_levels"].float()/ 100.0).squeeze(1) ,
+                    env_outputs["enemy_trainer_pokemon_hp"].float() / 705.0,
+                    env_outputs["enemy_pokemon_hp"].float() / 705.0,
                     ) ,
                     dim = -1
                 )
