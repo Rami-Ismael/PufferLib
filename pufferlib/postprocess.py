@@ -15,7 +15,7 @@ class EpisodeStats(gymnasium.Wrapper):
         self.reset()
 
     # TODO: Fix options. Maybe reimplement gymnasium.Wrapper with better compatibility
-    def reset(self, seed=None):
+    def reset(self, seed=None, options = None):
         self.info = dict(episode_return=[], episode_length=0)
         return self.env.reset(seed=seed)
 

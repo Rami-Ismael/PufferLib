@@ -19,7 +19,7 @@ def make(name, headless: bool = True, state_path=None):
     '''Pokemon Red'''
     env = Environment(headless=headless, state_path=state_path)
     env = RenderWrapper(env)
-    #env = pufferlib.postprocess.EpisodeStats(env) #we are removing this because I want to see the performances for each episode
+    env = pufferlib.postprocess.EpisodeStats(env) #we are removing this because I want to see the performances for each episode
     env = TransformReward(env, lambda x:  max(min(1.0 , x) , -1.0)) # clip the reward to -1 to 1 
     return pufferlib.emulation.GymnasiumPufferEnv(env=env)
 
