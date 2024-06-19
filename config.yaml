@@ -749,8 +749,12 @@ pokedebug:
 local_cpu_pokemon:
   package: pokemon_red
   use_rnn: True
+  env:
+    EpisodeStats: False
+    max_episode_steps: 2048
+    display_info_interval_divisor: 128
   train:
-    num_envs: 256
+    num_envs: 128
     num_workers: 4
     batch_size: 4096
     zero_copy: True
@@ -797,6 +801,7 @@ local_cpu_pokemon:
 puffertank_pokemon_red:
     package: pokemon_red
     use_rnn: True
+    display_info_interval_divisor: 2048
     train:
       seed: 1
       torch_deterministic: True
@@ -831,6 +836,7 @@ puffertank_pokemon_red:
 
       learning_rate: 3.0e-4
       weight_decay: 0.001
+
 
 
 
