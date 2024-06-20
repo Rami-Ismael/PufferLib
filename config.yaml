@@ -859,9 +859,7 @@ puffertank_pokemon_red:
           train:
             parameters:
               learning_rate: {
-                'distribution': 'uniform',
-                'min': 8e-5,
-                'max': 5e-3,
+                  'values' :[5.0e-4 , 2.5e-4 , 1.0e-4]
               }
               batch_size: {
                 'values': [65536 , 131072 , 147456 , 163840],
