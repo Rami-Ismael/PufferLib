@@ -180,6 +180,10 @@ def train(args, env_module, make_env):
     else:
         raise ValueError(f'Invalid --vector (serial/multiprocessing/ray).')
     print(f'The Environment Keyword Arguments')
+    
+    if args.train.device == 'cuda' and torch.cuda.is_available():
+        torch.cuda.empty_cache() # I got OutOfMemoryError: CUDA out of memory
+ 
     vecenv = pufferlib.vector.make(
         make_env,
         env_kwargs=args.env,
@@ -195,10 +199,7 @@ def train(args, env_module, make_env):
     train_config.device = args.train.device
     train_config.env = args.env_name
 
-    #policy  = torch.load(model_path, map_location = train_config.device)
-    if train_config.device == 'cuda' and torch.cuda.is_available():
-        torch.cuda.empty_cache() # I got OutOfMemoryError: CUDA out of memory
-    
+   
     if args.backend == 'clean_pufferl':
         data = clean_pufferl.create(train_config, vecenv, policy, wandb=args.wandb)
 
