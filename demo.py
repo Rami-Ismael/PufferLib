@@ -82,7 +82,7 @@ def load_config(parser, config_path='config.yaml'):
             config[name][key] = getattr(parser.parse_known_args()[0], data_key)
         config[name] = pufferlib.namespace(**config[name])
 
-    pufferlib.utils.validate_args(make_env.func if isinstance(make_env, functools.partial) else make_env, config['env'])
+    pufferlib.utils.validate_args(make_env.func if isinstance(make_env, functools.partial) else make_env, config['env']) # This is where environments are created
     pufferlib.utils.validate_args(env_module.Policy, config['policy'])
 
     if 'use_rnn' in env_config:
@@ -177,7 +177,7 @@ def train(args, env_module, make_env):
         vec = pufferlib.vector.Ray
     else:
         raise ValueError(f'Invalid --vector (serial/multiprocessing/ray).')
-
+    print(f'The Environment Keyword Arguments')
     vecenv = pufferlib.vector.make(
         make_env,
         env_kwargs=args.env,
@@ -209,7 +209,7 @@ def train(args, env_module, make_env):
         ) as p:
         '''
 
-        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0.00 and (data.losses.value_loss == 0.00 or data.losses.value_loss >= 0.016):
+        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0.0 and (data.losses.value_loss == 0.00 or data.losses.value_loss >= 0.016):
             try:
                 clean_pufferl.evaluate(data)
                 clean_pufferl.train(data)
