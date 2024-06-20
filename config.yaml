@@ -865,7 +865,7 @@ puffertank_pokemon_red:
                 'values': [65536 , 131072 , 147456 , 163840],
               }
               update_epoch: {
-                'values' :[ 1 , 2  , 4, 8]
+                'values' :[ 2  , 4, 8]
               }
               ent_coef: {
                 "values": [0.01, 0]
