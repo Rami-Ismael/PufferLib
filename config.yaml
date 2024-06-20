@@ -873,6 +873,9 @@ puffertank_pokemon_red:
               gae_lambda: {
                 "values": [.8 , .9 , .95]
               }
+              clip_coef: {
+                "values": [.25 , .275 , .3]
+              }
 
 links_awaken:
   package: links_awaken
