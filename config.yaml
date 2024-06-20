@@ -817,7 +817,6 @@ puffertank_pokemon_red:
       update_epochs: 8
       norm_adv: True
       clip_coef: 0.25
-      ent_coef: 0.0005
       vf_coef: 0.5
       clip_vloss: True
       vf_clip_coef: 0.125
@@ -866,6 +865,12 @@ puffertank_pokemon_red:
               }
               update_epoch: {
                 'values' :[ 1 , 2  , 4, 8]
+              }
+              ent_coef: {
+                "value": [0.01, 0]
+              }
+              gae_lambda: {
+                "value": [.8 , .9 , .95]
               }
 
 links_awaken:
