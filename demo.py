@@ -196,6 +196,8 @@ def train(args, env_module, make_env):
     train_config.env = args.env_name
 
     #policy  = torch.load(model_path, map_location = train_config.device)
+    if train_config.device == 'cuda' and torch.cuda.is_available():
+        torch.cuda.empty_cache() # I got OutOfMemoryError: CUDA out of memory
     
     if args.backend == 'clean_pufferl':
         data = clean_pufferl.create(train_config, vecenv, policy, wandb=args.wandb)
@@ -270,6 +272,7 @@ if __name__ == '__main__':
     print(f"The arguments of of the trains is")
     pprint(args.train.__dict__)
     print(f"The number of step of each agents does is {args.train.batch_size / args.train.num_envs}")
+    print(f"The number of steps which maybe which be random because of entropy coeficient is {args.train.batch_size / args.train.num_envs} * args.train.ent_coef")
 
     if args.baseline:
         assert args.mode in ('train', 'eval', 'evaluate')
