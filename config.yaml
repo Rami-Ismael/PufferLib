@@ -751,7 +751,7 @@ local_cpu_pokemon:
   use_rnn: True
   env:
     EpisodeStats: False
-    max_episode_steps: 2048
+    max_episode_steps: 256
     display_info_interval_divisor: 128
   train:
     num_envs: 128
@@ -801,7 +801,10 @@ local_cpu_pokemon:
 puffertank_pokemon_red:
     package: pokemon_red
     use_rnn: True
-    display_info_interval_divisor: 2048
+    env:
+      display_info_interval_divisor: 8196
+      max_episode_steps: 65636
+      EpisodeStats: False
     train:
       seed: 1
       torch_deterministic: True
