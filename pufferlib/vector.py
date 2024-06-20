@@ -14,6 +14,8 @@ from pufferlib.namespace import Namespace
 import pufferlib.spaces
 import gymnasium
 
+from rich import print as print
+
 RESET = 0
 STEP = 1
 SEND = 2
@@ -328,65 +330,70 @@ class Multiprocessing:
     def recv(self):
         recv_precheck(self)
         while True:
-            worker = self.waiting_workers.pop(0)
-            sem = self.buf.semaphores[worker]
-            if sem >= MAIN:
-                self.ready_workers.append(worker)
-            else:
-                self.waiting_workers.append(worker)
+            try:
+                worker = self.waiting_workers.pop(0)
+                sem = self.buf.semaphores[worker]
+                if sem >= MAIN:
+                    self.ready_workers.append(worker)
+                else:
+                    self.waiting_workers.append(worker)
 
-            if sem == INFO:
-                self.infos[worker] = self.recv_pipes[worker].recv()
+                if sem == INFO:
+                    self.infos[worker] = self.recv_pipes[worker].recv()
 
-            if not self.ready_workers:
+                if not self.ready_workers:
+                    continue
+                if self.workers_per_batch == 1:
+                    # Fastest path. Zero-copy optimized for batch size 1
+                    w_slice = self.ready_workers[0]
+                    s_range = [w_slice]
+                    self.waiting_workers.append(w_slice)
+                    self.ready_workers.pop(0)
+                    break
+                elif self.workers_per_batch == self.num_workers:
+                    # Slowest path. Zero-copy synchornized for all workers
+                    if len(self.ready_workers) < self.num_workers:
+                        continue
+
+                    w_slice = slice(0, self.num_workers)
+                    s_range = range(0, self.num_workers)
+                    self.waiting_workers.extend(s_range)
+                    self.ready_workers = []
+                    break
+                elif self.zero_copy:
+                    # Zero-copy for batch size > 1. Has to wait for
+                    # a contiguous block of workers and adds a few
+                    # microseconds of extra index processing time
+                    completed = np.zeros(self.num_workers, dtype=bool)
+                    completed[self.ready_workers] = True
+                    buffers = completed.reshape(
+                        -1, self.workers_per_batch).all(axis=1)
+                    start = buffers.argmax()
+                    if not buffers[start]:
+                        continue
+
+                    start *= self.workers_per_batch
+                    end = start + self.workers_per_batch
+                    w_slice = slice(start, end)
+                    s_range = range(start, end)
+                    self.waiting_workers.extend(s_range)
+                    self.ready_workers = [e for e in self.ready_workers
+                        if e not in s_range]
+                    break
+                elif len(self.ready_workers) >= self.workers_per_batch:
+                    # Full async path for batch size > 1. Alawys copies
+                    # data because of non-contiguous worker indices
+                    # Can be faster for envs with small observations
+                    w_slice = self.ready_workers[:self.workers_per_batch]
+                    s_range = w_slice
+                    self.waiting_workers.extend(s_range)
+                    self.ready_workers = self.ready_workers[self.workers_per_batch:]
+                    break
+            except Exception as e:
+                print(e)
+                print("Which condition failed?")
+                print(f"Check workers per batch is equal to ones which is the first condition:  The self workers per batch is {self.workers_per_batch} == 1 is {self.workers_per_batch == 1}")
                 continue
-
-            if self.workers_per_batch == 1:
-                # Fastest path. Zero-copy optimized for batch size 1
-                w_slice = self.ready_workers[0]
-                s_range = [w_slice]
-                self.waiting_workers.append(w_slice)
-                self.ready_workers.pop(0)
-                break
-            elif self.workers_per_batch == self.num_workers:
-                # Slowest path. Zero-copy synchornized for all workers
-                if len(self.ready_workers) < self.num_workers:
-                    continue
-
-                w_slice = slice(0, self.num_workers)
-                s_range = range(0, self.num_workers)
-                self.waiting_workers.extend(s_range)
-                self.ready_workers = []
-                break
-            elif self.zero_copy:
-                # Zero-copy for batch size > 1. Has to wait for
-                # a contiguous block of workers and adds a few
-                # microseconds of extra index processing time
-                completed = np.zeros(self.num_workers, dtype=bool)
-                completed[self.ready_workers] = True
-                buffers = completed.reshape(
-                    -1, self.workers_per_batch).all(axis=1)
-                start = buffers.argmax()
-                if not buffers[start]:
-                    continue
-
-                start *= self.workers_per_batch
-                end = start + self.workers_per_batch
-                w_slice = slice(start, end)
-                s_range = range(start, end)
-                self.waiting_workers.extend(s_range)
-                self.ready_workers = [e for e in self.ready_workers
-                    if e not in s_range]
-                break
-            elif len(self.ready_workers) >= self.workers_per_batch:
-                # Full async path for batch size > 1. Alawys copies
-                # data because of non-contiguous worker indices
-                # Can be faster for envs with small observations
-                w_slice = self.ready_workers[:self.workers_per_batch]
-                s_range = w_slice
-                self.waiting_workers.extend(s_range)
-                self.ready_workers = self.ready_workers[self.workers_per_batch:]
-                break
 
         self.w_slice = w_slice
         buf = self.buf
