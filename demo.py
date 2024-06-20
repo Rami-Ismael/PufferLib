@@ -269,6 +269,7 @@ if __name__ == '__main__':
     pprint( args.__dict__ )
     print(f"The arguments of of the trains is")
     pprint(args.train.__dict__)
+    print(f"The number of step of each agents does is {args.train.batch_size / args.train.num_envs}")
 
     if args.baseline:
         assert args.mode in ('train', 'eval', 'evaluate')
