@@ -165,6 +165,7 @@ class Policy(nn.Module):
             print(e)
             # Checks for each keys
             print(f"The Data types of env_outputs is {env_outputs.dtype}")
+            print(f"Determine the amout of data that exist in GPU {torch.cuda.memory_allocated()}")
             pdb.set_trace()
 
     def decode_actions(self, flat_hidden, lookup, concat=None):
