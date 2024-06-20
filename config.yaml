@@ -802,7 +802,7 @@ puffertank_pokemon_red:
     package: pokemon_red
     use_rnn: True
     env:
-      display_info_interval_divisor: 8196
+      display_info_interval_divisor: 8192
       max_episode_steps: 65636
       EpisodeStats: False
     train:
@@ -864,7 +864,7 @@ puffertank_pokemon_red:
                 'max': 5e-3,
               }
               batch_size: {
-                'values': [16384 , 65536 , 131072 , 262144],
+                'values': [65536 , 131072 , 262144],
               }
 
 links_awaken:
