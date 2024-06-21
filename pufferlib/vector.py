@@ -397,8 +397,12 @@ class Multiprocessing:
 
         self.w_slice = w_slice
         buf = self.buf
-
-        o = buf.observations[w_slice].reshape(self.obs_batch_shape)
+        try:
+            o = buf.observations[w_slice].reshape(self.obs_batch_shape)
+        except Exception as e:
+            print(e)
+            print(f"What is the datatype of the observation? {buf.observations.dtype}")
+            print(f"What is the shape of the observation? {buf.observations.shape}")
         r = buf.rewards[w_slice].ravel()
         d = buf.terminals[w_slice].ravel()
         t = buf.truncations[w_slice].ravel()
