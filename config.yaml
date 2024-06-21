@@ -803,7 +803,7 @@ puffertank_pokemon_red:
     use_rnn: True
     env:
       display_info_interval_divisor: 4096 
-      max_episode_steps: 65636
+      max_episode_steps: 32768
       EpisodeStats: False
     train:
       seed: 1
@@ -874,7 +874,7 @@ puffertank_pokemon_red:
                 "values": [.8 , .9 , .95]
               }
               clip_coef: {
-                "values": [.25 , .275 , .3]
+                "values": [.2 , .25 , .275 , .3]
               }
 
 links_awaken:
