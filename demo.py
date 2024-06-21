@@ -273,7 +273,8 @@ if __name__ == '__main__':
     print(f"The arguments of of the trains is")
     pprint(args.train.__dict__)
     print(f"The number of step of each agents does is {args.train.batch_size / args.train.num_envs}")
-    print(f"The number of steps which maybe which be random because of entropy coeficient is { {args.train.batch_size / args.train.num_envs} * args.train.ent_coef}")
+    agent_steps:int = args.train.batch_size / args.train.num_envs
+    print(f"The number of steps which maybe which be random because of entropy coeficient is  { agent_steps * args.train.ent_coef } ")
 
     if args.baseline:
         assert args.mode in ('train', 'eval', 'evaluate')
