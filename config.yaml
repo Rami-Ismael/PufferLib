@@ -820,8 +820,6 @@ puffertank_pokemon_red:
       clip_coef: 0.2
       ent_coef: 0.0005
       vf_coef: 0.5
-      clip_vloss: True
-      vf_clip_coef: 0.125
       max_grad_norm: 0.5
       target_kl: ~
       num_envs: 768
@@ -839,7 +837,7 @@ puffertank_pokemon_red:
 
 
       learning_rate: 3.0e-4
-      weight_decay: 0.001
+      weight_decay: 0.0001
 
 
 
