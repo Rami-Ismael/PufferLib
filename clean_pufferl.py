@@ -202,7 +202,11 @@ def train(data):
                     )
 
                 if config.device == 'cuda':
-                    torch.cuda.synchronize()
+                    try:
+                        torch.cuda.synchronize()
+                    except Exception as e:
+                        print(e)
+                        print('CUDA Synchronize failed. Continuing...')
 
             with profile.train_misc:
                 logratio = newlogprob - log_probs.reshape(-1)
