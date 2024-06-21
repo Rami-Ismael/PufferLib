@@ -805,6 +805,7 @@ puffertank_pokemon_red:
       display_info_interval_divisor: 4096 
       max_episode_steps: 32768
       EpisodeStats: False
+      max_reward_clip: 2
     train:
       seed: 1
       torch_deterministic: True
