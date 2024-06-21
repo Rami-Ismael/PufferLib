@@ -253,7 +253,12 @@ def train(data):
                 torch.nn.utils.clip_grad_norm_(data.policy.parameters(), config.max_grad_norm)
                 data.optimizer.step()
                 if config.device == 'cuda':
-                    torch.cuda.synchronize()
+                    try:
+                        torch.cuda.synchronize()
+                    except Exception as e:
+                        print(e)
+                        print('CUDA Synchronize failed. Continuing...')
+                        print("The much space is being used on the gpu", torch.cuda.memory_allocated())
 
             with profile.train_misc:
                 losses.policy_loss += pg_loss.item() / experience.num_minibatches
