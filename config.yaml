@@ -869,7 +869,7 @@ puffertank_pokemon_red:
                 'values' :[ 2  , 4, 8]
               }
               ent_coef: {
-                "values": [0.01, 0]
+                "values": [0.01, .1]
               }
               gae_lambda: {
                 "values": [.8 , .9 , .95]
