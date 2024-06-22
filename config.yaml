@@ -877,6 +877,9 @@ puffertank_pokemon_red:
               clip_coef: {
                 "values": [.2 , .25 , .275 , .3]
               }
+              weight_decay: {
+                "values": [0.0001, 0.001]
+              }
 
 links_awaken:
   package: links_awaken
