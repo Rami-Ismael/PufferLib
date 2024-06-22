@@ -28,7 +28,7 @@ class ResnetBlock(torch.nn.Module):
         return out
 
 class Policy(nn.Module):
-    def __init__(self, env, *args, framestack, flat_size,
+    def __init__(self, env, *args,
             input_size=512, hidden_size=512, output_size=512,
             channels_last=False, downsample=1, **kwargs):
         '''The CleanRL default NatureCNN policy used for Atari.
@@ -40,6 +40,8 @@ class Policy(nn.Module):
         self.channels_last = True
         self.downsample = downsample
         self.emulated = env.emulated
+        for key, value in kwargs.items():
+            print(f"{key}: {value}")
         print(f"The emulated environment is {self.emulated}")
         self.dtype = pufferlib.pytorch.nativize_dtype(self.emulated)
         print(f"The dtype is {self.dtype}")
@@ -92,23 +94,23 @@ class Policy(nn.Module):
         self.map_music_sound_bank_embeddings = torch.nn.Embedding(3, 6, dtype=torch.float32)
         self.pokemon_seen_fc = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Linear(19, 16)),
-            nn.ReLU(),
             nn.LayerNorm(16),
+            nn.ReLU(),
         )
         self.pokemon_caught_fc = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Linear(19, 16)),
-            nn.ReLU(),
             nn.LayerNorm(16),
+            nn.ReLU(),
         )
         self.pokemon_low_health_alarm = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Linear(1, 2)),
-            nn.ReLU(),
             nn.LayerNorm(2),
+            nn.ReLU(),
         )
         self.oppoents_pokemon_levels = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Linear(6, 16)),
-            nn.ReLU(),
             nn.LayerNorm(16),
+            nn.ReLU(),
         )
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)
