@@ -82,15 +82,15 @@ class Policy(nn.Module):
         '''
         self.encode_linear = nn.Sequential()
         self.encode_linear.add_module(
-                f"layer_{1}",
+                f"layer_0",
                 pufferlib.pytorch.layer_init(nn.Linear( 1024 , mlp_width)),
             )
         self.encode_linear.add_module(
-                f"layer_norm_{1}",
+                f"layer_norm_0",
                 nn.LayerNorm(mlp_width),
             )
         self.encode_linear.add_module(
-                f"relu_{1}",
+                f"relu_0",
                 nn.ReLU(),
             )
         for i in range( 1, mlp_depth-1):
