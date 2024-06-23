@@ -812,8 +812,8 @@ puffertank_pokemon_red:
       max_episode_steps: 32768 
       EpisodeStats: False
       max_reward_clip: 2
-      reward_for_increase_pokemon_level_coef: 1.2
-      reward_for_explore_unique_coor_coef: .30
+      reward_for_increase_pokemon_level_coef: 1.3
+      reward_for_explore_unique_coor_coef: .25
     train:
       seed: 1
       torch_deterministic: True
@@ -872,7 +872,7 @@ puffertank_pokemon_red:
                 'values': [131072 , 147456 , 163840],
               }
               update_epoch: {
-                'values' :[ 4, 8]
+                'values' :[ 2, 4, 8]
               }
               ent_coef: {
                 "values": [0.01, .1]
