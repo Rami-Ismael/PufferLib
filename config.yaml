@@ -806,7 +806,7 @@ puffertank_pokemon_red:
     use_rnn: True
     policy:
       mlp_width: 512
-      mlp_depth: 3
+      mlp_depth: 4
     env:
       display_info_interval_divisor: 4096 
       max_episode_steps: 32768 
@@ -872,7 +872,7 @@ puffertank_pokemon_red:
                 'values': [131072 , 147456 , 163840],
               }
               update_epoch: {
-                'values' :[ 2  , 4, 8]
+                'values' :[ 4, 8]
               }
               ent_coef: {
                 "values": [0.01, .1]
@@ -881,7 +881,7 @@ puffertank_pokemon_red:
                 "values": [.8 , .9 , .95]
               }
               clip_coef: {
-                "values": [.2 , .25 , .275 , .3]
+                "values": [ .25 , .275 , .3]
               }
               weight_decay: {
                 "values": [0.0001, 0.001]
