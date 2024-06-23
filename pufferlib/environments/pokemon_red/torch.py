@@ -108,6 +108,7 @@ class Policy(nn.Module):
             )
         self.encode_linear.add_module(f"layer_{mlp_depth}",
             pufferlib.pytorch.layer_init(nn.Linear( mlp_width , hidden_size)))
+        print(f"The encode linear layer is {self.encode_linear}")
         self.encode_linear.add_module(f"layer_norm_{mlp_depth}", nn.LayerNorm(hidden_size))
         self.encode_linear.add_module(f"relu_{mlp_depth}", nn.ReLU())
         
@@ -211,6 +212,7 @@ class Policy(nn.Module):
         except Exception as e:
             print(e)
             # Checks for each keys
+            print(f"The type of env_outputs is {type(env_outputs)}")
             print(f"The Data types of env_outputs is {env_outputs.dtype}")
             print(f"Determine the amout of data that exist in GPU {torch.cuda.memory_allocated()}")
             pdb.set_trace()
