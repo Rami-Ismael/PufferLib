@@ -64,8 +64,8 @@ class Policy(nn.Module):
             pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 32,  out_channels = 32, kernel_size = 3, stride = 1)),
             nn.ReLU(),
             nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear( 2560, hidden_size - 20)),
-            nn.LayerNorm(hidden_size-20), 
+            pufferlib.pytorch.layer_init(nn.Linear( 2560, hidden_size - 36)),
+            nn.LayerNorm(hidden_size-36), 
             nn.ReLU(),
         )
         self.battle_stats_embedding = nn.Embedding(4 , 4, dtype=torch.float32)
@@ -149,6 +149,11 @@ class Policy(nn.Module):
             nn.LayerNorm(16),
             nn.ReLU(),
         )
+        self.total_pokemon_seen_fc = nn.Sequential(
+            nn.Embedding(151 , 16, dtype=torch.float32),
+            nn.LayerNorm(16) , 
+            nn.ReLU()
+        )
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)
         actions, value = self.decode_actions(hidden, lookup)
@@ -192,7 +197,7 @@ class Policy(nn.Module):
                     self.map_music_sound_id_emebedding(env_outputs["map_music_sound_id"].long()).squeeze(1) , 
                     env_outputs["player_xp"].float() , 
                     env_outputs["total_party_max_hit_points"].float() , 
-                    env_outputs["total_pokemon_seen"].float() / 151.0,
+                    self.total_pokemon_seen_fc(env_outputs["total_pokemon_seen"].long()).squeeze(1) ,
                     self.pokemon_seen_fc(env_outputs["pokemon_seen_in_the_pokedex"].float() / 255.0).squeeze(1) , 
                     self.pokemon_caught_fc(env_outputs["byte_representation_of_caught_pokemon_in_the_pokedex"].float() / 255.0).squeeze(1) ,
                     self.pokemon_low_health_alarm(env_outputs["low_health_alarm"].float() / 255.0).squeeze(1) ,
