@@ -64,8 +64,8 @@ class Policy(nn.Module):
             pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 32,  out_channels = 32, kernel_size = 3, stride = 1)),
             nn.ReLU(),
             nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear( 2560, hidden_size - 36)),
-            nn.LayerNorm(hidden_size-36), 
+            pufferlib.pytorch.layer_init(nn.Linear( 2560, hidden_size - 35)),
+            nn.LayerNorm(hidden_size-35), 
             nn.ReLU(),
         )
         self.battle_stats_embedding = nn.Embedding(4 , 4, dtype=torch.float32)
