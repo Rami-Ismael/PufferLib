@@ -30,7 +30,10 @@ class ResnetBlock(torch.nn.Module):
 class Policy(nn.Module):
     def __init__(self, env, *args,
             input_size=512, hidden_size=512, output_size=512,
-            channels_last=False, downsample=1, **kwargs):
+            channels_last=False, downsample=1, 
+            mlp_width = 512,
+            mlp_depth = 3 , 
+            **kwargs):
         '''The CleanRL default NatureCNN policy used for Atari.
         It's just a stack of three convolutions followed by a linear layer
         
@@ -67,15 +70,49 @@ class Policy(nn.Module):
         )
         self.battle_stats_embedding = nn.Embedding(4 , 4, dtype=torch.float32)
         self.battle_results_embedding = nn.Embedding(4, 4, dtype=torch.float32)
+        '''
+            self.encode_linear = nn.Sequential(
+                pufferlib.pytorch.layer_init(nn.Linear( 1024 , mlp_width)),
+                nn.LayerNorm(mlp_width),
+                nn.ReLU(),
+                pufferlib.pytorch.layer_init(nn.Linear( 1024 , hidden_size)),
+                nn.LayerNorm(hidden_size),
+                nn.ReLU(),
+            )
+        '''
+        self.encode_linear = nn.Sequential()
+        self.encode_linear.add_module(
+                f"layer_{1}",
+                pufferlib.pytorch.layer_init(nn.Linear( 1024 , mlp_width)),
+            )
+        self.encode_linear.add_module(
+                f"layer_norm_{1}",
+                nn.LayerNorm(mlp_width),
+            )
+        self.encode_linear.add_module(
+                f"relu_{1}",
+                nn.ReLU(),
+            )
+        for i in range( 1, mlp_depth-1):
+            self.encode_linear.add_module(
+                f"layer_{i}",
+                pufferlib.pytorch.layer_init(nn.Linear( 1024 , mlp_width)),
+            )
+            self.encode_linear.add_module(
+                f"layer_norm_{i}",
+                nn.LayerNorm(mlp_width),
+            )
+            self.encode_linear.add_module(
+                f"relu_{i}",
+                nn.ReLU(),
+            )
+        self.encode_linear.add_module(f"layer_{mlp_depth}",
+            pufferlib.pytorch.layer_init(nn.Linear( mlp_width , hidden_size)))
+        self.encode_linear.add_module(f"layer_norm_{mlp_depth}", nn.LayerNorm(hidden_size))
+        self.encode_linear.add_module(f"relu_{mlp_depth}", nn.ReLU())
         
-        self.encode_linear = nn.Sequential(
-            pufferlib.pytorch.layer_init(nn.Linear( 1024 , 1024)),
-            nn.LayerNorm(1024),
-            nn.ReLU(),
-            pufferlib.pytorch.layer_init(nn.Linear( 1024 , hidden_size)),
-            nn.LayerNorm(hidden_size),
-            nn.ReLU(),
-        )
+            
+        
         
         self.selected_move_id =  nn.Embedding(
             166 , 

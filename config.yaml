@@ -738,6 +738,9 @@ pokegym:
   package: pokemon_red
 pokedebug:
   package: pokemon_red
+  policy:
+    mlp_width: 512
+    mlp_depth: 2
   train:
     num_envs: 4
     num_workers: 4
@@ -801,13 +804,16 @@ local_cpu_pokemon:
 puffertank_pokemon_red:
     package: pokemon_red
     use_rnn: True
+    policy:
+      mlp_width: 512
+      mlp_depth: 3
     env:
       display_info_interval_divisor: 4096 
       max_episode_steps: 32768 
       EpisodeStats: False
       max_reward_clip: 2
-      reward_for_increase_pokemon_level_coef: 1.1
-      reward_for_explore_unique_coor_coef: .4
+      reward_for_increase_pokemon_level_coef: 1.2
+      reward_for_explore_unique_coor_coef: .30
     train:
       seed: 1
       torch_deterministic: True
@@ -863,7 +869,7 @@ puffertank_pokemon_red:
                   'values' :[5.0e-4 , 2.5e-4 , 1.0e-4]
               }
               batch_size: {
-                'values': [65536 , 131072 , 147456 , 163840],
+                'values': [131072 , 147456 , 163840],
               }
               update_epoch: {
                 'values' :[ 2  , 4, 8]
