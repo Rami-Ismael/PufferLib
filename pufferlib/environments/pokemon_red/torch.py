@@ -96,7 +96,7 @@ class Policy(nn.Module):
         for i in range( 1, mlp_depth-1):
             self.encode_linear.add_module(
                 f"layer_{i}",
-                pufferlib.pytorch.layer_init(nn.Linear( 1024 , mlp_width)),
+                pufferlib.pytorch.layer_init(nn.Linear( mlp_width , mlp_width)),
             )
             self.encode_linear.add_module(
                 f"layer_norm_{i}",
