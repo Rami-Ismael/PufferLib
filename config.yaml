@@ -805,7 +805,7 @@ puffertank_pokemon_red:
     package: pokemon_red
     use_rnn: True
     policy:
-      mlp_width: 512
+      mlp_width: 1024 
       mlp_depth: 4
     env:
       display_info_interval_divisor: 4096 
@@ -884,7 +884,7 @@ puffertank_pokemon_red:
                 "values": [ .25 , .275 , .3]
               }
               weight_decay: {
-                "values": [0.0001, 0.001]
+                "values": [0,00001 , 0.0001, 0.001]
               }
 
 links_awaken:
