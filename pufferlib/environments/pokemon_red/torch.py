@@ -108,10 +108,9 @@ class Policy(nn.Module):
             )
         self.encode_linear.add_module(f"layer_{mlp_depth}",
             pufferlib.pytorch.layer_init(nn.Linear( mlp_width , hidden_size)))
-        print(f"The encode linear layer is {self.encode_linear}")
         self.encode_linear.add_module(f"layer_norm_{mlp_depth}", nn.LayerNorm(hidden_size))
         self.encode_linear.add_module(f"relu_{mlp_depth}", nn.ReLU())
-        
+        print(f"The encode linear layer is {self.encode_linear}")
             
         
         
