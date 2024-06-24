@@ -872,7 +872,7 @@ puffertank_pokemon_red:
                 'values': [131072 , 147456 , 163840],
               }
               update_epoch: {
-                'values' :[ 2, 4, 8]
+                'values' :[ 2, 4, 8 , 16]
               }
               ent_coef: {
                 "values": [0.01, .1]
@@ -886,6 +886,8 @@ puffertank_pokemon_red:
               weight_decay: {
                 "values": [0,00001 , 0.0001, 0.001]
               }
+          policy:
+            parameters:
               mlp_depth: {
                "values": [ 2 , 3 , 4]
               }
