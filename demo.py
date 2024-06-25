@@ -146,6 +146,9 @@ def sweep(args, wandb_name, env_module, make_env):
             # TODO: Add update method to namespace
             print(wandb.config.train)
             args.train.__dict__.update(dict(wandb.config.train))
+            if args.policy.__dict__:
+                print(f"The new configuration of policy is {args.policy.__dict__}")
+                args.policy.__dict__.update(dict(wandb.config.policy))
             args.track = True
             train(args, env_module, make_env)
         except Exception as e:
