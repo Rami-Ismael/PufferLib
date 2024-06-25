@@ -739,8 +739,8 @@ pokegym:
 pokedebug:
   package: pokemon_red
   policy:
-    mlp_width: 512
-    mlp_depth: 2
+    mlp_width: 256
+    mlp_depth: 1
   train:
     num_envs: 4
     num_workers: 4
@@ -811,7 +811,7 @@ puffertank_pokemon_red:
       display_info_interval_divisor: 4096 
       max_episode_steps: 32768 
       EpisodeStats: False
-      max_reward_clip: 2
+      max_reward_clip: 3
       reward_for_increase_pokemon_level_coef: 1.4
       reward_for_explore_unique_coor_coef: .275
     train:
