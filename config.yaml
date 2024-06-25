@@ -897,7 +897,10 @@ puffertank_pokemon_red:
               mlp_width: {
                 "values": [ 256 , 512 , 1024]
               }
-
+          env:
+            max_reward_clip: {
+              "values": [ 1 , 2, 3]
+            }
 links_awaken:
   package: links_awaken
 links-awaken:
