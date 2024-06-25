@@ -886,6 +886,9 @@ puffertank_pokemon_red:
               weight_decay: {
                 "values": [0,00001 , 0.0001, 0.001]
               }
+              anneal_lr: {
+                "values": [ True , False]
+              }
           policy:
             parameters:
               mlp_depth: {
