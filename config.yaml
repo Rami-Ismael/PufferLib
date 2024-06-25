@@ -884,7 +884,7 @@ puffertank_pokemon_red:
                 "values": [ .25 , .275 , .3]
               }
               weight_decay: {
-                "values": [0,00001 , 0.0001, 0.001]
+                "values": [0.00001 , 0.0001, 0.001]
               }
               anneal_lr: {
                 "values": [ True , False]
