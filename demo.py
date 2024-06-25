@@ -149,8 +149,6 @@ def sweep(args, wandb_name, env_module, make_env):
             if args.policy.__dict__:
                 print(f"The new configuration of policy is {args.policy.__dict__}")
                 args.policy.__dict__.update(dict(wandb.config.policy))
-            if args.env.__dict__:
-                args.env.__dict__.update(dict(wandb.config.env))
             args.track = True
             train(args, env_module, make_env)
         except Exception as e:
