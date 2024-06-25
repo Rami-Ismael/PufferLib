@@ -52,8 +52,8 @@ class Policy(nn.Module):
             ResnetBlock( in_planes = 3 , img_size = (72, 80) ),
             nn.ReLU(),
             nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size - 114 - 7 )),
-            nn.LayerNorm(hidden_size - 114- 7 ),
+            pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size - 114 - 37 )),
+            nn.LayerNorm(hidden_size - 114- 37 ),
             nn.ReLU(),
         )
         self.visited_and_global_mask = nn.Sequential(
@@ -154,6 +154,16 @@ class Policy(nn.Module):
             nn.LayerNorm(16) , 
             nn.ReLU()
         )
+        self.coordinate_fc_x = nn.Sequential(
+            nn.Embedding(444 , 16 , dtype=torch.float32),
+            nn.LayerNorm(16),
+            nn.ReLU()
+        )
+        self.coordinate_fc_y = nn.Sequential(
+            nn.Embedding(436 , 16 , dtype=torch.float32),
+            nn.LayerNorm(16),
+            nn.ReLU()
+        )
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)
         actions, value = self.decode_actions(hidden, lookup)
@@ -177,8 +187,9 @@ class Policy(nn.Module):
                     (
                     (self.screen_network(observations.float() / 255.0).squeeze(1)) ,
                     (self.visited_and_global_mask( torch.cat( (env_outputs["visited_mask"].permute(0, 3, 1, 2).float() , env_outputs["global_map"].permute(0, 3, 1, 2).float() ) , dim = -1) ).squeeze(1)),
-                    env_outputs["x"].float() // 444,
-                    env_outputs["y"].float() // 436,
+                    #env_outputs["x"].float() // 444,
+                    self.coordinate_fc_x(env_outputs["x"].float()),
+                    self.coordinate_fc_y(env_outputs["y"].float()),
                     map_id.squeeze(1),
                     self.map_music_sound_bank_embeddings(env_outputs["map_music_sound_bank"].long()).squeeze(1) , 
                     env_outputs["party_size"].float() / 6.0,
