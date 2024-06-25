@@ -812,7 +812,7 @@ puffertank_pokemon_red:
       max_episode_steps: 32768 
       EpisodeStats: False
       max_reward_clip: 2
-      reward_for_increase_pokemon_level_coef: 1.3
+      reward_for_increase_pokemon_level_coef: 1.4
       reward_for_explore_unique_coor_coef: .275
     train:
       seed: 1
