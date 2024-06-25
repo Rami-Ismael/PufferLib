@@ -805,8 +805,8 @@ puffertank_pokemon_red:
     package: pokemon_red
     use_rnn: True
     policy:
-      mlp_width: 512 
-      mlp_depth: 4
+      mlp_width: 1024
+      mlp_depth: 3
     env:
       display_info_interval_divisor: 4096 
       max_episode_steps: 32768 
