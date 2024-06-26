@@ -102,7 +102,7 @@ class Policy(nn.Module):
                 f"relu_1",
                 nn.ReLU(),
             )
-        for i in range( 2, mlp_depth + 1 ):
+        for i in range( 2, mlp_depth ):
             self.encode_linear.add_module(
                 f"layer_{i}",
                 pufferlib.pytorch.layer_init(nn.Linear( mlp_width , mlp_width)),
@@ -115,10 +115,10 @@ class Policy(nn.Module):
                 f"relu_{i}",
                 nn.ReLU(),
             )
-        self.encode_linear.add_module(f"layer_{mlp_depth+1}",
+        self.encode_linear.add_module(f"layer_{mlp_depth}",
             pufferlib.pytorch.layer_init(nn.Linear( mlp_width , hidden_size)))
-        self.encode_linear.add_module(f"layer_norm_{mlp_depth+1}", nn.LayerNorm(hidden_size))
-        self.encode_linear.add_module(f"relu_{mlp_depth+1}", nn.ReLU())
+        self.encode_linear.add_module(f"layer_norm_{mlp_depth}", nn.LayerNorm(hidden_size))
+        self.encode_linear.add_module(f"relu_{mlp_depth}", nn.ReLU())
         print(f"The encode linear layer is {self.encode_linear}")
             
         
