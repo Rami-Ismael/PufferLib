@@ -135,6 +135,8 @@ def evaluate(data):
                     import pokemon_red_eval
                     data.map_updater = pokemon_red_eval.map_updater()
                     data.pokemon_map = pmap
+                    print(f"The datatype of of pmap is {pmap.dtype} which could mean pokemon map")
+                    print(f"This check if pokemon exploration map is set")
 
                 data.pokemon_map = np.maximum(data.pokemon_map, pmap)
 
