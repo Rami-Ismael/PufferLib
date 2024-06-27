@@ -809,12 +809,12 @@ puffertank_pokemon_red:
       mlp_depth: 3
       embedd_the_x_and_y_coordinate: True
     env:
-      display_info_interval_divisor: 4096 
+      display_info_interval_divisor: 2048 
       max_episode_steps: 16384  
       EpisodeStats: False
       max_reward_clip: 2
       reward_for_increase_pokemon_level_coef: 1.4
-      reward_for_explore_unique_coor_coef: .325
+      reward_for_explore_unique_coor_coef: .35
     train:
       compile: True
       compile_mode: "reduce-overhead"
