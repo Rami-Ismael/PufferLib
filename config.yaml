@@ -745,9 +745,13 @@ pokedebug:
     num_envs: 4
     num_workers: 4
     env_batch_size: 2
-    batch_size: 2048
+    batch_size: 256
     minibatch_size: 256
     compile: False
+    continual_learning:
+      shrink_and_perturb: True
+      shrink : .8
+      perturb: .1
     device: cpu
 local_cpu_pokemon:
   package: pokemon_red
@@ -813,7 +817,7 @@ puffertank_pokemon_red:
       max_episode_steps: 16384  
       EpisodeStats: False
       max_reward_clip: 2
-      reward_for_increase_pokemon_level_coef: 1.4
+      reward_for_increase_pokemon_level_coef: 1.2
       reward_for_explore_unique_coor_coef: .35
     train:
       compile: True
@@ -855,6 +859,11 @@ puffertank_pokemon_red:
 
       batch_rows: 512
       bptt_horizon: 32
+
+      continual_learning:
+        shrink_and_perturb: False
+        shrink : .8
+        perturb: .1
     sweep:
         method: bayes
         name: sweep
@@ -878,7 +887,10 @@ puffertank_pokemon_red:
                 "values": [0.00001 , 0.0001, 0.001]
               }
               ent_coef: {
-                "values": [0 , 0.01]
+                "values": [0 , .1 , 0.01]
+              }
+              update_epochs: {
+                "values": [2 , 4 , 8 , 16]
               }
           policy:
             parameters:
