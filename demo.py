@@ -225,7 +225,7 @@ def train(args, env_module, make_env):
                 if data.losses.policy_loss > policy_loss_has_to_be_less_than :
                     print(f"The policy loss is {data.losses.policy_loss}")
                     return False
-                elif ( data.losses.value_loss <= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00):
+                elif not ( data.losses.value_loss >= value_loss_has_to_be_greater_than or  data.losses.value_loss == 0.00):
                     print(f"The value loss need to be greater than {value_loss_has_to_be_greater_than} and not {data.losses.value_loss}")
                     return False
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
