@@ -818,7 +818,7 @@ puffertank_pokemon_red:
       EpisodeStats: False
       max_reward_clip: 2
       reward_for_increase_pokemon_level_coef: 1.4
-      reward_for_explore_unique_coor_coef: .35
+      reward_for_explore_unique_coor_coef: .4
     train:
       compile: True
       compile_mode: "reduce-overhead"
