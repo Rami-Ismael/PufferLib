@@ -813,7 +813,7 @@ puffertank_pokemon_red:
       mlp_depth: 3
       embedd_the_x_and_y_coordinate: True
     env:
-      display_info_interval_divisor:  1024
+      display_info_interval_divisor:  2048
       max_episode_steps: 16384  
       EpisodeStats: False
       max_reward_clip: 2
