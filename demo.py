@@ -216,7 +216,15 @@ def train(args, env_module, make_env):
             ]
         ) as p:
         '''
-        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0.02 and (data.losses.value_loss == 0.00 or data.losses.value_loss >= 0.04) and (data.losses.old_approx_kl == 0.00 or  data.losses.approx_kl < 1.0):
+        def early_stopping_base_on_ppo_loss_func(data):
+            if train_config.update_epochs == 2:
+                policy_loss_has_to_be_less_than = .00123
+                value_loss_has_to_be_less_than = 0.04
+                approx_kl_has_to_be_less_than = 1.0
+                clip_frac_has_to_be_greater_than = 0.01
+                return data.losses.policy_loss <= policy_loss_has_to_be_less_than and ( data.losses.value_loss <= value_loss_has_to_be_less_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clip_frac >= clip_frac_has_to_be_greater_than or data.losses.clip_frac == 0.00)
+            
+        while data.global_step < args.train.total_timesteps and early_stopping_base_on_ppo_loss_func(data):
         #while data.global_step < args.train.total_timesteps:
             try:
                 clean_pufferl.evaluate(data)
