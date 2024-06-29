@@ -817,7 +817,7 @@ puffertank_pokemon_red:
       max_episode_steps: 16384  
       EpisodeStats: False
       max_reward_clip: 1
-      reward_for_increase_pokemon_level_coef: 1.4
+      reward_for_increase_pokemon_level_coef: 1.6
       reward_for_explore_unique_coor_coef: .5
     train:
       compile: True
@@ -872,7 +872,7 @@ puffertank_pokemon_red:
           name: environment/total_events_that_occurs_in_game
         early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
           type: hyperband
-          min_iter: 2
+          min_iter: 4
         # Nested parameters name required by WandB API
         parameters:
           train:
