@@ -216,11 +216,11 @@ def train(args, env_module, make_env):
             ]
         ) as p:
         '''
-        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0.0 and (data.losses.value_loss == 0.00 or data.losses.value_loss >= 0.08) and (data.losses.old_approx_kl == 0.00 or  data.losses.approx_kl < 1.0):
+        while data.global_step < args.train.total_timesteps and data.losses.policy_loss <= 0.02 and (data.losses.value_loss == 0.00 or data.losses.value_loss >= 0.04) and (data.losses.old_approx_kl == 0.00 or  data.losses.approx_kl < 1.0):
         #while data.global_step < args.train.total_timesteps:
             try:
                 clean_pufferl.evaluate(data)
-                clean_pufferl.train(data)
+                clean_pufferl.train(data , args.train.continual_learning["shrink_and_perturb"] , args.train.continual_learning["shrink"] , args.train.continual_learning["perturb"])
             except KeyboardInterrupt:
                 clean_pufferl.close(data)
                 os._exit(0)
