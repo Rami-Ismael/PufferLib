@@ -830,13 +830,13 @@ puffertank_pokemon_red:
       anneal_lr: True
       gamma: 0.99
       gae_lambda: 0.95
-      update_epochs: 16
+      update_epochs: 2
       norm_adv: True
       clip_coef: 0.2
       ent_coef: 0.01
       vf_coef: 0.5
       max_grad_norm: 0.5
-      target_kl: ~
+      target_kl: .9
       num_envs: 768
       num_workers: 24
       batch_size: 131072
@@ -848,7 +848,7 @@ puffertank_pokemon_red:
       pool_kernel: [0]
 
 
-      minibatch_size: 16384  # if not set it will be 2048
+      minibatch_size: 32768  # if not set it will be 2048
 
 
       learning_rate: 3.0e-4
@@ -857,7 +857,7 @@ puffertank_pokemon_red:
 
 
 
-      batch_rows: 512
+      #batch_rows: 512
       bptt_horizon: 32
 
       continual_learning:
@@ -888,9 +888,6 @@ puffertank_pokemon_red:
               }
               ent_coef: {
                 "values": [0 , .1 , 0.01]
-              }
-              update_epochs: {
-                "values": [2 , 4 , 8 , 16]
               }
           policy:
             parameters:
