@@ -29,7 +29,7 @@ class ResnetBlock(torch.nn.Module):
 def create_screen_network(embedd_the_x_and_y_coordinate = False , hidden_size=512):
     outputs_of_the_screen_nework = 512
     if embedd_the_x_and_y_coordinate:
-        outputs_of_the_screen_nework  -= 30
+        outputs_of_the_screen_nework  -= 96
     outputs_of_the_screen_nework -= 114 # idk
     outputs_of_the_screen_nework -=7 # idk
     return nn.Sequential(
@@ -163,14 +163,15 @@ class Policy(nn.Module):
             nn.LayerNorm(16) , 
             nn.ReLU()
         )
+        # https://forums.fast.ai/t/size-of-embedding-for-categorical-variables/42608/4
         self.coordinate_fc_x = nn.Sequential(
-            nn.Embedding(444 , 16 , dtype=torch.float32),
-            nn.LayerNorm(16),
+            nn.Embedding(444 , 48 , dtype=torch.float32),
+            nn.LayerNorm(48),
             nn.ReLU()
         )
         self.coordinate_fc_y = nn.Sequential(
-            nn.Embedding(436 , 16 , dtype=torch.float32),
-            nn.LayerNorm(16),
+            nn.Embedding(436 , 48 , dtype=torch.float32),
+            nn.LayerNorm(48),
             nn.ReLU()
         )
     def forward(self, observations):
