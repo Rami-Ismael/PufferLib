@@ -889,6 +889,9 @@ puffertank_pokemon_red:
               ent_coef: {
                 "values": [0 , .1 , 0.01]
               }
+              minibatch_size: {
+                "values": [16384 , 32768 , 65536 ]
+              }
           policy:
             parameters:
               mlp_depth: {
