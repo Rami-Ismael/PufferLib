@@ -222,7 +222,7 @@ def train(args, env_module, make_env):
                 value_loss_has_to_be_less_than = 0.04
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.01
-                return data.losses.policy_loss <= policy_loss_has_to_be_less_than and ( data.losses.value_loss <= value_loss_has_to_be_less_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clip_frac >= clip_frac_has_to_be_greater_than or data.losses.clip_frac == 0.00)
+                return data.losses.policy_loss <= policy_loss_has_to_be_less_than and ( data.losses.value_loss <= value_loss_has_to_be_less_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             
         while data.global_step < args.train.total_timesteps and early_stopping_base_on_ppo_loss_func(data):
         #while data.global_step < args.train.total_timesteps:
