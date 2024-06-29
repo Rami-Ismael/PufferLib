@@ -839,7 +839,7 @@ puffertank_pokemon_red:
       target_kl: .9
       num_envs: 768
       num_workers: 24
-      batch_size: 262144 
+      batch_size: 131072 
       zero_copy: False
       env_batch_size: 512
       env_pool: True
@@ -848,7 +848,7 @@ puffertank_pokemon_red:
       pool_kernel: [0]
 
 
-      minibatch_size: 32768  # if not set it will be 2048
+      minibatch_size: 16384  # if not set it will be 2048
 
 
       learning_rate: 3.0e-4
@@ -888,9 +888,6 @@ puffertank_pokemon_red:
               }
               ent_coef: {
                 "values": [0 , .1 , 0.01]
-              }
-              minibatch_size: {
-                "values": [16384 , 32768]
               }
           policy:
             parameters:
