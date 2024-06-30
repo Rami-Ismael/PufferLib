@@ -890,7 +890,7 @@ puffertank_pokemon_red:
                 "values": [0 , .1 , 0.01]
               }
               update_epochs: {
-                "values":" [ 2 , 4, 8 , 16]
+                "values": [ 2 , 4, 8 , 16]
               }
           policy:
             parameters:
