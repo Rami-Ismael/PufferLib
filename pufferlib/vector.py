@@ -407,8 +407,6 @@ class Multiprocessing:
             print(f"What is the data type of the observation shape? {type(self.obs_batch_shape)}")
             print(f"What is the shape of the observation slice? {buf.observations[w_slice].shape}")
             print(f"What is the shape of the observation shape? {self.obs_batch_shape}")
-            print(f"What is the buffer {buf}")
-            print(f"What is the buffer observations? {buf.observations}")
             
         r = buf.rewards[w_slice].ravel()
         d = buf.terminals[w_slice].ravel()
