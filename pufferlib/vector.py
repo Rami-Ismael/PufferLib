@@ -397,16 +397,16 @@ class Multiprocessing:
 
         self.w_slice = w_slice
         buf = self.buf
-        o = buf.observations[w_slice].reshape(self.obs_batch_shape)
-        '''
-        print(f"I go this error {e}")
-        print(f"What is the data type of the buffer? {type(buf)}")
-        print(f"What is the data type of the observation? {type(buf.observations)}")
-        print(f"What is the data type of the observation slice? {type(buf.observations[w_slice])}")
-        print(f"What is the data type of the observation shape? {type(self.obs_batch_shape)}")
-        print(f"What is the shape of the observation slice? {buf.observations[w_slice].shape}")
-        print(f"What is the shape of the observation shape? {self.obs_batch_shape}")
-        '''
+        try:
+            o = buf.observations[w_slice].reshape(self.obs_batch_shape)
+        except Exception as e:
+            print(f"I go this error {e}")
+            print(f"What is the data type of the buffer? {type(buf)}")
+            print(f"What is the data type of the observation? {type(buf.observations)}")
+            print(f"What is the data type of the observation slice? {type(buf.observations[w_slice])}")
+            print(f"What is the data type of the observation shape? {type(self.obs_batch_shape)}")
+            print(f"What is the shape of the observation slice? {buf.observations[w_slice].shape}")
+            print(f"What is the shape of the observation shape? {self.obs_batch_shape}")
             
         r = buf.rewards[w_slice].ravel()
         d = buf.terminals[w_slice].ravel()
