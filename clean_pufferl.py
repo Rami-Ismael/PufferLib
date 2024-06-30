@@ -93,7 +93,14 @@ def evaluate(data):
             data.global_step += sum(mask)
 
             o = torch.as_tensor(o)
-            o_device = o.to(config.device)
+            try:
+                o_device = o.to(config.device)
+            except Exception as e:
+                print(e)
+                print('Failed to move observation to device. Not Continuing...')
+                print(f'The device config is {config.device}')
+                print(f"What is the type of the observation is {type(o)}")
+                break
             r = torch.as_tensor(r)
             d = torch.as_tensor(d)
 

@@ -841,7 +841,7 @@ puffertank_pokemon_red:
       num_workers: 24
       batch_size: 131072 
       zero_copy: True
-      env_batch_size: 512
+      env_batch_size: 256
       env_pool: True
 
       save_checkpoint: False
