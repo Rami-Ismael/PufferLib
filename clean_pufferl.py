@@ -96,13 +96,13 @@ def evaluate(data):
             o = torch.as_tensor(o)
             try:
                 o_device = o.to(config.device)
-            except Exception as e:
+            except ValueError as e:
                 rich_print(e)
                 rich_print('Failed to move observation to device. Not Continuing...')
                 rich_print(f'The device config is {config.device}')
                 rich_print(f"What is the type of the observation is {type(o)}")
                 rich_print(f"What is the shape of the observation is {o.shape}")
-                break
+                print(f"What is the data global step is {data.global_step}")
             r = torch.as_tensor(r)
             d = torch.as_tensor(d)
 
