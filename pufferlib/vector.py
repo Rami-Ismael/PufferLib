@@ -393,7 +393,7 @@ class Multiprocessing:
                 print(e)
                 print("Which condition failed?")
                 print(f"Check workers per batch is equal to ones which is the first condition:  The self workers per batch is {self.workers_per_batch} == 1 is {self.workers_per_batch == 1}")
-                continue
+                break 
 
         self.w_slice = w_slice
         buf = self.buf
@@ -405,9 +405,10 @@ class Multiprocessing:
             print(f"What is the data type of the observation? {type(buf.observations)}")
             print(f"What is the data type of the observation slice? {type(buf.observations[w_slice])}")
             print(f"What is the data type of the observation shape? {type(self.obs_batch_shape)}")
-            print(f"What is the buffer {buf}")
             print(f"What is the shape of the observation slice? {buf.observations[w_slice].shape}")
             print(f"What is the shape of the observation shape? {self.obs_batch_shape}")
+            print(f"What is the buffer {buf}")
+            print(f"What is the buffer observations? {buf.observations}")
             
         r = buf.rewards[w_slice].ravel()
         d = buf.terminals[w_slice].ravel()
