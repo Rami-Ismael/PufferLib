@@ -830,7 +830,7 @@ puffertank_pokemon_red:
       anneal_lr: True
       gamma: 0.99
       gae_lambda: 0.95
-      update_epochs: 4
+      update_epochs: 8
       norm_adv: True
       clip_coef: 0.2
       ent_coef: 0.01
@@ -888,6 +888,9 @@ puffertank_pokemon_red:
               }
               ent_coef: {
                 "values": [0 , .1 , 0.01]
+              }
+              update_epochs: {
+                "values":" [ 2 , 4, 8 , 16]
               }
           policy:
             parameters:
