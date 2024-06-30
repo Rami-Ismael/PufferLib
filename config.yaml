@@ -820,7 +820,7 @@ puffertank_pokemon_red:
       reward_for_increase_pokemon_level_coef: 1
       reward_for_explore_unique_coor_coef: 1
     train:
-      compile: True
+      compile: False
       compile_mode: "reduce-overhead"
       seed: 1
       torch_deterministic: True
