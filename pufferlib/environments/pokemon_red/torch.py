@@ -29,7 +29,7 @@ class ResnetBlock(torch.nn.Module):
 def create_screen_network(embedd_the_x_and_y_coordinate = False , hidden_size=512):
     outputs_of_the_screen_nework = 512
     if embedd_the_x_and_y_coordinate:
-        outputs_of_the_screen_nework  -= 96
+        outputs_of_the_screen_nework  -= 94 # 96 which is 48 *2 = 96 - 2 because we are placing a two elemnts in the process in the process 
     outputs_of_the_screen_nework -= 114 # idk
     outputs_of_the_screen_nework -=7 # idk
     return nn.Sequential(
