@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 import rich
 from rich.console import Console
 from rich.table import Table
-from rich import print as print
+from rich import print as rich_print
 
 import torch
 
@@ -97,11 +97,11 @@ def evaluate(data):
             try:
                 o_device = o.to(config.device)
             except Exception as e:
-                print(e)
-                print('Failed to move observation to device. Not Continuing...')
-                print(f'The device config is {config.device}')
-                print(f"What is the type of the observation is {type(o)}")
-                print(f"What is the shape of the observation is {o.shape}")
+                rich_print(e)
+                rich_print('Failed to move observation to device. Not Continuing...')
+                rich_print(f'The device config is {config.device}')
+                rich_print(f"What is the type of the observation is {type(o)}")
+                rich_print(f"What is the shape of the observation is {o.shape}")
                 break
             r = torch.as_tensor(r)
             d = torch.as_tensor(d)
