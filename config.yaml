@@ -894,6 +894,9 @@ puffertank_pokemon_red:
               ent_coef: {
                 "values": [0 , .1 , 0.01]
               }
+              target_kl: {
+                "values": [ .1  , .2 , .3  , .4]
+              }
           policy:
             parameters:
               mlp_depth: {
