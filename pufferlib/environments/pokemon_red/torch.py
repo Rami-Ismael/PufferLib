@@ -58,10 +58,16 @@ def crete_mlp(dense_act_func: str = "ReLU", mlp_width:int = 512, mlp_depth:int =
                     f"layer_{i}",
                     pufferlib.pytorch.layer_init(nn.Linear( mlp_width , hidden_size)),
                 )
-            encode_linear.add_module(
-                f"layer_norm_{i}",
-                nn.LayerNorm(mlp_width),
-            )
+            if i < mlp_depth+1:
+                encode_linear.add_module(
+                    f"layer_{i}_norm",
+                    nn.LayerNorm(mlp_width),
+                )
+            else:
+                encode_linear.add_module(
+                    f"layer_{i}_norm",
+                    nn.LayerNorm(hidden_size),
+                )
             if dense_act_func == "ReLU":
                 encode_linear.add_module(
                     f"relu_{i}",
