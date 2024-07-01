@@ -72,7 +72,7 @@ def crete_mlp(dense_act_func: str = "ReLU", mlp_width:int = 512, mlp_depth:int =
                     f"leaky_relu_{i}",
                     nn.LeakyReLU(),
                 )
-        print(f"The encode linear layer is {self.encode_linear}")
+        print(f"The encode linear layer is {encode_linear}")
         return encode_linear
 
 class Policy(nn.Module):
