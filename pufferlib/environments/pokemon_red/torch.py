@@ -40,6 +40,40 @@ def create_screen_network(embedd_the_x_and_y_coordinate = False , hidden_size=51
             nn.LayerNorm( outputs_of_the_screen_nework ),
             nn.ReLU(),
         )
+def crete_mlp(dense_act_func: str = "ReLU", mlp_width:int = 512, mlp_depth:int = 3, hidden_size:int = 512):
+        encode_linear = nn.Sequential()
+        for i in range( 1, mlp_depth+2 ):
+            if i == 0:
+                encode_linear.add_module(
+                    f"layer_{i}",
+                    pufferlib.pytorch.layer_init(nn.Linear( 1024 , mlp_width)),
+                )
+            elif i == 1:
+                encode_linear.add_module(
+                    f"layer_{i}",
+                    pufferlib.pytorch.layer_init(nn.Linear( mlp_width , mlp_width)),
+                )
+            elif i == mlp_depth+1:
+                encode_linear.add_module(
+                    f"layer_{i}",
+                    pufferlib.pytorch.layer_init(nn.Linear( mlp_width , hidden_size)),
+                )
+            encode_linear.add_module(
+                f"layer_norm_{i}",
+                nn.LayerNorm(mlp_width),
+            )
+            if dense_act_func == "ReLU":
+                encode_linear.add_module(
+                    f"relu_{i}",
+                    nn.ReLU(),
+                )
+            elif dense_act_func == "LeakyReLU":
+                encode_linear.add_module(
+                    f"leaky_relu_{i}",
+                    nn.LeakyReLU(),
+                )
+        print(f"The encode linear layer is {self.encode_linear}")
+        return encode_linear
 
 class Policy(nn.Module):
     def __init__(self, env, *args,
@@ -48,6 +82,7 @@ class Policy(nn.Module):
             mlp_width = 512,
             mlp_depth = 3 , 
             embedd_the_x_and_y_coordinate = True,
+            dense_act_func: str = "ReLU",
             **kwargs):
         '''The CleanRL default NatureCNN policy used for Atari.
         It's just a stack of three convolutions followed by a linear layer
@@ -89,37 +124,7 @@ class Policy(nn.Module):
                 nn.ReLU(),
             )
         '''
-        self.encode_linear = nn.Sequential()
-        self.encode_linear.add_module(
-                f"layer_0",
-                pufferlib.pytorch.layer_init(nn.Linear( 1024 , mlp_width)),
-            )
-        self.encode_linear.add_module(
-                f"layer_norm_0",
-                nn.LayerNorm(mlp_width),
-            )
-        self.encode_linear.add_module(
-                f"relu_0",
-                nn.ReLU(),
-            )
-        for i in range( 1, mlp_depth+1 ):
-            self.encode_linear.add_module(
-                f"layer_{i}",
-                pufferlib.pytorch.layer_init(nn.Linear( mlp_width , mlp_width)),
-            )
-            self.encode_linear.add_module(
-                f"layer_norm_{i}",
-                nn.LayerNorm(mlp_width),
-            )
-            self.encode_linear.add_module(
-                f"relu_{i}",
-                nn.ReLU(),
-            )
-        self.encode_linear.add_module(f"layer_{mlp_depth+1}",
-            pufferlib.pytorch.layer_init(nn.Linear( mlp_width , hidden_size)))
-        self.encode_linear.add_module(f"layer_norm_{mlp_depth+1}", nn.LayerNorm(hidden_size))
-        self.encode_linear.add_module(f"relu_{mlp_depth+1}", nn.ReLU())
-        print(f"The encode linear layer is {self.encode_linear}")
+        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size)
             
         
         
