@@ -42,7 +42,7 @@ def create_screen_network(embedd_the_x_and_y_coordinate = False , hidden_size=51
         )
 def crete_mlp(dense_act_func: str = "ReLU", mlp_width:int = 512, mlp_depth:int = 3, hidden_size:int = 512):
         encode_linear = nn.Sequential()
-        for i in range( 1, mlp_depth+2 ):
+        for i in range( 0, mlp_depth+2 ):
             if i == 0:
                 encode_linear.add_module(
                     f"layer_{i}",
