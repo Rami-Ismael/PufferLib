@@ -836,7 +836,7 @@ puffertank_pokemon_red:
       ent_coef: 0.01
       vf_coef: 0.5
       max_grad_norm: 0.5
-      target_kl: .9
+      target_kl: .4
       num_envs: 768
       num_workers: 24
       batch_size: 131072 
@@ -888,9 +888,6 @@ puffertank_pokemon_red:
               }
               ent_coef: {
                 "values": [0 , .1 , 0.01]
-              }
-              update_epochs: {
-                "values": [ 2 , 4, 8 , 16]
               }
           policy:
             parameters:
