@@ -22,7 +22,8 @@ def make(name, headless: bool = True, state_path=None ,
          EpisodeStats = False , max_episode_steps = 65536 , 
          max_reward_clip = 1.0, 
         reward_for_increase_pokemon_level_coef =  1.1 , 
-        reward_for_explore_unique_coor_coef = .4
+        reward_for_explore_unique_coor_coef = .4 , 
+        random_starter_pokemon:bool = True
          ):
     #print(f"The current diosplayin of interval divisor is {display_info_interval_divisor}")
     '''Pokemon Red'''
@@ -30,7 +31,8 @@ def make(name, headless: bool = True, state_path=None ,
                       state_path=state_path , display_info_interval_divisor=display_info_interval_divisor , 
                       max_episode_steps=max_episode_steps , 
                       reward_for_explore_unique_coor_coef=reward_for_explore_unique_coor_coef ,
-                        reward_for_increase_pokemon_level_coef=reward_for_increase_pokemon_level_coef)
+                        reward_for_increase_pokemon_level_coef=reward_for_increase_pokemon_level_coef , 
+                        random_starter_pokemon = random_starter_pokemon )
     env = RenderWrapper(env)
     if EpisodeStats:
         env = pufferlib.postprocess.EpisodeStats(env) #we are removing this because I want to see the performances for each episode

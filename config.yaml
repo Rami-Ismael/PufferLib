@@ -753,6 +753,8 @@ pokedebug:
       shrink : .8
       perturb: .1
     device: cpu
+    env:
+      random_starter_pokemon: True
 local_cpu_pokemon:
   package: pokemon_red
   use_rnn: True
@@ -820,6 +822,7 @@ puffertank_pokemon_red:
       max_reward_clip: 1
       reward_for_increase_pokemon_level_coef: 1
       reward_for_explore_unique_coor_coef: 1
+      random_starter_pokemon: True
     train:
       compile: False
       compile_mode: "reduce-overhead"
@@ -904,6 +907,11 @@ puffertank_pokemon_red:
               }
               dense_act_func: {
                 "values": ["ReLU" , "LeakyReLU"]
+              }
+          env:
+            parameters:
+              random_starter_pokemon: {
+                "values": [True , False]
               }
 links_awaken:
   package: links_awaken
