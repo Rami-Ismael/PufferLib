@@ -834,6 +834,7 @@ puffertank_pokemon_red:
       norm_adv: True
       clip_coef: 0.2
       ent_coef: 0.01
+      clip_vloss: False
       vf_coef: 0.5
       max_grad_norm: 0.5
       target_kl: .4
