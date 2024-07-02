@@ -260,6 +260,20 @@ def train(args, env_module, make_env):
                     print(f"The clipfrac is {data.losses.clipfrac} and it should be greater than {clipfrac_has_to_be_greater_than}")
                     return False
                 return True
+            if train_config.update_epochs == 16:
+                policy_loss_has_to_be_less_than = 0.00
+                approx_kl_has_to_be_greater_than = 0.08
+                clipfrac_has_to_be_greater_than = 0.1
+                if data.losses.policy_loss > policy_loss_has_to_be_less_than :
+                    print(f"The policy loss is {data.losses.policy_loss}")
+                    return False
+                if data.losses.approx_kl != 0 and data.losses.approx_kl < approx_kl_has_to_be_greater_than:
+                    print(f"The approx kl is {data.losses.approx_kl} and it should be greater than {approx_kl_has_to_be_greater_than}")
+                    return False
+                if data.losses.clipfrac != 0 and data.losses.clipfrac < clipfrac_has_to_be_greater_than:
+                    print(f"The clipfrac is {data.losses.clipfrac} and it should be greater than {clipfrac_has_to_be_greater_than}")
+                    return False
+                return True
             return True
             
         while data.global_step < args.train.total_timesteps and early_stopping_base_on_ppo_loss_func(data):
