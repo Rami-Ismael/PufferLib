@@ -905,6 +905,11 @@ puffertank_pokemon_red:
               mlp_width: {
                 "values": [ 256 , 512 , 1024]
               }
+          env:
+            parameters:
+              reward_for_explore_unique_coor_coef : {
+                "values": [ 0 , .25 , .5  , 1]
+              }
 links_awaken:
   package: links_awaken
 links-awaken:
