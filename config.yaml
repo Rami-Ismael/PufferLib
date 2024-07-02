@@ -814,7 +814,7 @@ puffertank_pokemon_red:
       mlp_width: 1024
       mlp_depth: 3
       embedd_the_x_and_y_coordinate: True
-      dense_act_func: "ReLU"
+      dense_act_func: "LeakyReLU"
     env:
       display_info_interval_divisor: 1024 
       max_episode_steps: 16384  
@@ -895,7 +895,7 @@ puffertank_pokemon_red:
                 "values": [0 , .1 , 0.01]
               }
               target_kl: {
-                "values": [ .1  , .2 , .3  , .4]
+                "values": [ .2 , .3  , .4]
               }
           policy:
             parameters:
@@ -906,14 +906,6 @@ puffertank_pokemon_red:
                 "values": [ 256 , 512 , 1024]
               }
               embedd_the_x_and_y_coordinate : {
-                "values": [True , False]
-              }
-              dense_act_func: {
-                "values": ["ReLU" , "LeakyReLU"]
-              }
-          env:
-            parameters:
-              random_starter_pokemon: {
                 "values": [True , False]
               }
 links_awaken:
