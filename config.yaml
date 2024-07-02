@@ -834,7 +834,7 @@ puffertank_pokemon_red:
       anneal_lr: True
       gamma: 0.99
       gae_lambda: 0.95
-      update_epochs: 8
+      update_epochs: 16
       norm_adv: True
       clip_coef: 0.2
       ent_coef: 0.01
