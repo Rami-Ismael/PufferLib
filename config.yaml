@@ -905,9 +905,6 @@ puffertank_pokemon_red:
               mlp_width: {
                 "values": [ 256 , 512 , 1024]
               }
-              embedd_the_x_and_y_coordinate : {
-                "values": [True , False]
-              }
 links_awaken:
   package: links_awaken
 links-awaken:
