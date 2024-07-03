@@ -149,6 +149,9 @@ def sweep(args, wandb_name, env_module, make_env):
             if args.policy.__dict__:
                 print(f"The new configuration of policy is {args.policy.__dict__}")
                 args.policy.__dict__.update(dict(wandb.config.policy))
+            if args.env.__dict__:
+                args.env.__dict__.update(dict(wandb.config.env))
+                print(f"The new configuration of env is {args.env.__dict__}")
             args.track = True
             train(args, env_module, make_env)
         except Exception as e:
@@ -264,7 +267,7 @@ def train(args, env_module, make_env):
                 policy_loss_has_to_be_less_than = 0.00
                 approx_kl_has_to_be_greater_than = 0.08
                 clipfrac_has_to_be_greater_than = 0.1
-                kl_has_to_be_less_than = 3.0
+                kl_has_to_be_less_than = 1
                 if data.losses.policy_loss > policy_loss_has_to_be_less_than :
                     print(f"The policy loss is {data.losses.policy_loss}")
                     return False

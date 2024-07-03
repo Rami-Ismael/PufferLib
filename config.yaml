@@ -819,11 +819,11 @@ puffertank_pokemon_red:
       add_time: True
     env:
       display_info_interval_divisor: 1024 
-      max_episode_steps: 16384  
+      max_episode_steps: 32768  
       EpisodeStats: False
       max_reward_clip: 1
       reward_for_increase_pokemon_level_coef: 1
-      reward_for_explore_unique_coor_coef: 1
+      reward_for_explore_unique_coor_coef: .01
       random_starter_pokemon: True
     train:
       compile: False
@@ -835,11 +835,11 @@ puffertank_pokemon_red:
       total_timesteps: 100_000_000
       anneal_lr: True
       gamma: 0.99
-      gae_lambda: 0.95
+      gae_lambda: 0.7
       update_epochs: 16
       norm_adv: True
       clip_coef: 0.2
-      ent_coef: 0.01
+      ent_coef: 0.1
       clip_vloss: False
       vf_coef: 0.5
       max_grad_norm: 0.5
@@ -858,8 +858,8 @@ puffertank_pokemon_red:
       minibatch_size: 16384  # if not set it will be 2048
 
 
-      learning_rate: 3.0e-4
-      weight_decay: 0.0001
+      learning_rate: 0.00025
+      weight_decay: 0.00001
 
 
 
@@ -910,10 +910,13 @@ puffertank_pokemon_red:
               add_time: {
                 "values": [True , False]
               }
+              dense_act_func: {
+                "values": ["LeakyReLU" , "ReLU"]
+              }
           env:
             parameters:
               reward_for_explore_unique_coor_coef : {
-                "values": [ 0 , .25 , .5  , 1]
+                "values": [ 0 , .01 , .1 , .25 , .5  , 1]
               }
               random_starter_pokemon: {
                 "values": [True , False]
