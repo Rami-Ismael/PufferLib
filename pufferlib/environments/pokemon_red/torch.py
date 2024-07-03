@@ -250,7 +250,7 @@ class Policy(nn.Module):
                     self.oppoents_pokemon_levels(env_outputs["opponent_pokemon_levels"].float()/ 100.0).squeeze(1) ,
                     env_outputs["enemy_trainer_pokemon_hp"].float() / 705.0,
                     env_outputs["enemy_pokemon_hp"].float() / 705.0,
-                    self.each_pokemon_pp_fc(env_outputs["each_pokemon_pp"].float() / 20.0),
+                    self.each_pokemon_pp_fc(env_outputs["each_pokemon_pp"].float() / 40.0),
                     ]
             if self.embedd_the_x_and_y_coordinate:
                 elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))
