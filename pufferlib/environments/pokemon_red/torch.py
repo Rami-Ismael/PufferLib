@@ -192,6 +192,7 @@ class Policy(nn.Module):
         )
         self.each_pokemon_pp_fc = nn.Sequential(
             nn.Linear(24 , 32, dtype=torch.float32),
+            nn.LayerNorm(32),
             nn.ReLU()
         )
         self.fc_time = nn.Sequential(
