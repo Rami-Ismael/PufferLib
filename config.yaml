@@ -741,6 +741,7 @@ pokedebug:
   policy:
     mlp_width: 256
     mlp_depth: 1
+    add_time: True
   train:
     num_envs: 4
     num_workers: 4
@@ -815,6 +816,7 @@ puffertank_pokemon_red:
       mlp_depth: 3
       embedd_the_x_and_y_coordinate: True
       dense_act_func: "LeakyReLU"
+      add_time: True
     env:
       display_info_interval_divisor: 1024 
       max_episode_steps: 16384  
@@ -905,10 +907,16 @@ puffertank_pokemon_red:
               mlp_width: {
                 "values": [ 256 , 512 , 1024]
               }
+              add_time: {
+                "values": [True , False]
+              }
           env:
             parameters:
               reward_for_explore_unique_coor_coef : {
                 "values": [ 0 , .25 , .5  , 1]
+              }
+              random_starter_pokemon: {
+                "values": [True , False]
               }
 links_awaken:
   package: links_awaken

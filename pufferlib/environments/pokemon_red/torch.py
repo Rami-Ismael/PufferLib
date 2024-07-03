@@ -26,12 +26,15 @@ class ResnetBlock(torch.nn.Module):
         out = self.model(x)
         out += x
         return out
-def create_screen_network(embedd_the_x_and_y_coordinate = False , hidden_size=512):
+def create_screen_network(embedd_the_x_and_y_coordinate = False , add_time:bool = False , hidden_size=512):
     outputs_of_the_screen_nework = 512
     if embedd_the_x_and_y_coordinate:
         outputs_of_the_screen_nework  -= 94 # 96 which is 48 *2 = 96 - 2 because we are placing a two elemnts in the process in the process 
+    if add_time:
+        outputs_of_the_screen_nework  = outputs_of_the_screen_nework - 4
     outputs_of_the_screen_nework -= 114 # idk
     outputs_of_the_screen_nework -=7 # idk
+    outputs_of_the_screen_nework -= 32 # this is because each pokemon pp
     return nn.Sequential(
             ResnetBlock( in_planes = 3 , img_size = (72, 80) ),
             nn.ReLU(),
@@ -89,6 +92,7 @@ class Policy(nn.Module):
             mlp_depth = 3 , 
             embedd_the_x_and_y_coordinate = True,
             dense_act_func: str = "ReLU",
+            add_time:bool = False , 
             **kwargs):
         '''The CleanRL default NatureCNN policy used for Atari.
         It's just a stack of three convolutions followed by a linear layer
@@ -100,12 +104,13 @@ class Policy(nn.Module):
         self.downsample = downsample
         self.emulated = env.emulated
         self.embedd_the_x_and_y_coordinate = embedd_the_x_and_y_coordinate
+        self.add_time = add_time
         for key, value in kwargs.items():
             print(f"{key}: {value}")
         print(f"The emulated environment is {self.emulated}")
         self.dtype = pufferlib.pytorch.nativize_dtype(self.emulated)
         print(f"The dtype is {self.dtype}")
-        self.screen_network = create_screen_network( embedd_the_x_and_y_coordinate = self.embedd_the_x_and_y_coordinate, hidden_size=hidden_size)
+        self.screen_network = create_screen_network( embedd_the_x_and_y_coordinate = self.embedd_the_x_and_y_coordinate, add_time = self.add_time , hidden_size=hidden_size)
         self.visited_and_global_mask = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 1 ,  out_channels = 16, kernel_size = 8, stride = 4)),
             nn.ReLU(),
@@ -185,6 +190,15 @@ class Policy(nn.Module):
             nn.LayerNorm(48),
             nn.ReLU()
         )
+        self.each_pokemon_pp_fc = nn.Sequential(
+            nn.Linear(24 , 32, dtype=torch.float32),
+            nn.ReLU()
+        )
+        self.fc_time = nn.Sequential(
+            nn.Linear(1 , 4, dtype=torch.float32),
+            nn.LayerNorm(4),
+            nn.ReLU()
+        )
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)
         actions, value = self.decode_actions(hidden, lookup)
@@ -235,6 +249,7 @@ class Policy(nn.Module):
                     self.oppoents_pokemon_levels(env_outputs["opponent_pokemon_levels"].float()/ 100.0).squeeze(1) ,
                     env_outputs["enemy_trainer_pokemon_hp"].float() / 705.0,
                     env_outputs["enemy_pokemon_hp"].float() / 705.0,
+                    self.each_pokemon_pp_fc(env_outputs["each_pokemon_pp"].float() / 20.0),
                     ]
             if self.embedd_the_x_and_y_coordinate:
                 elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))
@@ -242,6 +257,8 @@ class Policy(nn.Module):
             else:
                 elements_to_concatenate.append(env_outputs["x"].float() // 444)
                 elements_to_concatenate.append( env_outputs["y"].float() // 436)
+            if self.add_time:
+                elements_to_concatenate.append(self.fc_time(env_outputs["time"]))
             return self.encode_linear(torch.cat(elements_to_concatenate, dim = -1)) , None
         except Exception as e:
             print(e)
