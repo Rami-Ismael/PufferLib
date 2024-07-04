@@ -827,7 +827,7 @@ puffertank_pokemon_red:
       reward_for_explore_unique_coor_coef: 1
       random_starter_pokemon: True
     train:
-      compile: True
+      compile: False
       compile_mode: "reduce-overhead"
       seed: 1
       torch_deterministic: True
@@ -892,17 +892,11 @@ puffertank_pokemon_red:
               gae_lambda: {
                 "values": [.7 , .8 , .9 , .95]
               }
-              weight_decay: {
-                "values": [0.00001 , 0.0001, 0.001 , .1]
-              }
               ent_coef: {
                 "values": [0 , .1 , 0.01]
               }
               target_kl: {
                 "values": [ .2 , .3  , .4]
-              }
-              optimizer: {
-                "values": ["Adam" , "AdamWScheduleFree"]
               }
           policy:
             parameters:
