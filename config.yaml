@@ -749,6 +749,7 @@ pokedebug:
     batch_size: 256
     minibatch_size: 256
     compile: False
+    optimizer: AdamWScheduleFree
     continual_learning:
       shrink_and_perturb: True
       shrink : .8
@@ -823,7 +824,7 @@ puffertank_pokemon_red:
       EpisodeStats: False
       max_reward_clip: 1
       reward_for_increase_pokemon_level_coef: 1
-      reward_for_explore_unique_coor_coef: .01
+      reward_for_explore_unique_coor_coef: 1
       random_starter_pokemon: True
     train:
       compile: False
@@ -860,6 +861,7 @@ puffertank_pokemon_red:
 
       learning_rate: 0.00025
       weight_decay: 0.00001
+      optimizer: AdamWScheduleFree
 
 
 
@@ -899,6 +901,9 @@ puffertank_pokemon_red:
               target_kl: {
                 "values": [ .2 , .3  , .4]
               }
+              optimizer: {
+                "values": ["Adam" , "AdamWScheduleFree"]
+              }
           policy:
             parameters:
               mlp_depth: {
@@ -906,9 +911,6 @@ puffertank_pokemon_red:
               }
               mlp_width: {
                 "values": [ 256 , 512 , 1024]
-              }
-              add_time: {
-                "values": [True , False]
               }
               dense_act_func: {
                 "values": ["LeakyReLU" , "ReLU"]

@@ -21,6 +21,7 @@ import pufferlib.utils
 import pufferlib.pytorch
 
 from copy import deepcopy
+import schedulefree
 
 torch.set_float32_matmul_precision('high')
 
@@ -53,11 +54,13 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
 
     if config.compile:
         policy = torch.compile(policy, mode=config.compile_mode)
-
-    optimizer = torch.optim.Adam(policy.parameters(),
-        lr=config.learning_rate, eps=1e-5 , 
-        weight_decay = config.weight_decay)
-
+    
+    if config.optimizer == "AdamWScheduleFree":
+        optimizer = schedulefree.AdamWScheduleFree(policy.parameters(), lr = config.learning_rate)
+    elif config.optimizer == "Adam":
+        optimizer = torch.optim.Adam(policy.parameters(),
+            lr=config.learning_rate, eps=1e-5 , 
+            weight_decay = config.weight_decay)
     return pufferlib.namespace(
         config=config,
         vecenv=vecenv,
