@@ -115,6 +115,7 @@ def make_policy(env, env_module, args):
 def init_wandb(args, name, id=None, resume=True):
     #os.environ["WANDB_SILENT"] = "true"
     import wandb
+    wandb.require("core")
     wandb.init(
         id=id or wandb.util.generate_id(),
         project=args.wandb_project,
@@ -135,6 +136,7 @@ def init_wandb(args, name, id=None, resume=True):
 
 def sweep(args, wandb_name, env_module, make_env):
     import wandb
+    wandb.require("core")
     sweep_id = wandb.sweep(
         sweep=dict(args.sweep),
         project="pufferlib",
