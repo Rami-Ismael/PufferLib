@@ -822,8 +822,8 @@ puffertank_pokemon_red:
       display_info_interval_divisor: 1024 
       max_episode_steps: 32768  
       EpisodeStats: False
-      max_reward_clip: 1
-      reward_for_increase_pokemon_level_coef: 1
+      max_reward_clip: 4
+      reward_for_increase_pokemon_level_coef: 4
       reward_for_explore_unique_coor_coef: 1
       random_starter_pokemon: True
     train:
