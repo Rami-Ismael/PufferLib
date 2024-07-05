@@ -911,9 +911,6 @@ puffertank_pokemon_red:
               }
           env:
             parameters:
-              reward_for_explore_unique_coor_coef : {
-                "values": [ 0 , .01 , .1 , .25 , .5  , 1]
-              }
               random_starter_pokemon: {
                 "values": [True , False]
               }
