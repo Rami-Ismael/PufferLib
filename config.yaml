@@ -823,7 +823,7 @@ puffertank_pokemon_red:
       max_episode_steps: 32768  
       EpisodeStats: False
       max_reward_clip: 4
-      reward_for_increase_pokemon_level_coef: 4
+      reward_for_increase_pokemon_level_coef: 2
       reward_for_explore_unique_coor_coef: 1
       random_starter_pokemon: True
     train:
@@ -893,7 +893,7 @@ puffertank_pokemon_red:
                 "values": [.7 , .8 , .9 , .95]
               }
               ent_coef: {
-                "values": [0 , .1 , 0.01]
+                "values": [.1 , 0.01]
               }
               target_kl: {
                 "values": [ .2 , .3  , .4 , .5]
