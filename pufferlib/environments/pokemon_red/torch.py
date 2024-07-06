@@ -6,6 +6,8 @@ import torch.nn as nn
 import pufferlib.models
 import pufferlib.models
 import pufferlib.pytorch
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
 
 class Recurrent(pufferlib.models.LSTMWrapper):
     def __init__(self, env, policy,
@@ -198,6 +200,12 @@ class Policy(nn.Module):
         self.fc_time = nn.Sequential(
             nn.Linear(1 , 4, dtype=torch.float32),
             nn.LayerNorm(4),
+            nn.ReLU()
+        )
+        self.pokemon_party_move_id_embedding = nn.Embedding(255, round(1.6*255**.56), dtype=torch.float32)
+        self.pokemon_party_move_id_fc = nn.Sequential(
+            nn.Linear(24 , 128),
+            nn.LayerNorm(128),
             nn.ReLU()
         )
     def forward(self, observations):
