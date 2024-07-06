@@ -22,6 +22,7 @@ def make(name, headless: bool = True, state_path=None ,
          EpisodeStats = False , max_episode_steps = 65536 , 
          max_reward_clip = 1.0, 
         reward_for_increase_pokemon_level_coef =  1.1 , 
+        reward_for_increasing_the_highest_pokemon_level_in_the_team_by_battle_coef = 1,
         reward_for_explore_unique_coor_coef = .4 , 
         random_starter_pokemon:bool = True
          ):
@@ -30,6 +31,7 @@ def make(name, headless: bool = True, state_path=None ,
     env = Environment(headless=headless, 
                       state_path=state_path , display_info_interval_divisor=display_info_interval_divisor , 
                       max_episode_steps=max_episode_steps , 
+                      
                       reward_for_explore_unique_coor_coef=reward_for_explore_unique_coor_coef ,
                         reward_for_increase_pokemon_level_coef=reward_for_increase_pokemon_level_coef , 
                         random_starter_pokemon = random_starter_pokemon )

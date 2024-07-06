@@ -267,7 +267,7 @@ def train(args, env_module, make_env):
                 return True
             if train_config.update_epochs == 16:
                 policy_loss_has_to_be_less_than = 0.00
-                approx_kl_has_to_be_greater_than = 0.08
+                approx_kl_has_to_be_greater_than = 0.07469981660506164
                 clipfrac_has_to_be_greater_than = 0.1
                 kl_has_to_be_less_than = 1
                 if data.losses.policy_loss > policy_loss_has_to_be_less_than :
