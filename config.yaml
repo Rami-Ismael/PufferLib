@@ -825,6 +825,7 @@ puffertank_pokemon_red:
       max_reward_clip: 4
       reward_for_increase_pokemon_level_coef: 2
       reward_for_explore_unique_coor_coef: 1
+      reward_for_increasing_the_highest_pokemon_level_in_the_team_by_battle_coef: 1
       random_starter_pokemon: True
     train:
       compile: False
@@ -861,7 +862,7 @@ puffertank_pokemon_red:
 
       learning_rate: 0.00025
       weight_decay: 0.00001
-      optimizer: AdamWScheduleFree
+      optimizer: Adam
 
 
 
@@ -897,6 +898,9 @@ puffertank_pokemon_red:
               }
               target_kl: {
                 "values": [ .2 , .3  , .4 , .5]
+              }
+              weight_decay: {
+                "values": [0.00001 , 0.0001, 0.001 , .1]
               }
           policy:
             parameters:
