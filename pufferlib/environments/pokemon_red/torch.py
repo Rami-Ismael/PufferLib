@@ -45,13 +45,13 @@ def create_screen_network(embedd_the_x_and_y_coordinate = False , add_time:bool 
             nn.LayerNorm( outputs_of_the_screen_nework ),
             nn.ReLU(),
         )
-def crete_mlp(dense_act_func: str = "ReLU", mlp_width:int = 512, mlp_depth:int = 3, hidden_size:int = 512):
+def crete_mlp(dense_act_func: str = "ReLU", mlp_width:int = 512, mlp_depth:int = 3, hidden_size:int = 512, concat_input_dim:int = 1024):
         encode_linear = nn.Sequential()
         for i in range( 0, mlp_depth+2 ):
             if i == 0:
                 encode_linear.add_module(
                     f"layer_{i}",
-                    pufferlib.pytorch.layer_init(nn.Linear( 1024 , mlp_width)),
+                    pufferlib.pytorch.layer_init(nn.Linear( concat_input_dim , mlp_width)),
                 )
             elif i == mlp_depth+1:
                 encode_linear.add_module(
@@ -137,7 +137,7 @@ class Policy(nn.Module):
                 nn.ReLU(),
             )
         '''
-        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size)
+        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1024 + 8 )
             
         
         
@@ -204,8 +204,13 @@ class Policy(nn.Module):
         )
         self.pokemon_party_move_id_embedding = nn.Embedding(255, round(1.6*255**.56), dtype=torch.float32)
         self.pokemon_party_move_id_fc = nn.Sequential(
-            nn.Linear(24 , 128),
-            nn.LayerNorm(128),
+            nn.Linear(24 , 36),
+            nn.LayerNorm(36),
+            nn.ReLU()
+        )
+        self.enemy_monster_pokemon_actaully_catch_rate_fc = nn.Sequential(
+            nn.Linear(1 , 8),
+            nn.LayerNorm(8),
             nn.ReLU()
         )
     def forward(self, observations):
@@ -259,6 +264,7 @@ class Policy(nn.Module):
                     env_outputs["enemy_trainer_pokemon_hp"].float() / 705.0,
                     env_outputs["enemy_pokemon_hp"].float() / 705.0,
                     self.each_pokemon_pp_fc(env_outputs["each_pokemon_pp"].float() / 40.0),
+                    self.enemy_monster_pokemon_actaully_catch_rate_fc(env_outputs["enemy_monster_actually_catch_rate"]).squeeze(1) ,
                     ]
             if self.embedd_the_x_and_y_coordinate:
                 elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))
