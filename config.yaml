@@ -849,7 +849,7 @@ puffertank_pokemon_red:
       target_kl: .3
       num_envs: 768
       num_workers: 24
-      batch_size: 131072 
+      batch_size: 65536 
       zero_copy: True
       env_batch_size: 256
       env_pool: True
