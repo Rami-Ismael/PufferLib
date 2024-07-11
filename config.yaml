@@ -749,7 +749,7 @@ pokedebug:
     batch_size: 256
     minibatch_size: 256
     compile: False
-    optimizer: AdamWScheduleFree
+    optimizer: Trac 
     continual_learning:
       shrink_and_perturb: True
       shrink : .8
@@ -780,6 +780,7 @@ local_cpu_pokemon:
 
     ent_coef: 0.001
     clip_coef: 0.2
+    optimizer: Adam
 
 
 
@@ -862,7 +863,7 @@ puffertank_pokemon_red:
 
       learning_rate: 0.00025
       weight_decay: 0.00001
-      optimizer: Adam 
+      optimizer:  Trac
 
 
 
