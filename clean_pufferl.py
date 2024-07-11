@@ -62,7 +62,7 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
             lr=config.learning_rate, eps=1e-5 , 
             weight_decay = config.weight_decay)
     elif config.optimizer == "Trac" :
-        from trac_optimizer import start_trac
+        from trac import start_trac
         optimizer = torch.optim.Adam
         optimizer = start_trac( log_file = "logs/trac.txt" , Base = optimizer )(policy.parameters() , lr = config.learning_rate)
     return pufferlib.namespace(
