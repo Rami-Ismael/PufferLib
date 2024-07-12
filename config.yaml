@@ -889,7 +889,7 @@ puffertank_pokemon_red:
           train:
             parameters:
               learning_rate: {
-                  'values' :[2.5e-4 , 1.0e-4 , 5.0e-5 , 5.0e-6]
+                  'values' :[0.0025 , 2.5e-4 , 1.0e-4 , 5.0e-5 , 5.0e-6]
               }
               gae_lambda: {
                 "values": [.7 , .8 , .9 , .95]
