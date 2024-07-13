@@ -143,9 +143,9 @@ def sweep(args, wandb_name, env_module, make_env):
             project="pufferlib",
         )
     except Exception as e:
-        print(f"The sweep id is {sweep_id}")
         print(f"The sweep is {args.sweep}")
-
+    print(f"The sweep id is {sweep_id}")
+    print(f"The sweep args is {args}")
     def main():
         try:
             args.exp_name = init_wandb(args, wandb_name, id=args.exp_id)
