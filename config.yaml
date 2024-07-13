@@ -920,11 +920,6 @@ puffertank_pokemon_red:
               random_starter_pokemon: {
                 "values": [True , False]
               }
-              reward_for_entering_a_trainer_battle_coef: {
-                'distribution': 'log_uniform_values',
-                'max': 1,
-                'min': .1,
-              }
               reward_for_explore_unique_coor_coef: {
                 "distribution": "log_uniform_values",
                 "max":  1.0,
