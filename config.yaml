@@ -904,6 +904,9 @@ puffertank_pokemon_red:
               weight_decay: {
                 "values": [0.00001 , 0.0001, 0.001 , .1]
               }
+              bptt_horizon: {
+                "values": [ 16 , 32 , 64]
+              }
           policy:
             parameters:
               mlp_depth: {
