@@ -137,12 +137,14 @@ def init_wandb(args, name, id=None, resume=True):
 def sweep(args, wandb_name, env_module, make_env):
     import wandb
     wandb.require("core")
-    sweep_id = wandb.sweep(
-        sweep=dict(args.sweep),
-        project="pufferlib",
-    )
-    print(f"The sweep id is {sweep_id}")
-    print(f"The sweep is {args.sweep}")
+    try:
+        sweep_id = wandb.sweep(
+            sweep=dict(args.sweep),
+            project="pufferlib",
+        )
+    except Exception as e:
+        print(f"The sweep id is {sweep_id}")
+        print(f"The sweep is {args.sweep}")
 
     def main():
         try:
