@@ -152,8 +152,13 @@ def sweep(args, wandb_name, env_module, make_env):
                 print(f"The new configuration of policy is {args.policy.__dict__}")
                 args.policy.__dict__.update(dict(wandb.config.policy))
             if args.env.__dict__:
-                args.env.__dict__.update(dict(wandb.config.env))
-                print(f"The new configuration of env is {args.env.__dict__}")
+                try:
+                    args.env.__dict__.update(dict(wandb.config.env))
+                    print(f"The new configuration of env is {args.env.__dict__}")
+                except Exception as e:
+                    print(f"The error is {e}")
+                    print(f"What is the config of the env {wandb.config.env}")
+                    print(f"What is the args.env__dict__ {args.env.__dict__}")
             args.track = True
             train(args, env_module, make_env)
         except Exception as e:
