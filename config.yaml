@@ -921,7 +921,7 @@ puffertank_pokemon_red:
                 "values": [True , False]
               }
               reward_for_explore_unique_coor_coef: {
-                "distribution": "log_uniform_values",
+                "distribution": "uniform",
                 "min":  0.0,
                 "max": 1.0
               }
