@@ -25,6 +25,7 @@ def make(name, headless: bool = True, state_path=None ,
         reward_for_increasing_the_highest_pokemon_level_in_the_team_by_battle_coef = 1,
         reward_for_explore_unique_coor_coef = .4 , 
         reward_for_entering_a_trainer_battle_coef = 1.0 ,
+        propability_of_full_game_reset_at_reset = 0.1 ,
         random_starter_pokemon:bool = True 
          ):
     #print(f"The current diosplayin of interval divisor is {display_info_interval_divisor}")

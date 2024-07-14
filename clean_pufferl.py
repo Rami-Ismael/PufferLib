@@ -169,8 +169,15 @@ def evaluate(data):
                     T()
 
         for k, v in infos.items():
-            if '_map' in k and data.wandb is not None:
-                data.stats[f'Media/{k}'] = data.wandb.Image(v[0])
+            if '_map' in k and data.wandb is not None and "last_black_out_map_id" != k:
+                try:
+                    data.stats[f'Media/{k}'] = data.wandb.Image(v[0])
+                except Exception as e:
+                    print(e)
+                    print(f"Failed to log {k} to wandb")
+                    print(f"What is the type of the data is {type(v)}")
+                    print(f"What is {k} data is {v}")
+                    T()
                 continue
 
             try: # TODO: Better checks on log data types
