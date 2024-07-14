@@ -881,7 +881,7 @@ puffertank_pokemon_red:
         name: sweep
         metric:
           goal: maximize
-          name: environment/total_events_that_occurs_in_game
+          name: environment/number_of_uniqiue_coordinate_it_explored
         early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
           type: hyperband
           min_iter: 4
