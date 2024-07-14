@@ -820,7 +820,7 @@ puffertank_pokemon_red:
       dense_act_func: "LeakyReLU"
       add_time: True
     env:
-      display_info_interval_divisor: 1024 
+      display_info_interval_divisor: 512 
       max_episode_steps: 8196
       EpisodeStats: False
       max_reward_clip: 1
@@ -925,7 +925,7 @@ puffertank_pokemon_red:
               }
               reward_for_explore_unique_coor_coef: {
                 "distribution": "uniform",
-                "min":  0.05,
+                "min":  0.17338864809426202,
                 "max": 1.0
               }
               reward_for_entering_a_trainer_battle_coef: {
