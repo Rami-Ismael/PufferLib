@@ -28,21 +28,13 @@ class ResnetBlock(torch.nn.Module):
         out = self.model(x)
         out += x
         return out
-def create_screen_network(embedd_the_x_and_y_coordinate = False , add_time:bool = False , hidden_size=512):
-    outputs_of_the_screen_nework = 512
-    if embedd_the_x_and_y_coordinate:
-        outputs_of_the_screen_nework  -= 94 # 96 which is 48 *2 = 96 - 2 because we are placing a two elemnts in the process in the process 
-    if add_time:
-        outputs_of_the_screen_nework  = outputs_of_the_screen_nework - 4
-    outputs_of_the_screen_nework -= 114 # idk
-    outputs_of_the_screen_nework -=7 # idk
-    outputs_of_the_screen_nework -= 32 # this is because each pokemon pp
+def create_screen_network( hidden_size=512):
     return nn.Sequential(
             ResnetBlock( in_planes = 3 , img_size = (72, 80) ),
             nn.ReLU(),
             nn.Flatten(),
-            pufferlib.pytorch.layer_init(nn.Linear(17280, outputs_of_the_screen_nework )),
-            nn.LayerNorm( outputs_of_the_screen_nework ),
+            pufferlib.pytorch.layer_init(nn.Linear(17280, hidden_size )),
+            nn.LayerNorm( hidden_size ),
             nn.ReLU(),
         )
 def crete_mlp(dense_act_func: str = "ReLU", mlp_width:int = 512, mlp_depth:int = 3, hidden_size:int = 512, concat_input_dim:int = 1024):
@@ -94,7 +86,7 @@ class Policy(nn.Module):
             mlp_depth = 3 , 
             embedd_the_x_and_y_coordinate = True,
             dense_act_func: str = "ReLU",
-            add_time:bool = False , 
+            add_time:bool = True , 
             **kwargs):
         '''The CleanRL default NatureCNN policy used for Atari.
         It's just a stack of three convolutions followed by a linear layer
@@ -112,7 +104,7 @@ class Policy(nn.Module):
         print(f"The emulated environment is {self.emulated}")
         self.dtype = pufferlib.pytorch.nativize_dtype(self.emulated)
         print(f"The dtype is {self.dtype}")
-        self.screen_network = create_screen_network( embedd_the_x_and_y_coordinate = self.embedd_the_x_and_y_coordinate, add_time = self.add_time , hidden_size=hidden_size)
+        self.screen_network = create_screen_network( hidden_size=hidden_size)
         self.visited_and_global_mask = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Conv2d( in_channels = 1 ,  out_channels = 16, kernel_size = 8, stride = 4)),
             nn.ReLU(),
@@ -137,7 +129,7 @@ class Policy(nn.Module):
                 nn.ReLU(),
             )
         '''
-        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1024 + 8 + 16 + 26 + 31  )
+        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1356  )
             
         
         
@@ -217,6 +209,11 @@ class Policy(nn.Module):
         # Batlte Stuff
         self.player_current_monster_or_pokemon_stats_modifiers = nn.Sequential(
             nn.Linear(5 , 16),
+            nn.LayerNorm(16),
+            nn.ReLU()
+        )
+        self.enemy_current_pokemon_stat_modifers = nn.Sequential(
+            nn.Linear(6 , 16),
             nn.LayerNorm(16),
             nn.ReLU()
         )
