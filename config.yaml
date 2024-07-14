@@ -884,7 +884,8 @@ puffertank_pokemon_red:
           name: environment/number_of_uniqiue_coordinate_it_explored
         early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
           type: hyperband
-          min_iter: 4
+          min_iter: 8
+          strict: True
         # Nested parameters name required by WandB API
         parameters:
           train:
@@ -894,9 +895,6 @@ puffertank_pokemon_red:
               }
               gae_lambda: {
                 "values": [.7 , .8 , .9 , .95]
-              }
-              ent_coef: {
-                "values": [.1 , 0.01]
               }
               target_kl: {
                 "values": [ .2 , .3  , .4 , .5]
