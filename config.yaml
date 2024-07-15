@@ -817,7 +817,7 @@ puffertank_pokemon_red:
       mlp_width: 1024
       mlp_depth: 3
       embedd_the_x_and_y_coordinate: True
-      dense_act_func: "LeakyReLU"
+      dense_act_func: "ReLU"
       add_time: True
     env:
       display_info_interval_divisor: 512 
@@ -908,9 +908,6 @@ puffertank_pokemon_red:
               }
               mlp_width: {
                 "values": [ 256 , 512 , 1024]
-              }
-              dense_act_func: {
-                "values": ["LeakyReLU" , "ReLU"]
               }
           env:
             parameters:
