@@ -38,7 +38,7 @@ def make(name, headless: bool = True, state_path=None ,
                       reward_for_explore_unique_coor_coef=reward_for_explore_unique_coor_coef ,
                         reward_for_increase_pokemon_level_coef=reward_for_increase_pokemon_level_coef , 
                     random_starter_pokemon = random_starter_pokemon  , 
-                        reward_for_entering_a_trainer_battle_coef = reward_for_entering_a_trainer_battle_coef
+                        reward_for_entering_a_trainer_battle_coef = reward_for_entering_a_trainer_battle_coef , 
                         negative_reward_for_wiping_out_coef = negative_reward_for_wiping_out_coef,
                         )
     env = RenderWrapper(env)
