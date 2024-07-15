@@ -267,6 +267,8 @@ class Policy(nn.Module):
                     self.oppoents_pokemon_levels(env_outputs["opponent_pokemon_levels"].float()/ 100.0).squeeze(1) ,
                     env_outputs["enemy_trainer_pokemon_hp"].float() / 705.0,
                     env_outputs["enemy_pokemon_hp"].float() / 705.0,
+                    elements_to_concatenate.append(env_outputs["x"].float() // 444) ,
+                    elements_to_concatenate.append( env_outputs["y"].float() // 436) , 
                     self.each_pokemon_pp_fc(env_outputs["each_pokemon_pp"].float() / 40.0),
                     self.enemy_monster_pokemon_actaully_catch_rate_fc(env_outputs["enemy_monster_actually_catch_rate"]).squeeze(1) ,
                     self.player_current_monster_or_pokemon_stats_modifiers( torch.stack( [ env_outputs["player_current_monster_stats_modifier_attack"] , env_outputs["player_current_monster_stats_modifier_defense"] , env_outputs["player_current_monster_stats_modifier_speed"] , env_outputs["player_current_monster_stats_modifier_special"] , env_outputs["player_current_monster_stats_modifier_accuracy"] ] , dim = -1 ) ).squeeze(1) , 
@@ -275,9 +277,6 @@ class Policy(nn.Module):
             if self.embedd_the_x_and_y_coordinate:
                 elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))
                 elements_to_concatenate.append( self.coordinate_fc_y(env_outputs["y"].int()).squeeze(1))
-            else:
-                elements_to_concatenate.append(env_outputs["x"].float() // 444)
-                elements_to_concatenate.append( env_outputs["y"].float() // 436)
             if self.add_time:
                 elements_to_concatenate.append(self.fc_time(env_outputs["time"]))
             return self.encode_linear(torch.cat(elements_to_concatenate, dim = -1)) , None
