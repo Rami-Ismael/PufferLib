@@ -863,7 +863,7 @@ puffertank_pokemon_red:
       minibatch_size: 16384  # if not set it will be 2048
 
 
-      learning_rate: 0.00025
+      learning_rate: 0.0025 
       weight_decay: 0.1
       optimizer:  AdamWScheduleFree
 
@@ -892,9 +892,6 @@ puffertank_pokemon_red:
         parameters:
           train:
             parameters:
-              learning_rate: {
-                  'values' :[0.0025 , 2.5e-4 , 1.0e-4 , 5.0e-5 , 5.0e-6]
-              }
               gae_lambda: {
                 "values": [.7 , .8 , .9 , .95]
               }
