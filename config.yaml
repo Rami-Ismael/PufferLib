@@ -885,9 +885,10 @@ puffertank_pokemon_red:
           name: environment/number_of_uniqiue_coordinate_it_explored
         early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
           type: hyperband
-          min_iter: 8
+          min_iter: 4
           strict: True
-          target: 4
+          eta: 3
+
         # Nested parameters name required by WandB API
         parameters:
           train:
