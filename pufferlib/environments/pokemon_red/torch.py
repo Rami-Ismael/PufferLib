@@ -129,7 +129,7 @@ class Policy(nn.Module):
                 nn.ReLU(),
             )
         '''
-        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1356  )
+        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1358  )
             
         
         
