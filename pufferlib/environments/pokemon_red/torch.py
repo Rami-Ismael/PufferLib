@@ -129,7 +129,7 @@ class Policy(nn.Module):
                 nn.ReLU(),
             )
         '''
-        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1358  )
+        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1349  )
             
         
         
@@ -146,7 +146,6 @@ class Policy(nn.Module):
         
                 # pokemon has 0xF7 map ids
         # Lets start with 4 dims for now. Could try 8
-        self.map_embeddings = torch.nn.Embedding(0xF7, 35, dtype=torch.float32)
         self.map_id_embedding = torch.nn.Embedding(150 ,26, dtype=torch.float32)
         self.map_music_sound_bank_embeddings = torch.nn.Embedding(3, 6, dtype=torch.float32)
         self.pokemon_seen_fc = nn.Sequential(
@@ -223,11 +222,6 @@ class Policy(nn.Module):
         return actions, value , hidden
     def encode_observations(self, observations):
         env_outputs = pufferlib.pytorch.nativize_tensor(observations, self.dtype)
-        try:
-            map_id = self.map_embeddings(env_outputs["map_id"].long())
-        except Exception as e:
-            print(e)
-            pdb.set_trace()
         #pdb.set_trace()
         if self.channels_last:
             #observations = env_outputs["screen"].permute(0, 3, 1, 2)
@@ -242,7 +236,7 @@ class Policy(nn.Module):
             elements_to_concatenate = [
                     self.screen_network(observations.float() / 255.0).squeeze(1) ,
                     self.visited_and_global_mask( torch.cat( (env_outputs["visited_mask"].permute(0, 3, 1, 2).float() , env_outputs["global_map"].permute(0, 3, 1, 2).float() ) , dim = -1) ).squeeze(1),
-                    map_id.squeeze(1),
+                    self.map_id_embedding(env_outputs["map_id"].long()).squeeze(1), 
                     self.map_music_sound_bank_embeddings(env_outputs["map_music_sound_bank"].long()).squeeze(1) , 
                     env_outputs["party_size"].float() / 6.0,
                     env_outputs["each_pokemon_level"].float() / 100.0,
@@ -273,6 +267,7 @@ class Policy(nn.Module):
                     self.enemy_monster_pokemon_actaully_catch_rate_fc(env_outputs["enemy_monster_actually_catch_rate"]).squeeze(1) ,
                     self.player_current_monster_or_pokemon_stats_modifiers( torch.stack( [ env_outputs["player_current_monster_stats_modifier_attack"] , env_outputs["player_current_monster_stats_modifier_defense"] , env_outputs["player_current_monster_stats_modifier_speed"] , env_outputs["player_current_monster_stats_modifier_special"] , env_outputs["player_current_monster_stats_modifier_accuracy"] ] , dim = -1 ) ).squeeze(1) , 
                     self.map_id_embedding(env_outputs["last_black_out_map_id"].long()).squeeze(1) ,
+                    
                     ]
             if self.embedd_the_x_and_y_coordinate:
                 elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))
