@@ -172,7 +172,7 @@ def sweep(args, wandb_name, env_module, make_env):
     wandb.agent(sweep_id, main, count=100)
     '''
     wandb.agent(
-        sweep_id = "cr4aw4y7" , 
+        sweep_id = "usmciusr" , 
         project = "pufferlib" , 
         function = main,
         count = 100

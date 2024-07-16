@@ -129,7 +129,7 @@ class Policy(nn.Module):
                 nn.ReLU(),
             )
         '''
-        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1349 + 16  )
+        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1349 + 16 + 4  )
             
         
         
@@ -205,6 +205,11 @@ class Policy(nn.Module):
             nn.LayerNorm(36),
             nn.ReLU()
         )
+        self.pokemon_move_power_fc = nn.Sequential(
+            nn.Linear(1 , 4),
+            nn.LayerNorm(4),
+            nn.ReLU()
+        )
         self.enemy_monster_pokemon_actaully_catch_rate_fc = nn.Sequential(
             nn.Linear(1 , 8),
             nn.LayerNorm(8),
@@ -273,6 +278,7 @@ class Policy(nn.Module):
                     self.player_current_monster_or_pokemon_stats_modifiers( torch.stack( [ env_outputs["player_current_monster_stats_modifier_attack"] , env_outputs["player_current_monster_stats_modifier_defense"] , env_outputs["player_current_monster_stats_modifier_speed"] , env_outputs["player_current_monster_stats_modifier_special"] , env_outputs["player_current_monster_stats_modifier_accuracy"] ] , dim = -1 ) ).squeeze(1) , 
                     self.map_id_embedding(env_outputs["last_black_out_map_id"].long()).squeeze(1) ,
                     self.pokemon_move_effect_id_embedding_fc(env_outputs["enemy_current_move_effect"].long()).squeeze(1) ,
+                    self.pokemon_move_power_fc(env_outputs["enemy_pokemon_move_power"].float()).squeeze(1) ,
                     ]
             if self.embedd_the_x_and_y_coordinate:
                 elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))
