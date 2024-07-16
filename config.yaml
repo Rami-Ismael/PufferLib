@@ -846,7 +846,7 @@ puffertank_pokemon_red:
       clip_coef: 0.2
       ent_coef: 0.1
       clip_vloss: True
-      vf_clip_coef: 1.0
+      vf_clip_coef: .75
       vf_coef: 0.5
       max_grad_norm: 0.5
       target_kl: .3
@@ -901,6 +901,14 @@ puffertank_pokemon_red:
               }
               bptt_horizon: {
                 "values": [ 16 , 32 , 64]
+              }
+              vf_clip_coef: {
+                "distribution": "uniform" , 
+                "min": 0.2 , 
+                "max": .9
+              }
+              eps: {
+                "values": [1.0e-8 , 1.0e-5]
               }
           policy:
             parameters:

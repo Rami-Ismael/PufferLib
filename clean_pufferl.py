@@ -56,7 +56,8 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
         policy = torch.compile(policy, mode=config.compile_mode)
     
     if config.optimizer == "AdamWScheduleFree":
-        optimizer = schedulefree.AdamWScheduleFree(policy.parameters(), lr = config.learning_rate , weight_decay = config.weight_decay , eps=1e-5)
+        optimizer = schedulefree.AdamWScheduleFree(policy.parameters(), lr = config.learning_rate , weight_decay = config.weight_decay , 
+                                                   eps = config.eps)
         optimizer.train()
     elif config.optimizer == "Adam":
         optimizer = torch.optim.Adam(policy.parameters(),
