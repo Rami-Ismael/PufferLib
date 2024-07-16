@@ -755,6 +755,7 @@ pokedebug:
       shrink : .8
       perturb: .1
     device: cpu
+    eps: 1.0e-8
     env:
       random_starter_pokemon: True
 local_cpu_pokemon:
