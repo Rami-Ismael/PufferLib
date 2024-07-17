@@ -824,7 +824,7 @@ puffertank_pokemon_red:
       add_time: True
     env:
       display_info_interval_divisor: 512 
-      max_episode_steps: 2048 #16284 #8192 #4096
+      max_episode_steps: 4096 #2048 #16284 #8192 #4096
       EpisodeStats: False
       max_reward_clip: 1
       reward_for_increase_pokemon_level_coef: .25
