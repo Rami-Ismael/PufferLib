@@ -865,7 +865,7 @@ puffertank_pokemon_red:
       minibatch_size: 16384  # if not set it will be 2048
 
 
-      learning_rate: 0.0025 
+      learning_rate: 2.5e-4 
       weight_decay: 0.1
       optimizer:  Adam
 
