@@ -750,6 +750,8 @@ pokedebug:
     minibatch_size: 256
     compile: False
     optimizer:  AdamWScheduleFree
+    beta1: 0.95
+    beta2: 0.90
     continual_learning:
       shrink_and_perturb: False
       shrink : .8

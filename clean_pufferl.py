@@ -172,7 +172,7 @@ def evaluate(data):
                     T()
 
         for k, v in infos.items():
-            if '_map' in k and data.wandb is not None and "last_black_out_map_id" != k:
+            if '_map' in k and data.wandb is not None and "last_black_out_map_id" != k and "reward/reward_for_finding_new_maps" != k:
                 try:
                     data.stats[f'Media/{k}'] = data.wandb.Image(v[0])
                 except Exception as e:
