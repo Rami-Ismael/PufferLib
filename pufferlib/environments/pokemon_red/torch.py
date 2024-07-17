@@ -129,7 +129,7 @@ class Policy(nn.Module):
                 nn.ReLU(),
             )
         '''
-        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1349 + 16 + 4 + 8  )
+        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1349 + 16 + 4 + 8 + 6   )
             
         
         
@@ -146,7 +146,7 @@ class Policy(nn.Module):
         
                 # pokemon has 0xF7 map ids
         # Lets start with 4 dims for now. Could try 8
-        self.map_id_embedding = torch.nn.Embedding(150 ,26, dtype=torch.float32)
+        self.map_id_embedding = torch.nn.Embedding(247 ,32, dtype=torch.float32)
         self.map_music_sound_bank_embeddings = torch.nn.Embedding(3, 6, dtype=torch.float32)
         self.pokemon_seen_fc = nn.Sequential(
             pufferlib.pytorch.layer_init(nn.Linear(19, 16)),
