@@ -867,7 +867,7 @@ puffertank_pokemon_red:
 
       learning_rate: 0.0025 
       weight_decay: 0.1
-      optimizer:  AdamWScheduleFree
+      optimizer:  Adam
 
 
 
