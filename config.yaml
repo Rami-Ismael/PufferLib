@@ -822,7 +822,7 @@ puffertank_pokemon_red:
       add_time: True
     env:
       display_info_interval_divisor: 512 
-      max_episode_steps: 8192 #4096
+      max_episode_steps: 16284 #8192 #4096
       EpisodeStats: False
       max_reward_clip: 1
       reward_for_increase_pokemon_level_coef: .25
@@ -868,6 +868,8 @@ puffertank_pokemon_red:
       learning_rate: 0.0025
       weight_decay: 0.1
       optimizer:  AdamWScheduleFree
+      beta1: 0.9
+      beta2: 0.999
 
 
 
@@ -910,6 +912,17 @@ puffertank_pokemon_red:
               }
               eps: {
                 "values": [1.0e-8 , 1.0e-5]
+              }
+              weight_decay: {
+                "distribution": "uniform" , 
+                "min": 0.08121616522670176 , 
+                "max": 0.1
+              }
+              beta1: {
+                "values": [.9 , 0.95]
+              }
+              beta2: { 
+                "values": [0.9 , 0.999]
               }
           policy:
             parameters:
