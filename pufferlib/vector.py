@@ -392,6 +392,8 @@ class Multiprocessing:
             except Exception as e:
                 print(e)
                 print("Which condition failed?")
+                print(f'What is worker type ({type(worker)})?')
+                print(f"What is the data type of semaphores? {type(self.buf.semaphores)}")
                 print(f"Check workers per batch is equal to ones which is the first condition:  The self workers per batch is {self.workers_per_batch} == 1 is {self.workers_per_batch == 1}")
                 break 
 
