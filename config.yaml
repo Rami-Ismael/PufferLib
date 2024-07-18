@@ -935,6 +935,9 @@ puffertank_pokemon_red:
                 "min": 0.0005 , 
                 "max": 0.0025 , 
               }
+              update_epochs: { 
+                "values": [ 2 , 4, 8 , 16]
+              }
           policy:
             parameters:
               mlp_depth: {
