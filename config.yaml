@@ -758,9 +758,11 @@ pokedebug:
       perturb: .1
     device: cpu
     eps: 1.0e-8
-    env:
-      random_starter_pokemon: True
-      max_episode_steps: 512  #2048 #16284 #8192 #4096
+  env:
+    random_starter_pokemon: True
+    max_episode_steps: 8192  #2048 #16284 #8192 #4096
+    display_info_interval_divisor: 256 
+    max_reward_clip: 1
 local_cpu_pokemon:
   package: pokemon_red
   use_rnn: True
@@ -825,7 +827,7 @@ puffertank_pokemon_red:
       add_time: True
     env:
       display_info_interval_divisor: 512 
-      max_episode_steps: 16284  #2048 #16284 #8192 #4096
+      max_episode_steps: 8192  #2048 #16284 #8192 #4096
       EpisodeStats: False
       max_reward_clip: 1
       reward_for_increase_pokemon_level_coef: .25
