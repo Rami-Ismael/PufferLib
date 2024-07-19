@@ -938,6 +938,9 @@ puffertank_pokemon_red:
               update_epochs: { 
                 "values": [ 2 , 4, 8 , 16]
               }
+              clip_coef: {
+                "values": [.1 , .2 , .3  , .4]
+              }
           policy:
             parameters:
               mlp_depth: {
