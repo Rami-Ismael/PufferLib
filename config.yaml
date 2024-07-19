@@ -973,7 +973,7 @@ puffertank_pokemon_red:
                 "max": 1.0
               }
               max_episode_steps: {
-                "values": [8192 , 16384 , 32768]
+                "values": [ 4092 , 8192 , 16384 , 32768]
               }
               
 links_awaken:

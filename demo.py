@@ -150,15 +150,15 @@ def sweep(args, wandb_name, env_module, make_env):
         try:
             args.exp_name = init_wandb(args, wandb_name, id=args.exp_id)
             # TODO: Add update method to namespace
-            print(wandb.config.train)
+            pprint(wandb.config.train)
             args.train.__dict__.update(dict(wandb.config.train))
             if args.policy.__dict__:
-                print(f"The new configuration of policy is {args.policy.__dict__}")
+                pprint(f"The new configuration of policy is {args.policy.__dict__}")
                 args.policy.__dict__.update(dict(wandb.config.policy))
             if args.env.__dict__:
                 try:
                     args.env.__dict__.update(dict(wandb.config.env))
-                    print(f"The new configuration of env is {args.env.__dict__}")
+                    pprint(f"The new configuration of env is {args.env.__dict__}")
                 except Exception as e:
                     print(f"The error is {e}")
                     print(f"What is the config of the env {wandb.config.env}")
