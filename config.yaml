@@ -760,6 +760,7 @@ pokedebug:
     eps: 1.0e-8
     env:
       random_starter_pokemon: True
+      max_episode_steps: 512  #2048 #16284 #8192 #4096
 local_cpu_pokemon:
   package: pokemon_red
   use_rnn: True
