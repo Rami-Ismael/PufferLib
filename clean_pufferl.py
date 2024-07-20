@@ -55,6 +55,12 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
     if config.compile:
         policy = torch.compile(policy, mode=config.compile_mode)
     
+    if config.optimizer == "Stable_AdamWScheduleFree":
+        from adamw_schedulefree_stable_adam import AdamWScheduleFree
+        optimizer = AdamWScheduleFree(policy.parameters(), lr = config.learning_rate , 
+                                       weight_decay = config.weight_decay , 
+                                       betas = ( config.beta1 , config.beta2 ) ,
+                                       eps = config.eps)
     if config.optimizer == "AdamWScheduleFree":
         optimizer = schedulefree.AdamWScheduleFree(policy.parameters(), lr = config.learning_rate , 
                                                    weight_decay = config.weight_decay , 

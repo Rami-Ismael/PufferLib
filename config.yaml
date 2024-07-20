@@ -836,6 +836,7 @@ puffertank_pokemon_red:
       reward_for_entering_a_trainer_battle_coef: 1
       random_starter_pokemon: True
       negative_reward_for_wiping_out_coef: .5
+      negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: .5
     train:
       compile: False
       compile_mode: "reduce-overhead"
@@ -970,6 +971,11 @@ puffertank_pokemon_red:
               negative_reward_for_wiping_out_coef: {
                 "distribution": "uniform" ,
                 "min": 0.05,
+                "max": 1.0
+              }
+              negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: {
+                "distribution": "uniform" , 
+                "min": 0  , 
                 "max": 1.0
               }
               max_episode_steps: {
