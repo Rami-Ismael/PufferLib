@@ -120,6 +120,7 @@ def evaluate(data):
                 rich_print(f"What is the type of the observation is {type(o)}")
                 rich_print(f"What is the shape of the observation is {o.shape}")
                 rich_print(f"What is the data global step is {data.global_step}")
+                break
             try:
                 r = torch.as_tensor(r)
             except Exception as e:
@@ -129,6 +130,7 @@ def evaluate(data):
                 rich_print(f"What is the type of the reward is {type(r)}")
                 rich_print(f"What is the shape of the reward is {r.shape}")
                 rich_print(f"What is the data global step is {data.global_step}")
+                bre
             d = torch.as_tensor(d)
 
         with profile.eval_forward, torch.no_grad():
