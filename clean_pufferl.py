@@ -111,26 +111,8 @@ def evaluate(data):
             data.global_step += sum(mask)
 
             o = torch.as_tensor(o)
-            try:
-                o_device = o.to(config.device)
-            except Exception as e:
-                rich_print(e)
-                rich_print('Failed to move observation to device. Not Continuing...')
-                rich_print(f'The device config is {config.device}')
-                rich_print(f"What is the type of the observation is {type(o)}")
-                rich_print(f"What is the shape of the observation is {o.shape}")
-                rich_print(f"What is the data global step is {data.global_step}")
-                break
-            try:
-                r = torch.as_tensor(r)
-            except Exception as e:
-                rich_print(e)
-                rich_print('Failed to move reward to device. Not Continuing...')
-                rich_print(f'The device config is {config.device}')
-                rich_print(f"What is the type of the reward is {type(r)}")
-                rich_print(f"What is the shape of the reward is {r.shape}")
-                rich_print(f"What is the data global step is {data.global_step}")
-                bre
+            o_device = o.to(config.device)
+            r = torch.as_tensor(r)
             d = torch.as_tensor(d)
 
         with profile.eval_forward, torch.no_grad():
