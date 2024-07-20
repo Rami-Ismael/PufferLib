@@ -749,9 +749,9 @@ pokedebug:
     batch_size: 256
     minibatch_size: 256
     compile: False
-    optimizer:  AdamWScheduleFree
+    optimizer:  Stable_AdamWScheduleFree
     beta1: 0.90
-    beta2: 0.90
+    beta2: 0.995
     continual_learning:
       shrink_and_perturb: False
       shrink : .8
@@ -834,7 +834,7 @@ puffertank_pokemon_red:
       reward_for_explore_unique_coor_coef: .5
       reward_for_increasing_the_highest_pokemon_level_in_the_team_by_battle_coef: 1
       reward_for_entering_a_trainer_battle_coef: 1
-      random_starter_pokemon: True
+      random_starter_pokemon: False
       negative_reward_for_wiping_out_coef: .5
       negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: .5
     train:
@@ -955,9 +955,6 @@ puffertank_pokemon_red:
               }
           env:
             parameters:
-              random_starter_pokemon: {
-                "values": [True , False]
-              }
               reward_for_explore_unique_coor_coef: {
                 "distribution": "uniform",
                 "min":  0.17338864809426202,
