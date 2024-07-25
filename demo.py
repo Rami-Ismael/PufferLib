@@ -230,9 +230,10 @@ def train(args, env_module, make_env):
         def early_stopping_base_on_ppo_loss_func(data):
             if train_config.update_epochs == 2:
                 policy_loss_has_to_be_less_than = .0014
-                value_loss_has_to_be_greater_than = 0.02
+                value_loss_has_to_be_greater_than = 0.018
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
+                explain_variance_has_to_be_greater_than = 0.0
                 if data.losses.policy_loss > policy_loss_has_to_be_less_than :
                     print(f"The policy loss is {data.losses.policy_loss}")
                     return False
@@ -241,6 +242,9 @@ def train(args, env_module, make_env):
                     return False
                 elif data.losses.old_approx_kl <0:
                     print(f"The approx kl is {data.losses.old_approx_kl} and it should be greater than 0")
+                    return False
+                elif data.explained_variance < explain_variance_has_to_be_greater_than:
+                    print(f"The explained variance is {data.explained_variance} and it should be greater than {explain_variance_has_to_be_greater_than}")
                     return False
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 4:
