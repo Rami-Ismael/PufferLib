@@ -153,29 +153,29 @@ def sweep(args, wandb_name, env_module, make_env):
             pprint(wandb.config.train)
             args.train.__dict__.update(dict(wandb.config.train))
             if args.policy.__dict__:
-                pprint(f"The new configuration of policy is {args.policy.__dict__}")
                 args.policy.__dict__.update(dict(wandb.config.policy))
+                pprint(f"The new configuration of policy is {args.policy.__dict__}")
             if args.env.__dict__:
                 try:
                     args.env.__dict__.update(dict(wandb.config.env))
                     pprint(f"The new configuration of env is {args.env.__dict__}")
                 except Exception as e:
                     print(f"The error is {e}")
-                    print(f"What is the config of the env {wandb.config.env}")
-                    print(f"What is the args.env__dict__ {args.env.__dict__}")
+                    pprint(f"What is the config of the env {wandb.config.env}")
+                    pprint(f"What is the args.env__dict__ {args.env.__dict__}")
             args.track = True
             train(args, env_module, make_env)
         except Exception as e:
             import traceback
             traceback.print_exc()
 
-    wandb.agent(sweep_id, main, count=200)
-    #wandb.agent(
-    #    sweep_id = "4urnm0w1" , 
-    #    project = "pufferlib" , 
-    #    function = main,
-    #    count = 200
-    #)
+    #wandb.agent(sweep_id, main, count=300)
+    wandb.agent(
+        sweep_id = "2ks66iti" , 
+        project = "pufferlib" , 
+        function = main,
+        count = 300
+    )
     
 
 def train(args, env_module, make_env):
@@ -249,7 +249,7 @@ def train(args, env_module, make_env):
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 4:
                 policy_loss_has_to_be_less_than = 0.0003233939642086625
-                value_loss_has_to_be_greater_than = 0.02
+                value_loss_has_to_be_greater_than = 0.0187
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
                 approx_kl_has_to_be_greater_than = 0.0054
@@ -271,7 +271,7 @@ def train(args, env_module, make_env):
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 8:
                 policy_loss_has_to_be_less_than = 0.00
-                approx_kl_has_to_be_greater_than = 0.06439887615852058
+                approx_kl_has_to_be_greater_than = 0.02
                 clipfrac_has_to_be_greater_than = 0.048858642578125
                 if data.losses.policy_loss > policy_loss_has_to_be_less_than :
                     print(f"The policy loss is {data.losses.policy_loss}")
