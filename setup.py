@@ -31,7 +31,7 @@ cleanrl = [
     'stable_baselines3==2.1.0',
     'tensorboard==2.11.2',
     'torch',
-    'wandb==0.13.7',
+    'wandb>0.16.6',
     'psutil==5.9.5',
     'tyro==0.5.10',
     'pynvml'
@@ -144,7 +144,7 @@ environments = {
     'pokemon_red': [
         f'gym=={GYM_VERSION}',
         f'gymnasium=={GYMNASIUM_VERSION}',
-        'pokegym>=0.2.0',
+        'pokegym>=0.1.8',
         'einops==0.6.1',
         'matplotlib',
         'scikit-image',
@@ -154,6 +154,7 @@ environments = {
         'pandas==2.0.2',
         'pettingzoo',
         'websockets',
+        "wandb-core"
     ],
     'procgen': [
         f'gym=={GYM_VERSION}',
