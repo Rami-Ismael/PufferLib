@@ -937,7 +937,7 @@ puffertank_pokemon_red:
                 "values": [0.1, 0.01, 0.001, 0.0001, 1.0e-05 , 0.0002 , 0.0003 , 0.0004]
               }
               update_epochs: { 
-                "values": [ 2 , 4, 8 , 16]
+                "values": [ 2 , 4, 8 ]
               }
               clip_coef: {
                 "values": [.1 , .2 , .3  , .4]
