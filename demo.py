@@ -289,6 +289,7 @@ def train(args, env_module, make_env):
                 clipfrac_has_to_be_greater_than = 0.0788726806640625
                 kl_has_to_be_less_than = 2
                 value_loss_has_to_be_greater_than = 0.01902017235988751
+                explain_variances_has_to_be_greater_than = 0.0
                 if data.losses.value_loss !=0 and data.losses.value_loss < value_loss_has_to_be_greater_than:
                     print(f"The value loss is {data.losses.value_loss} and it should be greater than {value_loss_has_to_be_greater_than}")
                     return False
@@ -303,6 +304,9 @@ def train(args, env_module, make_env):
                     return False
                 if data.losses.clipfrac != 0 and data.losses.clipfrac < clipfrac_has_to_be_greater_than:
                     print(f"The clipfrac is {data.losses.clipfrac} and it should be greater than {clipfrac_has_to_be_greater_than}")
+                    return False
+                if data.losses.explained_variance < explain_variances_has_to_be_greater_than:
+                    print(f"The explained variance is {data.losses.explained_variance} and it should be greater than {explain_variances_has_to_be_greater_than}")
                     return False
                 return True
             return True
