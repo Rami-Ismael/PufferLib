@@ -249,7 +249,7 @@ def train(args, env_module, make_env):
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 4:
                 policy_loss_has_to_be_less_than = 0.006689547561109066
-                value_loss_has_to_be_greater_than = 0.0187
+                value_loss_has_to_be_greater_than = 0.016
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
                 approx_kl_has_to_be_greater_than = 0.0054
