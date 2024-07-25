@@ -248,7 +248,7 @@ def train(args, env_module, make_env):
                 value_loss_has_to_be_greater_than = 0.02
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
-                approx_kl_has_to_be_greater_than = 0.01
+                approx_kl_has_to_be_greater_than = 0.0054
                 if data.losses.policy_loss > policy_loss_has_to_be_less_than :
                     print(f"The policy loss is {data.losses.policy_loss}")
                     return False
