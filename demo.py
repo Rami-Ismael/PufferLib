@@ -169,13 +169,13 @@ def sweep(args, wandb_name, env_module, make_env):
             import traceback
             traceback.print_exc()
 
-    wandb.agent(sweep_id, main, count=100)
-    #wandb.agent(
-    #    sweep_id = "oottl18v" , 
-    #    project = "pufferlib" , 
-    #    function = main,
-    #    count = 100
-    #)
+    #wandb.agent(sweep_id, main, count=200)
+    wandb.agent(
+        sweep_id = "4urnm0w1" , 
+        project = "pufferlib" , 
+        function = main,
+        count = 200
+    )
     
 
 def train(args, env_module, make_env):
@@ -248,7 +248,7 @@ def train(args, env_module, make_env):
                     return False
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 4:
-                policy_loss_has_to_be_less_than = 0.0001
+                policy_loss_has_to_be_less_than = 0.0003233939642086625
                 value_loss_has_to_be_greater_than = 0.02
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
