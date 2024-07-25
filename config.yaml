@@ -898,7 +898,7 @@ puffertank_pokemon_red:
         early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
           type: hyperband
           min_iter: 4
-          strict: True
+          strict: False
           eta: 3
         # Nested parameters name required by WandB API
         parameters:
