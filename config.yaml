@@ -946,7 +946,7 @@ puffertank_pokemon_red:
                 "values" : [0 , 0.1 , 0.01]
               }
               batch_size: {
-                "values" : [32768 , 65_536]
+                "values" : [ 16_384, 32768 , 65_536 , 131_072]
               }
           policy:
             parameters:
