@@ -169,13 +169,13 @@ def sweep(args, wandb_name, env_module, make_env):
             import traceback
             traceback.print_exc()
 
-    #wandb.agent(sweep_id, main, count=100)
-    wandb.agent(
-        sweep_id = "oottl18v" , 
-        project = "pufferlib" , 
-        function = main,
-        count = 100
-    )
+    wandb.agent(sweep_id, main, count=200)
+    #wandb.agent(
+    #    sweep_id = "4urnm0w1" , 
+    #    project = "pufferlib" , 
+    #    function = main,
+    #    count = 200
+    #)
     
 
 def train(args, env_module, make_env):
@@ -229,10 +229,11 @@ def train(args, env_module, make_env):
         '''
         def early_stopping_base_on_ppo_loss_func(data):
             if train_config.update_epochs == 2:
-                policy_loss_has_to_be_less_than = .00123
-                value_loss_has_to_be_greater_than = 0.02
+                policy_loss_has_to_be_less_than = .0014
+                value_loss_has_to_be_greater_than = 0.018
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
+                explain_variance_has_to_be_greater_than = 0.0
                 if data.losses.policy_loss > policy_loss_has_to_be_less_than :
                     print(f"The policy loss is {data.losses.policy_loss}")
                     return False
@@ -242,13 +243,16 @@ def train(args, env_module, make_env):
                 elif data.losses.old_approx_kl <0:
                     print(f"The approx kl is {data.losses.old_approx_kl} and it should be greater than 0")
                     return False
+                elif data.losses.explained_variance < explain_variance_has_to_be_greater_than:
+                    print(f"The explained variance is {data.explained_variance} and it should be greater than {explain_variance_has_to_be_greater_than}")
+                    return False
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 4:
-                policy_loss_has_to_be_less_than = 0
+                policy_loss_has_to_be_less_than = 0.0003233939642086625
                 value_loss_has_to_be_greater_than = 0.02
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
-                approx_kl_has_to_be_greater_than = 0.01
+                approx_kl_has_to_be_greater_than = 0.0054
                 if data.losses.policy_loss > policy_loss_has_to_be_less_than :
                     print(f"The policy loss is {data.losses.policy_loss}")
                     return False
@@ -260,6 +264,9 @@ def train(args, env_module, make_env):
                     return False
                 elif data.losses.approx_kl != 0 and data.losses.approx_kl < approx_kl_has_to_be_greater_than:
                     print(f"The approx kl is {data.losses.approx_kl} and it should be greater than {approx_kl_has_to_be_greater_than}")
+                    return False
+                elif data.losses.explained_variance < 0:
+                    print(f"The explained variance is {data.explained_variance} and it should be greater than 0")
                     return False
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 8:
@@ -282,6 +289,7 @@ def train(args, env_module, make_env):
                 clipfrac_has_to_be_greater_than = 0.0788726806640625
                 kl_has_to_be_less_than = 2
                 value_loss_has_to_be_greater_than = 0.01902017235988751
+                explain_variances_has_to_be_greater_than = 0.0
                 if data.losses.value_loss !=0 and data.losses.value_loss < value_loss_has_to_be_greater_than:
                     print(f"The value loss is {data.losses.value_loss} and it should be greater than {value_loss_has_to_be_greater_than}")
                     return False
@@ -296,6 +304,9 @@ def train(args, env_module, make_env):
                     return False
                 if data.losses.clipfrac != 0 and data.losses.clipfrac < clipfrac_has_to_be_greater_than:
                     print(f"The clipfrac is {data.losses.clipfrac} and it should be greater than {clipfrac_has_to_be_greater_than}")
+                    return False
+                if data.losses.explained_variance < explain_variances_has_to_be_greater_than:
+                    print(f"The explained variance is {data.losses.explained_variance} and it should be greater than {explain_variances_has_to_be_greater_than}")
                     return False
                 return True
             return True

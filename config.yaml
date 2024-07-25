@@ -874,7 +874,7 @@ puffertank_pokemon_red:
 
       learning_rate: 0.0025
       weight_decay: 0.1
-      optimizer:  AdamWScheduleFree
+      optimizer:  Adam
       beta1: 0.9
       beta2: 0.999
 
@@ -910,7 +910,7 @@ puffertank_pokemon_red:
                 "values": [ .2 , .3  , .4 , .5]
               }
               bptt_horizon: {
-                "values": [ 16 , 32 , 64]
+                "values": [ 8 , 16 , 32 , 64]
               }
               vf_clip_coef: {
                 "distribution": "uniform" , 
@@ -918,12 +918,10 @@ puffertank_pokemon_red:
                 "max": .9
               }
               eps: {
-                "values": [1.0e-8 , 1.0e-5]
+                "values": [1.0e-8 , 1.0e-5 , 0.015]
               }
               weight_decay: {
-                "distribution": "uniform" , 
-                "min": 0.08121616522670176 , 
-                "max": 0.1
+                "values": [0.0 , 0.1 , 0.5 , 0.01]
               }
               beta1: {
                 "distribution": "uniform", 
@@ -936,15 +934,19 @@ puffertank_pokemon_red:
                 "max": 0.999
               }
               learning_rate: {
-                "distribution": "uniform" , 
-                "min": 0.0005 , 
-                "max": 0.0025 , 
+                "values": [0.1, 0.01, 0.001, 0.0001, 1.0e-05 , 0.0002 , 0.0003 , 0.0004]
               }
               update_epochs: { 
-                "values": [ 2 , 4, 8 , 16]
+                "values": [ 2 , 4, 8 ]
               }
               clip_coef: {
                 "values": [.1 , .2 , .3  , .4]
+              }
+              ent_coef: {
+                "values" : [0 , 0.1 , 0.01]
+              }
+              batch_size: {
+                "values" : [ 16_384, 32768 , 65_536 , 131_072]
               }
           policy:
             parameters:
@@ -977,7 +979,7 @@ puffertank_pokemon_red:
                 "max": 1.0
               }
               max_episode_steps: {
-                "values": [ 4092 , 8192 , 16384 , 32768]
+                "values": [  8192 , 16384 , 32768]
               }
               
 links_awaken:

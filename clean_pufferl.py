@@ -69,7 +69,9 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
         optimizer.train()
     elif config.optimizer == "Adam":
         optimizer = torch.optim.Adam(policy.parameters(),
-            lr=config.learning_rate, eps=1e-5 , 
+            lr=config.learning_rate, 
+            eps = config.eps,
+            betas=(config.beta1, config.beta2),
             weight_decay = config.weight_decay)
     elif config.optimizer == "Trac" :
         from trac import start_trac
