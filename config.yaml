@@ -934,7 +934,7 @@ puffertank_pokemon_red:
                 "max": 0.999
               }
               learning_rate: {
-                "values": [0.1, 0.01, 0.001, 0.0001, 1.0e-05 , 0.0002 , 0.0003 , 0.0004]
+                "values": [0.1, 0.01, 0.001, 0.0001, 1.0e-05 , 0.0002 , 0.0003 , 0.0004 , 0.0005 , 0.0025]
               }
               update_epochs: { 
                 "values": [ 2 , 4, 8 ]
@@ -947,6 +947,9 @@ puffertank_pokemon_red:
               }
               batch_size: {
                 "values" : [ 16_384, 32768 , 65_536 , 131_072]
+              }
+              optimizer: {
+                "values" : ["Stable_AdamWScheduleFree" , "Adam" , "AdamWScheduleFree"]
               }
           policy:
             parameters:
