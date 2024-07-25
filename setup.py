@@ -148,7 +148,7 @@ environments = {
         'einops==0.6.1',
         'matplotlib',
         'scikit-image',
-        'pyboy<2.0.0',
+        'pyboy>=2.2.2',
         'hnswlib==0.7.0',
         'mediapy',
         'pandas==2.0.2',
