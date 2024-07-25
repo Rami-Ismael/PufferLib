@@ -113,7 +113,12 @@ def evaluate(data):
             data.global_step += sum(mask)
 
             o = torch.as_tensor(o)
-            o_device = o.to(config.device)
+            try:
+                o_device = o.to(config.device)
+            except Exception as e:
+                print(e)
+                print('Failed to move to device. Continuing...')
+                break
             r = torch.as_tensor(r)
             d = torch.as_tensor(d)
 
