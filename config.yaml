@@ -764,6 +764,7 @@ pokedebug:
     max_episode_steps: 16284  #2048 #16284 #8192 #4096
     display_info_interval_divisor: 256 
     max_reward_clip: 1
+    disable_wild_encounters: True
 local_cpu_pokemon:
   package: pokemon_red
   use_rnn: True
