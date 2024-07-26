@@ -30,7 +30,8 @@ def make(name, headless: bool = True, state_path=None ,
         random_starter_pokemon:bool = True  , 
         negative_reward_for_wiping_out_coef = 1.0,
         negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef:float = 1.0 ,
-        reward_for_using_bad_moves_coef:float =1.0
+        reward_for_using_bad_moves_coef:float =1.0 ,
+        disable_wild_encounters:bool = False ,
          ):
     #print(f"The current diosplayin of interval divisor is {display_info_interval_divisor}")
     '''Pokemon Red'''
@@ -45,6 +46,7 @@ def make(name, headless: bool = True, state_path=None ,
                         negative_reward_for_wiping_out_coef = negative_reward_for_wiping_out_coef,
                         negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef = negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef ,
                         reward_for_using_bad_moves_coef = reward_for_using_bad_moves_coef ,
+                        disable_wild_encounters = disable_wild_encounters ,
                         )
     env = RenderWrapper(env)
     if EpisodeStats:
