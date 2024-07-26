@@ -948,7 +948,7 @@ puffertank_pokemon_red:
                 "values" : [ 16_384, 32768 , 65_536 , 131_072]
               }
               optimizer: {
-                "values" : ["Stable_AdamWScheduleFree" , "Adam" , "AdamWScheduleFree"]
+                "values" : ["Stable_AdamWScheduleFree" , "Adam"]
               }
           policy:
             parameters:
