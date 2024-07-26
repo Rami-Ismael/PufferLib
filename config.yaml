@@ -875,7 +875,7 @@ puffertank_pokemon_red:
 
       learning_rate: 0.0025
       weight_decay: 0.1
-      optimizer:  Adam
+      optimizer:  Stable_AdamWScheduleFree
       beta1: 0.9
       beta2: 0.999
 
@@ -917,10 +917,10 @@ puffertank_pokemon_red:
                 "values" :[.2 , .3  , .4  , .5 , .6 , .7 , .9 , 1]
               }
               eps: {
-                "values": [1.0e-8 , 1.0e-5 , 0.015]
+                "values": [1.0e-8 , 1.0e-6 , 1.0e-5 , 0.015]
               }
               weight_decay: {
-                "values": [0.0 , 0.1 , 0.5 , 0.01]
+                "values": [0.0 , 0.1 , 0.5 , 0.01 , 0.08]
               }
               beta1: {
                 "distribution": "uniform", 
@@ -930,10 +930,10 @@ puffertank_pokemon_red:
               beta2: { 
                 "distribution": "uniform" , 
                 "min": 0.75 , 
-                "max": 0.999
+                "max": 0.99
               }
               learning_rate: {
-                "values": [0.1, 0.01, 0.001, 0.0001, 1.0e-05 , 0.0002 , 0.0003 , 0.0004 , 0.0005 , 0.0025]
+                "values": [0.1, 0.01, 0.001, 0.0001,  1.0e-05 , 0.0002 , 0.003 , 0.004 , 0.0005 , 0.0025]
               }
               update_epochs: { 
                 "values": [ 2 , 4, 8 ]
@@ -946,9 +946,6 @@ puffertank_pokemon_red:
               }
               batch_size: {
                 "values" : [ 16_384, 32768 , 65_536 , 131_072]
-              }
-              optimizer: {
-                "values" : ["Stable_AdamWScheduleFree" , "Adam"]
               }
           policy:
             parameters:
