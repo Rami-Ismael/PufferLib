@@ -749,75 +749,24 @@ pokedebug:
     batch_size: 256
     minibatch_size: 256
     compile: False
-    optimizer:  Stable_AdamWScheduleFree
-    beta1: 0.90
-    beta2: 0.995
     continual_learning:
       shrink_and_perturb: False
       shrink : .8
       perturb: .1
     device: cpu
-    eps: 1.0e-8
     total_timesteps: 100_000_000
+    learning_rate: 2.5e-4
+    weight_decay: 0.00
+    optimizer:  Adam
+    beta1: 0.9
+    beta2: 0.995
+    eps: 1.0e-5
   env:
     random_starter_pokemon: False
-    max_episode_steps: 16284  #2048 #16284 #8192 #4096
+    max_episode_steps: 32568 #2048 #16284 #8192 #4096
     display_info_interval_divisor: 256 
     max_reward_clip: 1
     disable_wild_encounters: True
-local_cpu_pokemon:
-  package: pokemon_red
-  use_rnn: True
-  env:
-    EpisodeStats: False
-    max_episode_steps: 256
-    display_info_interval_divisor: 128
-  train:
-    num_envs: 128
-    num_workers: 4
-    batch_size: 4096
-    zero_copy: True
-    env_batch_size: 64
-
-    minibatch_size: 64
-
-    clip_vloss: True
-    vf_clip_coef: 0.1
-    vf_coef: 0.5
-
-
-    ent_coef: 0.001
-    clip_coef: 0.2
-    optimizer: Adam
-
-
-
-
-    total_timesteps: 1_000_000_000
-    update_epochs: 2
-    gamma: 0.998
-    anneal_lr: False
-    learning_rate: 2.0e-4
-    compile: False
-    device: cpu
-  sweep:
-      method: bayes
-      name: sweep
-      metric:
-        goal: maximize
-        name: environment/number_of_uniqiue_coordinate_it_explored
-      early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
-          type: hyperband
-          min_iter: 1
-      # Nested parameters name required by WandB API
-      parameters:
-        train:
-          parameters:
-            learning_rate: {
-              'distribution': 'log_uniform_values',
-              'min': 3e-5,
-              'max': 2e-4,
-            }
 puffertank_pokemon_red:
     package: pokemon_red
     use_rnn: True
@@ -876,10 +825,11 @@ puffertank_pokemon_red:
 
 
       learning_rate: 0.0025
-      weight_decay: 0.1
+      weight_decay: 0.08
       optimizer:  Stable_AdamWScheduleFree
       beta1: 0.9
-      beta2: 0.999
+      beta2: 0.97
+      eps: 1.0e-5
 
 
 
@@ -941,7 +891,7 @@ puffertank_pokemon_red:
                 "values": [ 2 , 4, 8 ]
               }
               clip_coef: {
-                "values": [.1 , .2 , .3  , .4]
+                "values": [.1 , .2]
               }
               ent_coef: {
                 "values" : [0 , 0.1 , 0.01]
