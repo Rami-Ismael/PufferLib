@@ -169,13 +169,13 @@ def sweep(args, wandb_name, env_module, make_env):
             import traceback
             traceback.print_exc()
 
-    wandb.agent(sweep_id, main, count=300)
-    #wandb.agent(
-    #    sweep_id = "psl7vc0w" , 
-    #    project = "pufferlib" , 
-    #    function = main,
-    #    count = 300
-    #)
+    #wandb.agent(sweep_id, main, count=300)
+    wandb.agent(
+        sweep_id = "ahe0igc7" , 
+        project = "pufferlib" , 
+        function = main,
+        count = 300
+    )
     
 
 def train(args, env_module, make_env):
@@ -244,7 +244,7 @@ def train(args, env_module, make_env):
                     print(f"The approx kl is {data.losses.old_approx_kl} and it should be greater than 0")
                     return False
                 elif data.losses.explained_variance < explain_variance_has_to_be_greater_than:
-                    print(f"The explained variance is {data.explained_variance} and it should be greater than {explain_variance_has_to_be_greater_than}")
+                    print(f"The explained variance is {data.losses.explained_variance} and it should be greater than {explain_variance_has_to_be_greater_than}")
                     return False
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 4:
