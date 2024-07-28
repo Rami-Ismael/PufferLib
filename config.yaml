@@ -858,16 +858,10 @@ puffertank_pokemon_red:
           train:
             parameters:
               gae_lambda: {
-                "values": [.7 , .8 , .9 , .95]
-              }
-              target_kl: {
-                "values": [ .2 , .3  , .4 , .5]
+                "values": [ .8 , .9 , .95]
               }
               bptt_horizon: {
                 "values": [ 8 , 16 , 32 , 64]
-              }
-              vf_clip_coef: {
-                "values" :[.2 , .3  , .4  , .5 , .6 , .7 , .9 , 1]
               }
               eps: {
                 "values": [1.0e-8 , 1.0e-6 , 1.0e-5 , 0.015]
@@ -891,14 +885,8 @@ puffertank_pokemon_red:
               update_epochs: { 
                 "values": [ 2 , 4, 8 ]
               }
-              clip_coef: {
-                "values": [.1 , .2]
-              }
               ent_coef: {
                 "values" : [0 , 0.1 , 0.01]
-              }
-              batch_size: {
-                "values" : [ 16_384, 32768 , 65_536 , 131_072]
               }
           policy:
             parameters:
@@ -934,9 +922,6 @@ puffertank_pokemon_red:
                 "distribution": "uniform", 
                 "min": 0 , 
                 "max": 1.0
-              }
-              max_episode_steps: {
-                "values": [  8192 , 16384 , 32768]
               }
               
 links_awaken:
