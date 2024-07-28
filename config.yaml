@@ -757,10 +757,12 @@ pokedebug:
     total_timesteps: 100_000_000
     learning_rate: 2.5e-4
     weight_decay: 0.00
-    optimizer:  Adam
+    optimizer:  adam_weight_clipping
     beta1: 0.9
     beta2: 0.995
     eps: 1.0e-5
+    clip_weight_value: 1.0
+    clip_last_layer: True
   env:
     random_starter_pokemon: False
     max_episode_steps: 32568 #2048 #16284 #8192 #4096
@@ -789,7 +791,7 @@ puffertank_pokemon_red:
       negative_reward_for_wiping_out_coef: .5
       negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: .5
       reward_for_using_bad_moves_coef: 1.0
-      disable_wild_encounters: True
+      disable_wild_encounters:  False
     train:
       compile: False
       compile_mode: "reduce-overhead"
@@ -886,6 +888,9 @@ puffertank_pokemon_red:
               }
               learning_rate: {
                 "values": [0.1, 0.01, 0.001, 0.0001,  1.0e-05 , 0.0002 , 0.003 , 0.004 , 0.0005 , 0.0025]
+              }
+              clip_weight_value: {
+                "values": [1, 2, 3, 4, 5]
               }
               update_epochs: { 
                 "values": [ 2 , 4, 8 ]
