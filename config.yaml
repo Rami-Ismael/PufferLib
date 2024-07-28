@@ -886,7 +886,7 @@ puffertank_pokemon_red:
                 "max": 0.99
               }
               learning_rate: {
-                "values": [0.1, 0.01, 0.001, 0.0001,  1.0e-05 , 0.0002 , 0.003 , 0.004 , 0.0005 , 0.0025]
+                "values": [0.004 , 0.003 , 0.0005 , 0.0025 , 1.00e-4]
               }
               update_epochs: { 
                 "values": [ 2 , 4, 8 ]
