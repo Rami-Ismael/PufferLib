@@ -314,7 +314,7 @@ def train(args, env_module, make_env):
         while data.global_step < args.train.total_timesteps and early_stopping_base_on_ppo_loss_func(data):
             try:
                 clean_pufferl.evaluate(data)
-                clean_pufferl.train(data , args.train.continual_learning["shrink_and_perturb"] , args.train.continual_learning["shrink"] , args.train.continual_learning["perturb"])
+                clean_pufferl.train(data)
             except KeyboardInterrupt:
                 clean_pufferl.close(data)
                 os._exit(0)

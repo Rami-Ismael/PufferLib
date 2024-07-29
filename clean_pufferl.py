@@ -213,24 +213,11 @@ def evaluate(data):
     return data.stats, infos
 
 @pufferlib.utils.profile
-def train(data , add_shrink_and_perturb:bool = True , shirnk:float = 0.4 , perturb:float = 0.1):
+def train(data ):
     config, profile, experience = data.config, data.profile, data.experience
     data.losses = make_losses()
     losses = data.losses
     
-    # Create Shrink and Perturb
-    if data.global_step!=0 and add_shrink_and_perturb:
-        def shrink_perturb(net, shrink, perturb):
-        # using a randomly-initialized model as a noise source respects how different kinds 
-        # of parameters are often initialized differently
-            #if args.model == 'resnet': new_init = resnet.ResNet18(num_classes=num_classes).cuda()
-            new_init = data.uncompiled_policy.to(config.device)
-            params1 = new_init.parameters()
-            params2 = net.parameters()
-            for p1, p2 in zip(*[params1, params2]):
-                p1.data = deepcopy(shrink * p2.data + perturb * p1.data)
-            return new_init
-        data.policy = shrink_perturb(data.policy, shrink = shirnk , perturb = perturb)
        
 
     with profile.train_misc:
