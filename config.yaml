@@ -984,7 +984,7 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
 
       learning_rate: 0.0025
       weight_decay: 0.08
-      optimizer:  shri
+      optimizer: shrink_perturb_adam 
       beta1: 0.9
       beta2: 0.97
       eps: 1.0e-5
