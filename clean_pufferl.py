@@ -72,13 +72,13 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
                                    clip_weight_value = config.clip_weight_value,
                                    betas = ( config.beta1 , config.beta2 ),
                                    clip_last_layer = config.clip_last_layer)
-    if config.optimizer == "Stable_AdamWScheduleFree" :
+    elif config.optimizer == "Stable_AdamWScheduleFree" :
         from adamw_schedulefree_stable_adam import AdamWScheduleFree
         optimizer = AdamWScheduleFree(policy.parameters(), lr = config.learning_rate , 
                                        weight_decay = config.weight_decay , 
                                        betas = ( config.beta1 , config.beta2 ) ,
                                        eps = config.eps)
-    if config.optimizer == "AdamWScheduleFree":
+    elif config.optimizer == "AdamWScheduleFree":
         optimizer = schedulefree.AdamWScheduleFree(policy.parameters(), lr = config.learning_rate , 
                                                    weight_decay = config.weight_decay , 
                                                    betas = ( config.beta1 , config.beta2 ) ,
@@ -94,6 +94,8 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
         from trac import start_trac
         optimizer = torch.optim.Adam
         optimizer = start_trac( log_file = "logs/trac.txt" , Base = optimizer )(policy.parameters() , lr = config.learning_rate)
+    else:
+        raise ValueError(f'Optimizer {config.optimizer} not recognized')
     return pufferlib.namespace(
         config=config,
         vecenv=vecenv,
