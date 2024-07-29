@@ -864,6 +864,9 @@ puffertank_pokemon_red:
               bptt_horizon: {
                 "values": [ 8 , 16 , 32 , 64]
               }
+              learning_rate: {
+                "values": [0.004 , 0.003 , 0.0005 , 0.0025 , 1.00e-4]
+              }
               eps: {
                 "values": [1.0e-8 , 1.0e-6 , 1.0e-5 , 0.015]
               }
@@ -879,9 +882,6 @@ puffertank_pokemon_red:
                 "distribution": "uniform" , 
                 "min": 0.75 , 
                 "max": 0.99
-              }
-              learning_rate: {
-                "values": [0.004 , 0.003 , 0.0005 , 0.0025 , 1.00e-4]
               }
               update_epochs: { 
                 "values": [ 2 , 4, 8 ]
@@ -924,7 +924,161 @@ puffertank_pokemon_red:
                 "min": 0 , 
                 "max": 1.0
               }
-              
+
+puffertank_pokemon_red_soft_shrink_and_perturb:
+    package: pokemon_red
+    use_rnn: True
+    policy:
+      mlp_width: 1024
+      mlp_depth: 3
+      embedd_the_x_and_y_coordinate: True
+      dense_act_func: "ReLU"
+      add_time: True
+    env:
+      display_info_interval_divisor: 512 
+      max_episode_steps: 8192  #2048 #16284 #8192 #4096
+      EpisodeStats: False
+      max_reward_clip: 1
+      reward_for_increase_pokemon_level_coef: .25
+      reward_for_explore_unique_coor_coef: .5
+      reward_for_increasing_the_highest_pokemon_level_in_the_team_by_battle_coef: 1
+      reward_for_entering_a_trainer_battle_coef: 1
+      random_starter_pokemon: False
+      negative_reward_for_wiping_out_coef: .5
+      negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: .5
+      reward_for_using_bad_moves_coef: 1.0
+      disable_wild_encounters:  False
+    train:
+      compile: False
+      compile_mode: "reduce-overhead"
+      seed: 1
+      torch_deterministic: True
+      cpu_offload: False
+      device: cuda
+      total_timesteps: 16_777_216 #268_435_456
+      anneal_lr: False 
+      gamma: 0.99
+      gae_lambda: 0.7
+      update_epochs: 16
+      norm_adv: True
+      clip_coef: 0.2
+      ent_coef: 0.1
+      clip_vloss: True
+      vf_clip_coef: .75
+      vf_coef: 0.5
+      max_grad_norm: 0.5
+      target_kl: .3
+      num_envs: 768
+      num_workers: 24
+      batch_size: 65_536 
+      zero_copy: True
+      env_batch_size: 256
+      env_pool: True
+
+      save_checkpoint: False
+      pool_kernel: [0]
+
+
+      minibatch_size: 16384  # if not set it will be 2048
+
+
+      learning_rate: 0.0025
+      weight_decay: 0.08
+      optimizer:  shri
+      beta1: 0.9
+      beta2: 0.97
+      eps: 1.0e-5
+
+
+
+
+      #batch_rows: 512
+      bptt_horizon: 16
+    sweep:
+        method: bayes
+        name: sweep
+        metric:
+          goal: maximize
+          name: environment/number_of_uniqiue_coordinate_it_explored
+        early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
+          type: hyperband
+          min_iter: 8
+          strict: False
+        # Nested parameters name required by WandB API
+        parameters:
+          train:
+            parameters:
+              gae_lambda: {
+                "values": [ .8 , .9 , .95]
+              }
+              bptt_horizon: {
+                "values": [ 8 , 16 , 32 , 64]
+              }
+              learning_rate: {
+                "values": [0.1 , 0.01 , 0.01 , 0.0001 ,  2.5e-4 , 5.0e-4 , 1.0e-05]
+              }
+              eps: {
+                "values": [1.0e-8 , 1.0e-6 , 1.0e-5 , 0.00015 , 0.015 ]
+              }
+              weight_decay: {
+                "values": [0.0 , 0.1 , 0.5 , 0.01 , 0.08]
+              }
+              beta1: {
+                "distribution": "uniform", 
+                'min': 0.9 , 
+                "max": 0.95
+              }
+              beta2: { 
+                "distribution": "uniform" , 
+                "min": 0.75 , 
+                "max": 0.99
+              }
+              sigma: {
+                "values" : [0 , 0.1 , 0.01 , 0.001 , 0.001]
+              }
+              update_epochs: { 
+                "values": [ 2 , 4, 8 ]
+              }
+              ent_coef: {
+                "values" : [0 , 0.1 , 0.01]
+              }
+          policy:
+            parameters:
+              mlp_depth: {
+               "values": [ 1 , 2 , 3 ]
+              }
+              mlp_width: {
+                "values": [ 256 , 512 , 1024]
+              }
+          env:
+            parameters:
+              reward_for_explore_unique_coor_coef: {
+                "distribution": "uniform",
+                "min":  0.17338864809426202,
+                "max": 1.0
+              }
+              reward_for_entering_a_trainer_battle_coef: {
+                "distribution": "uniform" , 
+                "min": 0.05,
+                "max": 1.0
+              }
+              negative_reward_for_wiping_out_coef: {
+                "distribution": "uniform" ,
+                "min": 0.05,
+                "max": 1.0
+              }
+              negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: {
+                "distribution": "uniform" , 
+                "min": 0  , 
+                "max": 1.0
+              }
+              reward_for_using_bad_moves_coef: {
+                "distribution": "uniform", 
+                "min": 0 , 
+                "max": 1.0
+              }
+
+
 links_awaken:
   package: links_awaken
 links-awaken:
