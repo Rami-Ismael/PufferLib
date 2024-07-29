@@ -766,7 +766,7 @@ pokedebug:
     sigma: .01
   env:
     random_starter_pokemon: False
-    max_episode_steps: 65136 #2048 #16284 #8192 #4096
+    max_episode_steps: 65136 #2048 #4096 #8192 #16284 # 32568 #65136
     display_info_interval_divisor: 256 
     max_reward_clip: 1
     disable_wild_encounters: True
@@ -815,7 +815,7 @@ puffertank_pokemon_red:
       target_kl: .3
       num_envs: 768
       num_workers: 24
-      batch_size: 65_536 
+      batch_size: 65136 
       zero_copy: True
       env_batch_size: 256
       env_pool: True
@@ -936,7 +936,7 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
       add_time: True
     env:
       display_info_interval_divisor: 512 
-      max_episode_steps: 8192  #2048 #16284 #8192 #4096
+      max_episode_steps: 8192  #2048 #4096 #8192 #16284 # 32568 #65136
       EpisodeStats: False
       max_reward_clip: 1
       reward_for_increase_pokemon_level_coef: .25
@@ -970,7 +970,7 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
       target_kl: .3
       num_envs: 768
       num_workers: 24
-      batch_size: 65_536 
+      batch_size: 65_136 
       zero_copy: True
       env_batch_size: 256
       env_pool: True
