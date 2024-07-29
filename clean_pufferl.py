@@ -537,12 +537,12 @@ class Experience:
             self.b_idxs_obs = torch.as_tensor(idxs.reshape(
                     self.minibatch_rows, self.num_minibatches, self.bptt_horizon
                 ).transpose(1,0,-1)).to(self.obs.device).long()
-        except ValueError as e:
+        except Exception as e:
             print(idxs.reshape(
                     self.minibatch_rows, self.num_minibatches, self.bptt_horizon
                 ).transpose(1,0,-1).shape)
             print(self.obs.device)
-            raise ValueError(e)
+            raise e
         self.b_idxs = self.b_idxs_obs.to(self.device)
         self.b_idxs_flat = self.b_idxs.reshape(
             self.num_minibatches, self.minibatch_size)
