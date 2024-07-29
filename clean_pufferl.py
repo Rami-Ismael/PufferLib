@@ -531,18 +531,22 @@ class Experience:
         self.step += 1
 
     def sort_training_data(self):
+        """
+        Sorts the indices of the training data based on the sort keys, which are tuples of (env_id, step).
+        This ensures that the training data is sorted by environment ID and then by step, which can improve
+        the performance of the training process.
+        """
         idxs = np.asarray(sorted(
             range(len(self.sort_keys)), key=self.sort_keys.__getitem__))
-        try:
-            self.b_idxs_obs = torch.as_tensor(idxs.reshape(
-                    self.minibatch_rows, self.num_minibatches, self.bptt_horizon
-                ).transpose(1,0,-1)).to(self.obs.device).long()
-        except Exception as e:
-            print(idxs.reshape(
-                    self.minibatch_rows, self.num_minibatches, self.bptt_horizon
-                ).transpose(1,0,-1).shape)
-            print(self.obs.device)
-            raise e
+        # Assert that we have the correct number of indices
+        assert len(idxs) == self.batch_size, f"Expected {self.batch_size} indices, but got {len(idxs)}"
+        
+        self.b_idxs_obs = torch.as_tensor(idxs.reshape(
+                self.minibatch_rows, self.num_minibatches, self.bptt_horizon
+            ).transpose(1,0,-1)).to(self.obs.device).long()
+        # Assert that the shape of b_idxs_obs is correct
+        expected_shape = (self.num_minibatches, self.minibatch_rows, self.bptt_horizon)
+        assert self.b_idxs_obs.shape == expected_shape, f"Expected shape {expected_shape}, but got {self.b_idxs_obs.shape}"
         self.b_idxs = self.b_idxs_obs.to(self.device)
         self.b_idxs_flat = self.b_idxs.reshape(
             self.num_minibatches, self.minibatch_size)
