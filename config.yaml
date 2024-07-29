@@ -970,7 +970,7 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
       target_kl: .3
       num_envs: 768
       num_workers: 24
-      batch_size: 65_136 
+      batch_size: 65_536 
       zero_copy: True
       env_batch_size: 256
       env_pool: True
