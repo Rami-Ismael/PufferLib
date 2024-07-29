@@ -757,15 +757,16 @@ pokedebug:
     total_timesteps: 100_000_000
     learning_rate: 2.5e-4
     weight_decay: 0.00
-    optimizer:  adam_weight_clipping
+    optimizer:  shrink_perturb_adam
     beta1: 0.9
     beta2: 0.995
     eps: 1.0e-5
     clip_weight_value: 1.0
     clip_last_layer: True
+    sigma: .01
   env:
     random_starter_pokemon: False
-    max_episode_steps: 32568 #2048 #16284 #8192 #4096
+    max_episode_steps: 65136 #2048 #16284 #8192 #4096
     display_info_interval_divisor: 256 
     max_reward_clip: 1
     disable_wild_encounters: True

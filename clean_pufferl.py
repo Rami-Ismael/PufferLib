@@ -55,7 +55,16 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
     if config.compile:
         policy = torch.compile(policy, mode=config.compile_mode)
     
-    if config.optimizer == "adam_weight_clipping":
+    if config.optimizer == "shrink_perturb_adam":
+        from shrink_and_perturb import ShrinkAndPerturbAdam
+        optimizer = ShrinkAndPerturbAdam(
+            params = policy.parameters(),
+            sigma = config.sigma,
+            lr = config.learning_rate,
+            eps = config.eps,
+            betas = ( config.beta1 , config.beta2 ),
+        )
+    elif config.optimizer == "adam_weight_clipping":
         from weight_clipping import WeightClipping
         optimizer = WeightClipping(policy.parameters(), 
                                    lr=config.learning_rate,
@@ -524,9 +533,16 @@ class Experience:
     def sort_training_data(self):
         idxs = np.asarray(sorted(
             range(len(self.sort_keys)), key=self.sort_keys.__getitem__))
-        self.b_idxs_obs = torch.as_tensor(idxs.reshape(
-                self.minibatch_rows, self.num_minibatches, self.bptt_horizon
-            ).transpose(1,0,-1)).to(self.obs.device).long()
+        try:
+            self.b_idxs_obs = torch.as_tensor(idxs.reshape(
+                    self.minibatch_rows, self.num_minibatches, self.bptt_horizon
+                ).transpose(1,0,-1)).to(self.obs.device).long()
+        except ValueError as e:
+            print(idxs.reshape(
+                    self.minibatch_rows, self.num_minibatches, self.bptt_horizon
+                ).transpose(1,0,-1).shape)
+            print(self.obs.device)
+            raise ValueError(e)
         self.b_idxs = self.b_idxs_obs.to(self.device)
         self.b_idxs_flat = self.b_idxs.reshape(
             self.num_minibatches, self.minibatch_size)
