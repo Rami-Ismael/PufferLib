@@ -122,9 +122,16 @@ def evaluate(data):
         lstm_h, lstm_c = experience.lstm_h, experience.lstm_c
 
     while not experience.full:
+        # Receive datra from the vectorized en
         with profile.env:
             o, r, d, t, info, env_id, mask = data.vecenv.recv()
+            assert len(mask) == len(o), "Mismatch between mask and observation lengths"
+            assert isinstance(o, np.ndarray), "Observation is not a numpy array"
+            assert isinstance(r, (float, np.ndarray)), "Reward is not a float or numpy array"
             env_id = env_id.tolist()
+            assert env_id, "env_id list is empty after conversion"
+
+
 
         with profile.eval_misc:
             data.global_step += sum(mask)
