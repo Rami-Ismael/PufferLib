@@ -535,11 +535,7 @@ class Experience:
         idxs = np.asarray(sorted(
             range(len(self.sort_keys)), key=self.sort_keys.__getitem__))
         # Assert that we have the correct number of indices
-        try:
-            assert len(idxs) == self.batch_size, f"Expected {self.batch_size} indices, but got {len(idxs)}"
-        except AssertionError as e:
-            print(f"Expected {self.batch_size} indices, but got {len(idxs)}")
-            raise e
+        assert len(idxs) == self.batch_size, f"Expected {self.batch_size} indices, but got {len(idxs)} and the idxs shape is {idxs.shape}"
         
         self.b_idxs_obs = torch.as_tensor(idxs.reshape(
                 self.minibatch_rows, self.num_minibatches, self.bptt_horizon
