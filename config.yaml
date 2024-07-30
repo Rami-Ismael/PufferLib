@@ -986,7 +986,7 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
       weight_decay: 0.08
       optimizer: shrink_perturb_adam 
       beta1: 0.9
-      beta2: 0.97
+      beta2: 0.999
       eps: 1.0e-5
 
 
@@ -1022,16 +1022,6 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
               }
               weight_decay: {
                 "values": [0.0 , 0.1 , 0.5 , 0.01 , 0.08]
-              }
-              beta1: {
-                "distribution": "uniform", 
-                'min': 0.9 , 
-                "max": 0.95
-              }
-              beta2: { 
-                "distribution": "uniform" , 
-                "min": 0.75 , 
-                "max": 0.99
               }
               sigma: {
                 "values" : [0 , 0.1 , 0.01 , 0.001 , 0.001]
@@ -1075,6 +1065,16 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
               reward_for_using_bad_moves_coef: {
                 "distribution": "uniform", 
                 "min": 0 , 
+                "max": 1.0
+              }
+              reward_for_increasing_the_total_party_level: {
+                "distribution": "uniform",
+                "min": 0 ,
+                "max": 1.0
+              }
+              reward_for_knocking_out_wild_pokemon_by_battle_coef: {
+                "distribution": "uniform",
+                "min": 0 ,
                 "max": 1.0
               }
 

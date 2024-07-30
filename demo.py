@@ -265,7 +265,7 @@ def train(args, env_module, make_env):
                     print(f"The approx kl is {data.losses.approx_kl} and it should be greater than {approx_kl_has_to_be_greater_than}")
                     return False
                 elif data.losses.explained_variance < 0:
-                    print(f"The explained variance is {data.explained_variance} and it should be greater than 0")
+                    print(f"The explained variance is {data.losses.explained_variance} and it should be greater than 0")
                     return False
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 8:

@@ -31,22 +31,26 @@ def make(name, headless: bool = True, state_path=None ,
         negative_reward_for_wiping_out_coef = 1.0,
         negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef:float = 1.0 ,
         reward_for_using_bad_moves_coef:float =1.0 ,
+        reward_for_increasing_the_total_party_level:float = 1.0 ,
+        reward_for_knocking_out_wild_pokemon_by_battle_coef:float = 1.0 ,
         disable_wild_encounters:bool =  True,
          ):
     #print(f"The current diosplayin of interval divisor is {display_info_interval_divisor}")
     '''Pokemon Red'''
     env = Environment(headless=headless, 
-                      state_path=state_path , display_info_interval_divisor=display_info_interval_divisor , 
-                      max_episode_steps=max_episode_steps , 
-                      
-                      reward_for_explore_unique_coor_coef=reward_for_explore_unique_coor_coef ,
+                        state_path=state_path , 
+                        display_info_interval_divisor=display_info_interval_divisor , 
+                        max_episode_steps=max_episode_steps ,
+                        reward_for_explore_unique_coor_coef=reward_for_explore_unique_coor_coef ,
                         reward_for_increase_pokemon_level_coef=reward_for_increase_pokemon_level_coef , 
-                    random_starter_pokemon = random_starter_pokemon  , 
+                        random_starter_pokemon = random_starter_pokemon  , 
                         reward_for_entering_a_trainer_battle_coef = reward_for_entering_a_trainer_battle_coef , 
                         negative_reward_for_wiping_out_coef = negative_reward_for_wiping_out_coef,
                         negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef = negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef ,
                         reward_for_using_bad_moves_coef = reward_for_using_bad_moves_coef ,
                         disable_wild_encounters = disable_wild_encounters ,
+                        reward_for_knocking_out_wild_pokemon_by_battle_coef = reward_for_knocking_out_wild_pokemon_by_battle_coef ,
+                        reward_for_increasing_the_total_party_level = reward_for_increasing_the_total_party_level ,
                         )
     env = RenderWrapper(env)
     if EpisodeStats:
