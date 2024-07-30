@@ -135,6 +135,12 @@ def _nativize_tensor(
         slice = observation.narrow(1, offset, delta)
         # slice = slice.contiguous()
         # slice = compilable_cast(slice, dtype)
+        try:
+            # Change the data type of the slice tensor while preserving its shape
+            slice: torch.Tensor = slice.view(dtype)
+        except Exception as e:
+            print(f"Error casting {slice.dtype} to {dtype}")
+            raise e
         slice = slice.view(dtype)
         slice = slice.view(observation.shape[0], *shape)
         return slice
