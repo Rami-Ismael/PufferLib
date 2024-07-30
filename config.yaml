@@ -936,7 +936,7 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
       add_time: True
     env:
       display_info_interval_divisor: 512 
-      max_episode_steps: 8192  #2048 #4096 #8192 #16284 # 32568 #65136
+      max_episode_steps: 16284  #2048 #4096 #8192 #16284 # 32568 #65136
       EpisodeStats: False
       max_reward_clip: 1
       reward_for_increase_pokemon_level_coef: .25
