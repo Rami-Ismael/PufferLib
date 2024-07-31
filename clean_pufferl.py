@@ -85,7 +85,7 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
                                                    eps = config.eps)
         optimizer.train()
     elif config.optimizer == "Adam":
-        optimizer = torch.optim.Adam(policy.parameters(),
+        ioptimizer = torch.optim.Adam(policy.parameters(),
             lr=config.learning_rate, 
             eps = config.eps,
             betas=(config.beta1, config.beta2),
@@ -137,14 +137,16 @@ def evaluate(data):
 
         with profile.eval_misc:
             data.global_step += sum(mask)
-
-            o = torch.as_tensor(o)
+            try:
+                o = torch.as_tensor(o)
+            except Exception as e:
+                print(e)
+                print('Failed to convert to tensor. Continuing...')
             try:
                 o_device = o.to(config.device)
             except Exception as e:
                 print(e)
                 print('Failed to move to device. Continuing...')
-                break
             r = torch.as_tensor(r)
             d = torch.as_tensor(d)
 
