@@ -1079,9 +1079,12 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
                 "max": 1.0
               }
               level_up_reward_threshold: {
-                "distribution": "uniform",
-                min: 1 , 
+                "distribution": "int_uniform",
+                min: 2 , 
                 max: 10
+              }
+              max_episode_steps: {
+                "values": [ 4096 , 8192 , 16384]
               }
 
 
