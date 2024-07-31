@@ -169,13 +169,13 @@ def sweep(args, wandb_name, env_module, make_env):
             import traceback
             traceback.print_exc()
 
-    #wandb.agent(sweep_id, main, count=300)
-    wandb.agent(
-        sweep_id = "rxwnqt5i" , 
-        project = "pufferlib" , 
-        function = main,
-        count = 300
-    )
+    wandb.agent(sweep_id, main, count=300)
+    #wandb.agent(
+    #    sweep_id = "rxwnqt5i" , 
+    #    project = "pufferlib" , 
+    #    function = main,
+    #    count = 300
+    #)
     
 
 def train(args, env_module, make_env):
