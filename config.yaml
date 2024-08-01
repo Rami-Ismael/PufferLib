@@ -1055,7 +1055,7 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
               }
               negative_reward_for_wiping_out_coef: {
                 "distribution": "uniform" ,
-                "min": 0.05,
+                "min": 0.00,
                 "max": 1.0
               }
               negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: {
@@ -1084,7 +1084,7 @@ puffertank_pokemon_red_soft_shrink_and_perturb:
                 max: 10
               }
               max_episode_steps: {
-                "values": [ 4096 , 8192 , 16384]
+                "values": [ 2048, 4096]
               }
 
 
