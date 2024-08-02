@@ -1112,7 +1112,7 @@ puffertank_pokemon_red_stable_sf_adam:
       negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: .5
       reward_for_using_bad_moves_coef: 1.0
       disable_wild_encounters:  True
-      level_up_reward_threshold: 4
+      level_up_reward_threshold: 10
     train:
       compile: False
       compile_mode: "reduce-overhead"
@@ -1180,7 +1180,7 @@ puffertank_pokemon_red_stable_sf_adam:
                 "values": [ 8 , 16 , 32 , 64]
               }
               learning_rate: {
-                "values": [0.004 , 0.003 , 0.0005 , 0.0025 , 1.0e-4]
+                "values": [0.004 , 0.003 , 0.005 , 0.0005 , 0.0025 , 1.0e-4]
               }
               eps: {
                 "values": [1.0e-8 , 1.0e-6 , 1.0e-5 , 0.00015 , 0.015 ]
@@ -1204,6 +1204,12 @@ puffertank_pokemon_red_stable_sf_adam:
               ent_coef: {
                 "values" : [0 , 0.1 , 0.01]
               }
+              vf_clip_coef: {
+                "values": [ 0.2 , 0.3]
+              }
+              target_kl: {
+                "values" :[ .2 , .3]
+              }
           policy:
             parameters:
               mlp_depth: {
@@ -1216,7 +1222,7 @@ puffertank_pokemon_red_stable_sf_adam:
             parameters:
               reward_for_explore_unique_coor_coef: {
                 "distribution": "uniform",
-                "min":  0.17338864809426202,
+                "min":  0,
                 "max": 1.0
               }
               reward_for_entering_a_trainer_battle_coef: {
@@ -1248,11 +1254,6 @@ puffertank_pokemon_red_stable_sf_adam:
                 "distribution": "uniform",
                 "min": 0 ,
                 "max": 1.0
-              }
-              level_up_reward_threshold: {
-                "distribution": "int_uniform",
-                min: 3 , 
-                max: 10
               }
               max_episode_steps: {
                 "values": [ 2048, 4096 , 8192]
