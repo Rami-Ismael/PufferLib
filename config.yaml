@@ -1256,10 +1256,16 @@ puffertank_pokemon_red_stable_sf_adam:
                 "max": 1.0
               }
               max_episode_steps: {
-                "values": [ 2048, 4096 , 8192]
+                min: 2048 , 
+                max: 4096
               }
               max_reward_clip: {
                 "values": [ 1 , 2 , 4, 8 , 10]
+              }
+              reward_for_doing_new_events: {
+                "distribution": "uniform" , 
+                "min": 0 , 
+                "max": 1.0
               }
 
 

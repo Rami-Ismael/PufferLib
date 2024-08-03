@@ -33,6 +33,7 @@ def make(name, headless: bool = True, state_path=None ,
         reward_for_using_bad_moves_coef:float =1.0 ,
         reward_for_increasing_the_total_party_level:float = 1.0 ,
         reward_for_knocking_out_wild_pokemon_by_battle_coef:float = 1.0 ,
+        reward_for_doing_new_events:float = 1.0 ,
         level_up_reward_threshold:int = 4 , 
         disable_wild_encounters:bool =  True,
          ):
@@ -52,6 +53,7 @@ def make(name, headless: bool = True, state_path=None ,
                         disable_wild_encounters = disable_wild_encounters ,
                         level_up_reward_threshold = level_up_reward_threshold ,
                         reward_for_knocking_out_wild_pokemon_by_battle_coef = reward_for_knocking_out_wild_pokemon_by_battle_coef ,
+                        reward_for_doing_new_events = reward_for_doing_new_events ,
                         reward_for_increasing_the_total_party_level = reward_for_increasing_the_total_party_level ,
                         )
     env = RenderWrapper(env)
