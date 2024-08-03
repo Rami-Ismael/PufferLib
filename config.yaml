@@ -1114,13 +1114,13 @@ puffertank_pokemon_red_stable_sf_adam:
       disable_wild_encounters:  True
       level_up_reward_threshold: 10
     train:
-      compile: False
+      compile: True
       compile_mode: "reduce-overhead"
       seed: 1
       torch_deterministic: True
       cpu_offload: False
       device: cuda
-      total_timesteps: 16_777_216 #268_435_456
+      total_timesteps:  20_971_528 #268_435_456
       anneal_lr: False 
       gamma: 0.99
       gae_lambda: 0.7
