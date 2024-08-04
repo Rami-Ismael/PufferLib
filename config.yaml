@@ -1112,7 +1112,7 @@ puffertank_pokemon_red_stable_sf_adam:
       negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: .5
       reward_for_using_bad_moves_coef: 1.0
       disable_wild_encounters:  False
-      level_up_reward_threshold: 10
+      level_up_reward_threshold: 100
       multiple_exp_gain_by_n: 4
     train:
       compile: False
