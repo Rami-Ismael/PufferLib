@@ -35,6 +35,7 @@ def make(name, headless: bool = True, state_path=None ,
         reward_for_knocking_out_wild_pokemon_by_battle_coef:float = 1.0 ,
         reward_for_doing_new_events:float = 1.0 ,
         level_up_reward_threshold:int = 4 , 
+        multiple_exp_gain_by_n:int = 3 , 
         disable_wild_encounters:bool =  True,
          ):
     #print(f"The current diosplayin of interval divisor is {display_info_interval_divisor}")
@@ -54,6 +55,7 @@ def make(name, headless: bool = True, state_path=None ,
                         level_up_reward_threshold = level_up_reward_threshold ,
                         reward_for_knocking_out_wild_pokemon_by_battle_coef = reward_for_knocking_out_wild_pokemon_by_battle_coef ,
                         reward_for_doing_new_events = reward_for_doing_new_events ,
+                        multiple_exp_gain_by_n = multiple_exp_gain_by_n , 
                         reward_for_increasing_the_total_party_level = reward_for_increasing_the_total_party_level ,
                         )
     env = RenderWrapper(env)
