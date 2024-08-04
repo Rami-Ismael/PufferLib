@@ -1204,6 +1204,9 @@ puffertank_pokemon_red_stable_sf_adam:
               ent_coef: {
                 "values" : [0 , 0.1 , 0.01]
               }
+              clip_vloss: {
+                "values": [ True , False ]
+              }
               vf_clip_coef: {
                 "values": [ 0.2 , 0.3]
               }
