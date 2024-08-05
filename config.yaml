@@ -1115,7 +1115,7 @@ puffertank_pokemon_red_stable_sf_adam:
       level_up_reward_threshold: 10
       multiple_exp_gain_by_n: 10
     train:
-      compile: False
+      compile: True
       compile_mode: "reduce-overhead"
       seed: 1
       torch_deterministic: True
