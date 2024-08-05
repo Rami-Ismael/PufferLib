@@ -1115,7 +1115,7 @@ puffertank_pokemon_red_stable_sf_adam:
       level_up_reward_threshold: 10
       multiple_exp_gain_by_n: 10
     train:
-      compile: False
+      compile: True
       compile_mode: "reduce-overhead"
       seed: 1
       torch_deterministic: True
@@ -1205,14 +1205,11 @@ puffertank_pokemon_red_stable_sf_adam:
               ent_coef: {
                 "values" : [0 , 0.1 , 0.01]
               }
-              clip_vloss: {
-                "values": [ True , False ]
-              }
               vf_clip_coef: {
-                "values": [ 0.2 , 0.3]
+                "values": [ 0.2 , 0.3 , 0.4 , 0.5 , 0.6 , 0.7 , 0.8 , 0.9 , 1.0]
               }
               target_kl: {
-                "values" :[ .2 , .3]
+                "values" :[ .2 , .3 , .4 , .5 , .6 , .7 , .8 , .9 , 1.0]
               }
           policy:
             parameters:
