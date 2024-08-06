@@ -36,7 +36,7 @@ def make(name, headless: bool = True, state_path=None ,
         reward_for_doing_new_events:float = 1.0 ,
         level_up_reward_threshold:int = 4 , 
         multiple_exp_gain_by_n:int = 3 , 
-        reward_for_finding_higher_level_wild_pokemon_coef:float = 1.0 ,
+        reward_for_finding_higher_level_wild_pokemon_coef:float = 1.0 , 
         reward_for_finding_new_maps_coef:float = 1.0 ,
         disable_wild_encounters:bool =  True,
          ):
