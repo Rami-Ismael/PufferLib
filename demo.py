@@ -169,13 +169,13 @@ def sweep(args, wandb_name, env_module, make_env):
             import traceback
             traceback.print_exc()
 
-    #wandb.agent(sweep_id, main, count=300)
-    wandb.agent(
-        sweep_id = "71r72053" , 
-        project = "pufferlib" , 
-        function = main,
-        count = 300
-    )
+    wandb.agent(sweep_id, main, count=300)
+    #wandb.agent(
+    #    sweep_id = "71r72053" , 
+    #    project = "pufferlib" , 
+    #    function = main,
+    #    count = 300
+    #)
     
 
 def train(args, env_module, make_env):
@@ -270,7 +270,7 @@ def train(args, env_module, make_env):
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 8:
                 policy_loss_has_to_be_less_than = 0.00537556956987828
-                approx_kl_has_to_be_greater_than = 0.008041739416512428
+                approx_kl_has_to_be_greater_than = 0.007167667066823924
                 clipfrac_has_to_be_greater_than = 0.004302978515625
                 if data.losses.policy_loss > policy_loss_has_to_be_less_than :
                     print(f"The policy loss is {data.losses.policy_loss}")

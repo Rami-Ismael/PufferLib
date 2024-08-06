@@ -129,7 +129,7 @@ class Policy(nn.Module):
                 nn.ReLU(),
             )
         '''
-        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1349 + 16 + 4 + 8 + 12 + 4   )
+        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1349 + 16 + 4 + 8 + 12 + 4 + 4 )
             
         
         
@@ -243,6 +243,11 @@ class Policy(nn.Module):
             nn.LayerNorm(4),
             nn.ReLU()
         )
+        self.enemy_pokemon_move_max_pp_fc = nn.Sequential(
+            nn.Linear(1 , 4),
+            nn.LayerNorm(4),
+            nn.ReLU()
+        )
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)
         actions, value = self.decode_actions(hidden, lookup)
@@ -298,6 +303,7 @@ class Policy(nn.Module):
                     self.pokemon_move_power_fc(env_outputs["enemy_pokemon_move_power"].float()).squeeze(1) ,
                     self.current_enemey_pokemon_move_type_fc(self.embedding_pokemon_type(env_outputs["enemy_pokemon_move_type"].long()).squeeze(1)) , 
                     self.enemy_move_accuracy_fc(env_outputs["enemy_pokemon_move_accuracy"].float()).squeeze(1) ,
+                    self.enemy_pokemon_move_max_pp_fc(env_outputs["enemy_pokemon_move_max_pp"].float()).squeeze(1) ,
                     ]
             if self.embedd_the_x_and_y_coordinate:
                 elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))

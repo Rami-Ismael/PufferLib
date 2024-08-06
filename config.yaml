@@ -1170,7 +1170,7 @@ puffertank_pokemon_red_stable_sf_adam:
           type: hyperband
           min_iter: 8
           eta: 3
-          strict: False
+          strict: True
         # Nested parameters name required by WandB API
         parameters:
           train:
