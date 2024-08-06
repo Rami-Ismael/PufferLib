@@ -1115,7 +1115,7 @@ puffertank_pokemon_red_stable_sf_adam:
       level_up_reward_threshold: 10
       multiple_exp_gain_by_n: 10
     train:
-      compile: True
+      compile: False
       compile_mode: "reduce-overhead"
       seed: 1
       torch_deterministic: True
@@ -1184,7 +1184,7 @@ puffertank_pokemon_red_stable_sf_adam:
                 "values": [0.004 , 0.003 , 0.005 , 0.0005 , 0.0025 , 1.0e-4]
               }
               eps: {
-                "values": [1.0e-8 , 1.0e-6 , 1.0e-5 , 0.00015 , 0.015 ]
+                "values": [1.0e-8 , 1.0e-6 , 1.0e-5 ], 
               }
               weight_decay: {
                 "values": [0.0 , 0.1 , 0.5 , 0.01 , 0.08]
