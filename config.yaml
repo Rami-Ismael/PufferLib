@@ -1259,6 +1259,11 @@ puffertank_pokemon_red_stable_sf_adam:
                 "min": 0 ,
                 "max": 1.0
               }
+              reward_for_finding_new_maps_coef: {
+                "distribution": "uniform",
+                "min": 0 ,
+                "max": 1.0
+              }
               max_episode_steps: {
                 min: 2048 , 
                 max: 4096
