@@ -1261,7 +1261,12 @@ puffertank_pokemon_red_stable_sf_adam:
               }
               reward_for_finding_new_maps_coef: {
                 "distribution": "uniform",
-                "min": 0 ,
+                "min": 0.0 ,
+                "max": 1.0
+              }
+              reward_for_finding_higher_level_wild_pokemon_coef: {
+                "distribution": "uniform",
+                "min": 0.0 , 
                 "max": 1.0
               }
               max_episode_steps: {
