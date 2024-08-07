@@ -215,7 +215,7 @@ def train(args, env_module, make_env):
    
     if args.backend == 'clean_pufferl':
         data = clean_pufferl.create(train_config, vecenv, policy, wandb=args.wandb)
-
+        info = 0
         '''
         import time
         import torch
@@ -308,6 +308,20 @@ def train(args, env_module, make_env):
                     print(f"The explained variance is {data.losses.explained_variance} and it should be greater than {explain_variances_has_to_be_greater_than}")
                     return False
                 return True
+            try:
+                if data.stats is not None and  data.stats.keys() and data.epoch >= 40 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=670:
+                    return False
+                if data.stats is not None and  data.stats.keys() and data.epoch >= 40 and  data.stats["number_of_uniqiue_coordinate_it_explored"]>670:
+                    return False
+                if data.stats is not None and  data.stats.keys() and data.epoch >= 150 and  data.stats["number_of_uniqiue_coordinate_it_explored"]>1500:
+                    return False
+                if data.stats is not None and  data.stats.keys() and data.epoch >= 150 and  data.stats["number_of_uniqiue_coordinate_it_explored"]>1600:
+                    return False
+                if data.stats is not None and  data.stats.keys() and data.epoch >= 200 and  data.stats["number_of_uniqiue_coordinate_it_explored"]>1700:
+                    return False
+            except Exception as e:
+                print(f"The error is {e}")
+                T()
             return True
             
         while data.global_step < args.train.total_timesteps and early_stopping_base_on_ppo_loss_func(data):
