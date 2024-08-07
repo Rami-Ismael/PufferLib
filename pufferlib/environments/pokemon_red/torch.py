@@ -313,6 +313,7 @@ class Policy(nn.Module):
             return self.encode_linear(torch.cat(elements_to_concatenate, dim = -1)) , None
         except Exception as e:
             print(e)
+            print(f"This is the error in my code {e}")
             # Checks for each keys
             print(f"The type of env_outputs is {type(env_outputs)}")
             for key , value in env_outputs.items():
