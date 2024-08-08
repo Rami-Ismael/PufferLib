@@ -311,13 +311,13 @@ def train(args, env_module, make_env):
             try:
                 if data.stats is not None and  data.stats.keys() and data.epoch >= 40 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=670:
                     return False
-                if data.stats is not None and  data.stats.keys() and data.epoch >= 40 and  data.stats["number_of_uniqiue_coordinate_it_explored"]>670:
+                if data.stats is not None and  data.stats.keys() and data.epoch >= 40 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=670:
                     return False
-                if data.stats is not None and  data.stats.keys() and data.epoch >= 150 and  data.stats["number_of_uniqiue_coordinate_it_explored"]>1500:
+                if data.stats is not None and  data.stats.keys() and data.epoch >= 150 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1500:
                     return False
-                if data.stats is not None and  data.stats.keys() and data.epoch >= 150 and  data.stats["number_of_uniqiue_coordinate_it_explored"]>1600:
+                if data.stats is not None and  data.stats.keys() and data.epoch >= 150 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1600:
                     return False
-                if data.stats is not None and  data.stats.keys() and data.epoch >= 200 and  data.stats["number_of_uniqiue_coordinate_it_explored"]>1700:
+                if data.stats is not None and  data.stats.keys() and data.epoch >= 200 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1700:
                     return False
             except Exception as e:
                 print(f"The error is {e}")

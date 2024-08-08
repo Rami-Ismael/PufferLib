@@ -1202,7 +1202,7 @@ puffertank_pokemon_red_stable_sf_adam:
                 "max": .999
               }
               update_epochs: { 
-                "values": [ 2 , 4, 8 ]
+                "values": [ 2 , 4 ]
               }
               ent_coef: {
                 "values" : [0 , 0.1 , 0.01]
