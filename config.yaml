@@ -1115,6 +1115,8 @@ puffertank_pokemon_red_stable_sf_adam:
       level_up_reward_threshold: 10
       multiple_exp_gain_by_n: 10
       set_enemy_pokemon_damage_calcuation_to_zero: True
+      set_enemy_pokemon_accuracy_to_zero: True
+      add_random_moves_to_starter_pokemon: True
     train:
       compile: False
       compile_mode: "reduce-overhead"
@@ -1287,9 +1289,6 @@ puffertank_pokemon_red_stable_sf_adam:
                 "distribution": "uniform" , 
                 "min": 0 , 
                 "max": 2.0
-              }
-              random_starter_pokemon: {
-                "values" : [True , False]
               }
 
 

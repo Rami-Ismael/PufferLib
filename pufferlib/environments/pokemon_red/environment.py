@@ -40,6 +40,8 @@ def make(name, headless: bool = True, state_path=None ,
         reward_for_knocking_out_enemy_pokemon_in_trainer_party_coef:float = 1.0 , 
         reward_for_finding_new_maps_coef:float = 1.0 ,
         disable_wild_encounters:bool =  True,
+        set_enemy_pokemon_accuracy_to_zero = True , 
+        add_random_moves_to_starter_pokemon = True,
         set_enemy_pokemon_damage_calcuation_to_zero = True,
          ):
     #print(f"The current diosplayin of interval divisor is {display_info_interval_divisor}")
@@ -64,6 +66,8 @@ def make(name, headless: bool = True, state_path=None ,
                         reward_for_knocking_out_enemy_pokemon_in_trainer_party_coef = reward_for_knocking_out_enemy_pokemon_in_trainer_party_coef ,
                         reward_for_finding_higher_level_wild_pokemon_coef = reward_for_finding_higher_level_wild_pokemon_coef,
                         reward_for_increasing_the_total_party_level = reward_for_increasing_the_total_party_level ,
+                        set_enemy_pokemon_accuracy_to_zero = set_enemy_pokemon_accuracy_to_zero , 
+                        add_random_moves_to_starter_pokemon = add_random_moves_to_starter_pokemon, 
                         set_enemy_pokemon_damage_calcuation_to_zero  = set_enemy_pokemon_damage_calcuation_to_zero,
                         )
     env = RenderWrapper(env)
