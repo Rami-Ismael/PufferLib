@@ -130,7 +130,11 @@ def evaluate(data):
             assert len(mask) == len(o), "Mismatch between mask and observation lengths"
             assert isinstance(o, np.ndarray), "Observation is not a numpy array"
             assert isinstance(r, (float, np.ndarray)), "Reward is not a float or numpy array"
-            env_id = env_id.tolist()
+            try:
+                env_id = env_id.tolist()
+            except Exception as e:
+                print(e)
+                print(f"env_id type: {type(env_id)}")
             assert env_id, "env_id list is empty after conversion"
 
 
