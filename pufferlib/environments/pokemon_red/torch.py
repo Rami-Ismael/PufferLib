@@ -304,6 +304,7 @@ class Policy(nn.Module):
                     self.current_enemey_pokemon_move_type_fc(self.embedding_pokemon_type(env_outputs["enemy_pokemon_move_type"].long()).squeeze(1)) , 
                     self.enemy_move_accuracy_fc(env_outputs["enemy_pokemon_move_accuracy"].float()).squeeze(1) ,
                     self.enemy_pokemon_move_max_pp_fc(env_outputs["enemy_pokemon_move_max_pp"].float()).squeeze(1) ,
+                    self.pokemon_move_effect_id_embedding_fc(env_outputs["player_selected_move_effect"].long()).squeeze(1) ,
                     ]
             if self.embedd_the_x_and_y_coordinate:
                 elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))
