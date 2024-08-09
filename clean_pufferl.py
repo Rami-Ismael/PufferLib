@@ -592,7 +592,7 @@ class Utilization(Thread):
                 self.gpu_util.append(torch.cuda.utilization())
                 #free, total = torch.cuda.mem_get_info()
                 #free, total = torch.cuda.mem_get_info(device=0)
-                free , total = 0 , 0
+                free , total = 1 , 1
                 self.gpu_mem.append(free / total)
             time.sleep(self.delay)
 
