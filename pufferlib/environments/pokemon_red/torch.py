@@ -196,7 +196,7 @@ class Policy(nn.Module):
         )
         self.pokemon_party_move_id_embedding = nn.Embedding(255, round(1.6*255**.56), dtype=torch.float32)
         self.pokemon_move_effect_id_embedding_fc = nn.Sequential(
-            nn.Embedding(153, 16, dtype=torch.float32),
+            nn.Embedding(157, 16, dtype=torch.float32),
             nn.LayerNorm(16),
             nn.ReLU()
         )
