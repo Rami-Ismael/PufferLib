@@ -170,12 +170,12 @@ def sweep(args, wandb_name, env_module, make_env):
             import traceback
             traceback.print_exc()
 
-    #wandb.agent(sweep_id, main, count=300)
+    #wandb.agent(sweep_id, main, count=400)
     wandb.agent(
         sweep_id = "ajdb4yld" , 
         project = "pufferlib" , 
         function = main,
-        count = 300
+        count = 400
     )
     
 
