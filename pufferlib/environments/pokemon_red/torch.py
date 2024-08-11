@@ -264,64 +264,53 @@ class Policy(nn.Module):
             if add_embedding:
                 return self.coordinate_fc_x(env_outputs["x"]) ,  self.coordinate_fc_y(env_outputs["y"])
             return env_outputs["x"].float() // 444 , env_outputs["y"].float() // 436
-        try:
-            elements_to_concatenate = [
-                    self.screen_network(observations.float() / 255.0).squeeze(1) ,
-                    self.visited_and_global_mask( torch.cat( (env_outputs["visited_mask"].permute(0, 3, 1, 2).float() , env_outputs["global_map"].permute(0, 3, 1, 2).float() ) , dim = -1) ).squeeze(1),
-                    self.map_id_embedding(env_outputs["map_id"].long()).squeeze(1), 
-                    self.map_music_sound_bank_embeddings(env_outputs["map_music_sound_bank"].long()).squeeze(1) , 
-                    env_outputs["party_size"].float() / 6.0,
-                    env_outputs["each_pokemon_level"].float() / 100.0,
-                    env_outputs["total_party_level"].float() / 600.0  , 
-                    env_outputs["number_of_turns_in_current_battle"].float() / 255.0 , 
-                    env_outputs["total_party_level"].float() / env_outputs["party_size"].float() , # average level of party
-                    env_outputs["each_pokemon_health_points"].float() , # average health of party
-                    env_outputs["each_pokemon_max_health_points"].float() / 703.0 ,  # https://github.com/xinpw8/pokegym/blob/a8b75e4ad2694461f661acf5894d498b69d1a3fa/pokegym/bin/ram_reader/red_ram_api.py#L752
-                    self.battle_stats_embedding(env_outputs["battle_stats"].long()).squeeze(1),
-                    self.battle_results_embedding(env_outputs["battle_result"].long()).squeeze(1),
-                    env_outputs["total_number_of_items"].float() / 64.0,
-                    env_outputs["money"].float() / 999999.0,
-                    self.selected_move_id(env_outputs["player_selected_move_id"].long()).squeeze(1),
-                    self.selected_move_id(env_outputs["enemy_selected_move_id"].long()).squeeze(1) , 
-                    self.map_music_sound_id_emebedding(env_outputs["map_music_sound_id"].long()).squeeze(1) , 
-                    env_outputs["player_xp"].float() , 
-                    env_outputs["total_party_max_hit_points"].float() , 
-                    self.total_pokemon_seen_fc(env_outputs["total_pokemon_seen"].long()).squeeze(1) ,
-                    self.pokemon_seen_fc(env_outputs["pokemon_seen_in_the_pokedex"].float() / 255.0).squeeze(1) , 
-                    self.pokemon_caught_fc(env_outputs["byte_representation_of_caught_pokemon_in_the_pokedex"].float() / 255.0).squeeze(1) ,
-                    self.pokemon_low_health_alarm(env_outputs["low_health_alarm"].float() / 255.0).squeeze(1) ,
-                    self.oppoents_pokemon_levels(env_outputs["opponent_pokemon_levels"].float()/ 100.0).squeeze(1) ,
-                    env_outputs["enemy_trainer_pokemon_hp"].float() / 705.0,
-                    env_outputs["enemy_pokemon_hp"].float() / 705.0,
-                    env_outputs["x"].float() // 444 ,
-                    env_outputs["y"].float() // 436 , 
-                    self.each_pokemon_pp_fc(env_outputs["each_pokemon_pp"].float() / 40.0),
-                    self.enemy_monster_pokemon_actaully_catch_rate_fc(env_outputs["enemy_monster_actually_catch_rate"]).squeeze(1) ,
-                    self.player_current_monster_or_pokemon_stats_modifiers( torch.stack( [ env_outputs["player_current_monster_stats_modifier_attack"] , env_outputs["player_current_monster_stats_modifier_defense"] , env_outputs["player_current_monster_stats_modifier_speed"] , env_outputs["player_current_monster_stats_modifier_special"] , env_outputs["player_current_monster_stats_modifier_accuracy"] ] , dim = -1 ) ).squeeze(1) , 
-                    self.map_id_embedding(env_outputs["last_black_out_map_id"].long()).squeeze(1) ,
-                    self.pokemon_move_effect_id_embedding_fc(env_outputs["enemy_current_move_effect"].long()).squeeze(1) ,
-                    self.pokemon_move_power_fc(env_outputs["enemy_pokemon_move_power"].float()).squeeze(1) ,
-                    self.current_enemey_pokemon_move_type_fc(self.embedding_pokemon_type(env_outputs["enemy_pokemon_move_type"].long()).squeeze(1)) , 
-                    self.enemy_move_accuracy_fc(env_outputs["enemy_pokemon_move_accuracy"].float()).squeeze(1) ,
-                    self.enemy_pokemon_move_max_pp_fc(env_outputs["enemy_pokemon_move_max_pp"].float()).squeeze(1) ,
-                    self.pokemon_move_effect_id_embedding_fc(env_outputs["player_selected_move_effect"].long()).squeeze(1) ,
-                    ]
-            if self.embedd_the_x_and_y_coordinate:
-                elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))
-                elements_to_concatenate.append( self.coordinate_fc_y(env_outputs["y"].int()).squeeze(1))
-            if self.add_time:
-                elements_to_concatenate.append(self.fc_time(env_outputs["time"]))
-            return self.encode_linear(torch.cat(elements_to_concatenate, dim = -1)) , None
-        except Exception as e:
-            print(e)
-            print(f"This is the error in my code {e}")
-            # Checks for each keys
-            print(f"The type of env_outputs is {type(env_outputs)}")
-            for key , value in env_outputs.items():
-                print(f"The type of {key} is {type(value)}")
-                print(f"The shape of {key} is {value.shape}")
-                print(f"The value of {key} is {value.shape}")
-            pdb.set_trace()
+        elements_to_concatenate = [
+                self.screen_network(observations.float() / 255.0).squeeze(1) ,
+                self.visited_and_global_mask( torch.cat( (env_outputs["visited_mask"].permute(0, 3, 1, 2).float() , env_outputs["global_map"].permute(0, 3, 1, 2).float() ) , dim = -1) ).squeeze(1),
+                self.map_id_embedding(env_outputs["map_id"].long()).squeeze(1), 
+                self.map_music_sound_bank_embeddings(env_outputs["map_music_sound_bank"].long()).squeeze(1) , 
+                env_outputs["party_size"].float() / 6.0,
+                env_outputs["each_pokemon_level"].float() / 100.0,
+                env_outputs["total_party_level"].float() / 600.0  , 
+                env_outputs["number_of_turns_in_current_battle"].float() / 255.0 , 
+                env_outputs["total_party_level"].float() / env_outputs["party_size"].float() , # average level of party
+                env_outputs["each_pokemon_health_points"].float() , # average health of party
+                env_outputs["each_pokemon_max_health_points"].float() / 703.0 ,  # https://github.com/xinpw8/pokegym/blob/a8b75e4ad2694461f661acf5894d498b69d1a3fa/pokegym/bin/ram_reader/red_ram_api.py#L752
+                self.battle_stats_embedding(env_outputs["battle_stats"].long()).squeeze(1),
+                self.battle_results_embedding(env_outputs["battle_result"].long()).squeeze(1),
+                env_outputs["total_number_of_items"].float() / 64.0,
+                env_outputs["money"].float() / 999999.0,
+                self.selected_move_id(env_outputs["player_selected_move_id"].long()).squeeze(1),
+                self.selected_move_id(env_outputs["enemy_selected_move_id"].long()).squeeze(1) , 
+                self.map_music_sound_id_emebedding(env_outputs["map_music_sound_id"].long()).squeeze(1) , 
+                env_outputs["player_xp"].float() , 
+                env_outputs["total_party_max_hit_points"].float() , 
+                self.total_pokemon_seen_fc(env_outputs["total_pokemon_seen"].long()).squeeze(1) ,
+                self.pokemon_seen_fc(env_outputs["pokemon_seen_in_the_pokedex"].float() / 255.0).squeeze(1) , 
+                self.pokemon_caught_fc(env_outputs["byte_representation_of_caught_pokemon_in_the_pokedex"].float() / 255.0).squeeze(1) ,
+                self.pokemon_low_health_alarm(env_outputs["low_health_alarm"].float() / 255.0).squeeze(1) ,
+                self.oppoents_pokemon_levels(env_outputs["opponent_pokemon_levels"].float()/ 100.0).squeeze(1) ,
+                env_outputs["enemy_trainer_pokemon_hp"].float() / 705.0,
+                env_outputs["enemy_pokemon_hp"].float() / 705.0,
+                env_outputs["x"].float() // 444 ,
+                env_outputs["y"].float() // 436 , 
+                self.each_pokemon_pp_fc(env_outputs["each_pokemon_pp"].float() / 40.0),
+                self.enemy_monster_pokemon_actaully_catch_rate_fc(env_outputs["enemy_monster_actually_catch_rate"]).squeeze(1) ,
+                self.player_current_monster_or_pokemon_stats_modifiers( torch.stack( [ env_outputs["player_current_monster_stats_modifier_attack"] , env_outputs["player_current_monster_stats_modifier_defense"] , env_outputs["player_current_monster_stats_modifier_speed"] , env_outputs["player_current_monster_stats_modifier_special"] , env_outputs["player_current_monster_stats_modifier_accuracy"] ] , dim = -1 ) ).squeeze(1) , 
+                self.map_id_embedding(env_outputs["last_black_out_map_id"].long()).squeeze(1) ,
+                self.pokemon_move_effect_id_embedding_fc(env_outputs["enemy_current_move_effect"].long()).squeeze(1) ,
+                self.pokemon_move_power_fc(env_outputs["enemy_pokemon_move_power"].float()).squeeze(1) ,
+                self.current_enemey_pokemon_move_type_fc(self.embedding_pokemon_type(env_outputs["enemy_pokemon_move_type"].long()).squeeze(1)) , 
+                self.enemy_move_accuracy_fc(env_outputs["enemy_pokemon_move_accuracy"].float()).squeeze(1) ,
+                self.enemy_pokemon_move_max_pp_fc(env_outputs["enemy_pokemon_move_max_pp"].float()).squeeze(1) ,
+                self.pokemon_move_effect_id_embedding_fc(env_outputs["player_selected_move_effect"].long()).squeeze(1) ,
+                ]
+        if self.embedd_the_x_and_y_coordinate:
+            elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))
+            elements_to_concatenate.append( self.coordinate_fc_y(env_outputs["y"].int()).squeeze(1))
+        if self.add_time:
+            elements_to_concatenate.append(self.fc_time(env_outputs["time"]))
+        return self.encode_linear(torch.cat(elements_to_concatenate, dim = -1)) , None
 
     def decode_actions(self, flat_hidden, lookup, concat=None):
         action = self.actor(flat_hidden)
