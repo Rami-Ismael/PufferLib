@@ -134,7 +134,7 @@ class Policy(nn.Module):
         
         
         self.selected_move_id =  nn.Embedding(
-            166 , 
+            256 , 
             8 , 
             dtype=torch.float32)
         self.map_music_sound_id_emebedding = nn.Embedding(76, 16, dtype=torch.float32)
