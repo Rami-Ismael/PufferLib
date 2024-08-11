@@ -1127,6 +1127,206 @@ puffertank_pokemon_red_stable_sf_adam:
       total_timesteps:  20_971_528 #268_435_456
       anneal_lr: False 
       gamma: 0.99
+      gae_lambda: 0.95
+      update_epochs: 4
+      norm_adv: True
+      clip_coef: 0.2
+      ent_coef: 0.1
+      clip_vloss: True
+      vf_clip_coef: .75
+      vf_coef: 0.5
+      max_grad_norm: 0.5
+      target_kl: .3
+      num_envs: 768
+      num_workers: 24
+      batch_size: 65_536 
+      zero_copy: True
+      env_batch_size: 256
+      env_pool: True
+
+      save_checkpoint: False
+      pool_kernel: [0]
+
+
+      minibatch_size: 16384  # if not set it will be 2048
+
+
+      learning_rate: 0.0025
+      weight_decay: 0.08
+      optimizer: Stable_AdamWScheduleFree 
+      beta1: 0.9
+      beta2: 0.999
+      eps: 1.0e-8
+
+
+
+
+      #batch_rows: 512
+      bptt_horizon: 16
+    sweep:
+        method: bayes
+        name: sweep
+        metric:
+          goal: maximize
+          name: environment/number_of_uniqiue_coordinate_it_explored
+        early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
+          type: hyperband
+          min_iter: 2
+          eta: 3
+          strict: True
+        # Nested parameters name required by WandB API
+        parameters:
+          train:
+            parameters:
+              gae_lambda: {
+                "values": [ .8 , .9 , .95]
+              }
+              bptt_horizon: {
+                "values": [ 8 , 16 , 32 , 64]
+              }
+              learning_rate: {
+                "values": [0.004 , 0.003 , 0.005 , 0.0005 , 0.0025 , 1.0e-4]
+              }
+              weight_decay: {
+                "values": [0.0 , 0.1 , 0.5 , 0.01 , 0.08]
+              }
+              beta1: {
+                "distribution": "uniform" , 
+                "min": .9 ,
+                "max" : .999
+              }
+              beta2: {
+                "distribution": "uniform" ,
+                "min": .75 , 
+                "max": .999
+              }
+              update_epochs: { 
+                "values": [ 2 , 4 ]
+              }
+              ent_coef: {
+                "values" : [0 , 0.1 , 0.01]
+              }
+              vf_clip_coef: {
+                "values": [ 0.2 , 0.3 , 0.4 , 0.5 , 0.6 , 0.7 , 0.8 , 0.9 , 1.0]
+              }
+              target_kl: {
+                "values" :[ .2 , .3 , .4 , .5 , .6 , .7 , .8 , .9 , 1.0]
+              }
+              gamma: {
+                "values": [0.98 , 0.99 , 0.995 , 0.999 , 0.9995]
+              }
+          policy:
+            parameters:
+              mlp_depth: {
+               "values": [ 1 , 2 , 3 ]
+              }
+              mlp_width: {
+                "values": [ 256 , 512 , 1024]
+              }
+          env:
+            parameters:
+              reward_for_explore_unique_coor_coef: {
+                "distribution": "uniform",
+                "min":  0,
+                "max": 1.0
+              }
+              reward_for_entering_a_trainer_battle_coef: {
+                "distribution": "uniform" , 
+                "min": 0.0,
+                "max": 1.0
+              }
+              negative_reward_for_wiping_out_coef: {
+                "distribution": "uniform" ,
+                "min": 0.00,
+                "max": 1.0
+              }
+              negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: {
+                "distribution": "uniform" , 
+                "min": 0  , 
+                "max": 1.0
+              }
+              reward_for_using_bad_moves_coef: {
+                "distribution": "uniform", 
+                "min": 0 , 
+                "max": 1.0
+              }
+              reward_for_increasing_the_total_party_level: {
+                "distribution": "uniform",
+                "min": 0 ,
+                "max": 1.0
+              }
+              reward_for_knocking_out_wild_pokemon_by_battle_coef: {
+                "distribution": "uniform",
+                "min": 0 ,
+                "max": 1.0
+              }
+              reward_for_finding_new_maps_coef: {
+                "distribution": "uniform",
+                "min": 0.0 ,
+                "max": 1.0
+              }
+              reward_for_finding_higher_level_wild_pokemon_coef: {
+                "distribution": "uniform",
+                "min": 0.0 , 
+                "max": 1.0
+              }
+              max_episode_steps: {
+                min: 2048 , 
+                max: 4096
+              }
+              reward_for_knocking_out_enemy_pokemon_in_trainer_party_coef: {
+                "distribution": "uniform",
+                "min": 0.0 ,
+                "max": 1.0
+              }
+              max_reward_clip: {
+                "values": [ 1 , 2 , 4, 8 , 10]
+              }
+              reward_for_doing_new_events: {
+                "distribution": "uniform" , 
+                "min": 0 , 
+                "max": 1.0
+              }
+
+          
+puffertank_pokemon_red_adam:
+    package: pokemon_red
+    use_rnn: True
+    policy:
+      mlp_width: 1024
+      mlp_depth: 3
+      embedd_the_x_and_y_coordinate: True
+      dense_act_func: "ReLU"
+      add_time: True
+    env:
+      display_info_interval_divisor: 512 
+      max_episode_steps: 16284  #2048 #4096 #8192 #16284 # 32568 #65136
+      EpisodeStats: False
+      max_reward_clip: 1
+      reward_for_increase_pokemon_level_coef: .25
+      reward_for_explore_unique_coor_coef: .5
+      reward_for_increasing_the_highest_pokemon_level_in_the_team_by_battle_coef: 1
+      reward_for_entering_a_trainer_battle_coef: 1
+      random_starter_pokemon: False
+      negative_reward_for_wiping_out_coef: .5
+      negative_reward_for_entering_a_trainer_battle_lower_total_pokemon_level_coef: .5
+      reward_for_using_bad_moves_coef: 1.0
+      disable_wild_encounters:  True
+      level_up_reward_threshold: 10
+      multiple_exp_gain_by_n: 10
+      set_enemy_pokemon_damage_calcuation_to_zero: True
+      set_enemy_pokemon_accuracy_to_zero: True
+      add_random_moves_to_starter_pokemon: True
+    train:
+      compile: True
+      compile_mode: "reduce-overhead"
+      seed: 1
+      torch_deterministic: True
+      cpu_offload: False
+      device: cuda
+      total_timesteps:  20_971_528 #268_435_456
+      anneal_lr: False 
+      gamma: 0.99
       gae_lambda: 0.7
       update_epochs: 16
       norm_adv: True
@@ -1153,7 +1353,7 @@ puffertank_pokemon_red_stable_sf_adam:
 
       learning_rate: 0.0025
       weight_decay: 0.08
-      optimizer: Stable_AdamWScheduleFree 
+      optimizer: Adam 
       beta1: 0.9
       beta2: 0.999
       eps: 1.0e-5
@@ -1288,9 +1488,8 @@ puffertank_pokemon_red_stable_sf_adam:
               reward_for_doing_new_events: {
                 "distribution": "uniform" , 
                 "min": 0 , 
-                "max": 2.0
+                "max": 1.0
               }
-
 
 links_awaken:
   package: links_awaken
