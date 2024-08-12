@@ -248,7 +248,7 @@ def train(args, env_module, make_env):
                     return False
                 return   ( data.losses.value_loss >= value_loss_has_to_be_greater_than or data.losses.value_loss == 0.00) and  ( data.losses.approx_kl <= approx_kl_has_to_be_less_than or data.losses.approx_kl == 0.00) and ( data.losses.clipfrac >= clip_frac_has_to_be_greater_than or data.losses.clipfrac == 0.00)
             if train_config.update_epochs == 4:
-                policy_loss_has_to_be_less_than = 0.012942150118760765
+                policy_loss_has_to_be_less_than = 0.019811158068478107
                 value_loss_has_to_be_greater_than = 0.00081819975093822
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
@@ -315,8 +315,10 @@ def train(args, env_module, make_env):
                 if data.stats is not None and  data.stats.keys() and data.epoch >= 40 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=670:
                     return False
                 if data.stats is not None and  data.stats.keys() and data.epoch >= 150 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1400:
+                    print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be greater than {1400}")
                     return False
                 if data.stats is not None and  data.stats.keys() and data.epoch >= 200 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1700:
+                    print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be greater than {1700}")
                     return False
             except Exception as e:
                 print(f"The error is {e}")
