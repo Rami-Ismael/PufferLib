@@ -1271,8 +1271,8 @@ puffertank_pokemon_red_stable_sf_adam:
                 "max": 1.0
               }
               max_episode_steps: {
-                min: 2048 , 
-                max: 4098 , 
+                min: 4096 , 
+                max: 16384 , 
               }
               reward_for_knocking_out_enemy_pokemon_in_trainer_party_coef: {
                 "distribution": "uniform",
