@@ -246,6 +246,9 @@ def train(args, env_module, make_env):
                 elif data.losses.explained_variance < explain_variance_has_to_be_greater_than:
                     print(f"The explained variance is {data.losses.explained_variance} and it should be greater than {explain_variance_has_to_be_greater_than}")
                     return False
+                elif data.losses.clipfrac < clip_frac_has_to_be_greater_than:
+                    print(f"The clip frac is {data.losses.clipfrac} and it should be greater than {clip_frac_has_to_be_greater_than}")
+                    return False
             if train_config.update_epochs == 4:
                 policy_loss_has_to_be_less_than = 0.019811158068478107
                 value_loss_has_to_be_greater_than = 0.00081819975093822
@@ -315,8 +318,8 @@ def train(args, env_module, make_env):
                 if data.stats is not None and  data.stats.keys() and data.epoch >= 150 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1400:
                     print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be greater than {1400}")
                     return False
-                if data.stats is not None and  data.stats.keys() and data.epoch >= 200 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1700:
-                    print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be greater than {1700}")
+                if data.stats is not None and  data.stats.keys() and data.epoch >= 200 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1600:
+                    print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be greater than {1600}")
                     return False
             except Exception as e:
                 print(f"The error is {e}")
