@@ -246,7 +246,7 @@ def train(args, env_module, make_env):
                 elif data.losses.explained_variance < explain_variance_has_to_be_greater_than:
                     print(f"The explained variance is {data.losses.explained_variance} and it should be greater than {explain_variance_has_to_be_greater_than}")
                     return False
-                elif data.losses.clipgrac !=0 and data.losses.clipfrac < clip_frac_has_to_be_greater_than:
+                elif data.losses.clipfrac !=0 and data.losses.clipfrac < clip_frac_has_to_be_greater_than:
                     print(f"The clip frac is {data.losses.clipfrac} and it should be greater than {clip_frac_has_to_be_greater_than}")
                     return False
             if train_config.update_epochs == 4:
