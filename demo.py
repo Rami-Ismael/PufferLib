@@ -320,8 +320,8 @@ def train(args, env_module, make_env):
                 if data.stats is not None and  data.stats.keys() and data.epoch >= 200 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1600:
                     print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be greater than {1600}")
                     return False
-                if data.stats is not None and  data.stats.keys() and  data.epoch * 10 <= data.stats["number_of_uniqiue_coordinate_it_explored"]:
-                    print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be less than {data.epoch * 10}")
+                if data.stats is not None and  data.stats.keys() and  data.epoch * 10 > data.stats["number_of_uniqiue_coordinate_it_explored"]:
+                    print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be greater than {data.epoch * 10}")
                     return False
             except Exception as e:
                 print(f"The error is {e}")
