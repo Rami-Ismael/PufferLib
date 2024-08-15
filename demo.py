@@ -170,13 +170,13 @@ def sweep(args, wandb_name, env_module, make_env):
             import traceback
             traceback.print_exc()
 
-    #wandb.agent(sweep_id, main, count=400)
-    wandb.agent(
-        sweep_id = "gtjtdmy1" , 
-        project = "pufferlib" , 
-        function = main,
-        count = 400
-    )
+    wandb.agent(sweep_id, main, count=400)
+    #wandb.agent(
+    #    sweep_id = "gtjtdmy1" , 
+    #    project = "pufferlib" , 
+    #    function = main,
+    #    count = 400
+    #)
     
 
 def train(args, env_module, make_env):
@@ -312,14 +312,16 @@ def train(args, env_module, make_env):
                 return True
             try:
                 if data.stats is not None and  data.stats.keys() and data.epoch >= 40 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=670:
-                    return False
-                if data.stats is not None and  data.stats.keys() and data.epoch >= 40 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=670:
+                    print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be greater than {670}")
                     return False
                 if data.stats is not None and  data.stats.keys() and data.epoch >= 150 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1400:
                     print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be greater than {1400}")
                     return False
                 if data.stats is not None and  data.stats.keys() and data.epoch >= 200 and  data.stats["number_of_uniqiue_coordinate_it_explored"]<=1600:
                     print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be greater than {1600}")
+                    return False
+                if data.stats is not None and  data.stats.keys() and  data.epoch * 10 <= data.stats["number_of_uniqiue_coordinate_it_explored"]:
+                    print(f"The number of unique coordinate it explored is {data.stats['number_of_uniqiue_coordinate_it_explored']} and it should be less than {data.epoch * 10}")
                     return False
             except Exception as e:
                 print(f"The error is {e}")
