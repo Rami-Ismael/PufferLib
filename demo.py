@@ -156,6 +156,9 @@ def sweep(args, wandb_name, env_module, make_env):
             if args.policy.__dict__:
                 args.policy.__dict__.update(dict(wandb.config.policy))
                 pprint(f"The new configuration of policy is {args.policy.__dict__}")
+            if args.rnn.__dict__:
+                args.rnn.__dict__.update(dict(wandb.config.rnn))
+                pprint(f"The new configuration of rnn is {args.rnn.__dict__}")
             if args.env.__dict__:
                 try:
                     args.env.__dict__.update(dict(wandb.config.env))
