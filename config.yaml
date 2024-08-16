@@ -738,10 +738,14 @@ pokegym:
   package: pokemon_red
 pokedebug:
   package: pokemon_red
+  use_rnn: True
   policy:
     mlp_width: 256
     mlp_depth: 1
     add_time: True
+  rnn:
+    hidden_size: 512
+    input_size: 512
   train:
     num_envs: 4
     num_workers: 4
@@ -764,6 +768,21 @@ pokedebug:
     clip_weight_value: 1.0
     clip_last_layer: True
     sigma: .01
+  sweep:
+    method: random
+    name: sweep
+    metric: 
+      name: environment/number_of_uniqiue_coordinate_it_explored
+      goal: maximize
+    parameters:
+      rnn:
+        parameters:
+          hidden_size: {
+            'values': [128, 256]
+          } 
+
+
+
   env:
     random_starter_pokemon: False
     max_episode_steps: 65136 #2048 #4096 #8192 #16284 # 32568 #65136
@@ -1163,6 +1182,9 @@ puffertank_pokemon_red_stable_sf_adam:
 
       #batch_rows: 512
       bptt_horizon: 16
+    rnn:
+      hidden_size: 512
+      input_size: 512
     sweep:
         method: bayes
         name: sweep
@@ -1295,7 +1317,10 @@ puffertank_pokemon_red_stable_sf_adam:
                 "min": 0.0 ,
                 "max": 1.0
               }
-
+          rnn:
+            hidden_size: {
+              "values": [ 256 , 512 , 1024 , 2048]
+            }
           
 puffertank_pokemon_red_adam:
     package: pokemon_red

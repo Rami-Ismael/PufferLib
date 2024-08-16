@@ -11,7 +11,7 @@ torch._dynamo.config.suppress_errors = True
 
 class Recurrent(pufferlib.models.LSTMWrapper):
     def __init__(self, env, policy,
-            input_size=512, hidden_size=512, num_layers=1):
+            input_size=512, hidden_size=1024, num_layers=1):
         super().__init__(env, policy,
             input_size, hidden_size, num_layers)
 class ResnetBlock(torch.nn.Module):
@@ -80,7 +80,7 @@ def crete_mlp(dense_act_func: str = "ReLU", mlp_width:int = 512, mlp_depth:int =
 
 class Policy(nn.Module):
     def __init__(self, env, *args,
-            input_size=512, hidden_size=512, output_size=512,
+            input_size=512, hidden_size=512, output_size=1024,
             channels_last=False, downsample=1, 
             mlp_width = 512,
             mlp_depth = 3 , 
@@ -140,7 +140,7 @@ class Policy(nn.Module):
         self.map_music_sound_id_emebedding = nn.Embedding(76, 16, dtype=torch.float32)
         
         self.actor = pufferlib.pytorch.layer_init(
-            nn.Linear(hidden_size, env.single_action_space.n), std=0.01)
+            nn.Linear(output_size, env.single_action_space.n), std=0.01)
         self.value_fn = pufferlib.pytorch.layer_init(
             nn.Linear(output_size, 1), std=1)
         

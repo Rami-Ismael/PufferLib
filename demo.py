@@ -126,7 +126,7 @@ def init_wandb(args, name, id=None, resume=True):
             'cleanrl': dict(args.train),
             'env': dict(args.env),
             'policy': dict(args.policy),
-            #'recurrent': args.recurrent,
+            'recurrent': dict(args.rnn),
         },
         name=name,
         monitor_gym=True,
@@ -138,40 +138,54 @@ def init_wandb(args, name, id=None, resume=True):
 def sweep(args, wandb_name, env_module, make_env):
     import wandb
     wandb.require("core")
-    try:
-        sweep_id = wandb.sweep(
-            sweep=dict(args.sweep),
-            project="pufferlib",
-        )
-    except Exception as e:
-        print(f"The sweep is {args.sweep}")
+    
+    sweep_id = wandb.sweep(
+        sweep = dict(args.sweep),
+        project = "pufferlib"
+    )
+    
     print(f"The sweep id is {sweep_id}")
-    print(f"The sweep args is {args}")
+    print(f"The args sweeps is")
+    pprint(args.sweep , expand_all = True)
+    print(f"The new dictionary of the sweep is")
+    pprint(dict(args.sweep) , expand_all = True)
+    
     def main():
-        try:
-            args.exp_name = init_wandb(args, wandb_name, id=args.exp_id)
-            # TODO: Add update method to namespace
-            pprint(wandb.config.train)
+        args.exp_name = init_wandb(args, wandb_name, id=args.exp_id)
+        print(f"The new Weight and Bias Configuration")
+        print(f'The datatype of the wandb.config is {type(wandb.config)}')
+        pprint(dict(wandb.config) , expand_all = True) # There shold be a rnn key inside of the aciton inside of the things 
+        
+        print("The arguments of the configuration")
+        pprint(dict(args) , expand_all = True)
+        
+        if "train" in wandb.config and wandb.config.train:
             args.train.__dict__.update(dict(wandb.config.train))
-            if args.policy.__dict__:
-                args.policy.__dict__.update(dict(wandb.config.policy))
-                pprint(f"The new configuration of policy is {args.policy.__dict__}")
-            if args.rnn.__dict__:
-                args.rnn.__dict__.update(dict(wandb.config.rnn))
-                pprint(f"The new configuration of rnn is {args.rnn.__dict__}")
-            if args.env.__dict__:
-                try:
-                    args.env.__dict__.update(dict(wandb.config.env))
-                    pprint(f"The new configuration of env is {args.env.__dict__}")
-                except Exception as e:
-                    print(f"The error is {e}")
-                    pprint(f"What is the config of the env {wandb.config.env}")
-                    pprint(f"What is the args.env__dict__ {args.env.__dict__}")
-            args.track = True
-            train(args, env_module, make_env)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
+            print(f"The new configuration of the train")
+            pprint(args.train.__dict__ , expand_all = True)
+        if "policy" in wandb.config and wandb.config.policy:
+            args.policy.__dict__.update(dict(wandb.config.policy))
+            if args.use_rnn:
+                #args.policy.outtput_size = wandb.config.recurrent["hidden_size"]
+                args.policy.__dict__["output_size"] = wandb.config.rnn["hidden_size"]
+            print(f"The new configuration of the new policy is because of the sweep")
+            pprint(args.policy.__dict__ , expand_all = True)
+        if "rnn" in wandb.config and wandb.config.rnn:
+            print(f"What are the values of the recurrent config") 
+            pprint("{wandb.config.recurrent}")
+            args.rnn.__dict__.update(dict(wandb.config.rnn))
+            print(f"The new configuration of rnn after the sweep")
+            pprint(args.rnn.__dict__ , expand_all = True)
+        if args.env.__dict__:
+            try:
+                args.env.__dict__.update(dict(wandb.config.env))
+                pprint(f"The new configuration of env is {args.env.__dict__}")
+            except Exception as e:
+                print(f"The error is {e}")
+                pprint(f"What is the config of the env {wandb.config.env}")
+                pprint(f"What is the args.env__dict__ {args.env.__dict__}")
+        args.track = True
+        train(args, env_module, make_env)
 
     wandb.agent(sweep_id, main, count=400)
     #wandb.agent(
@@ -180,6 +194,23 @@ def sweep(args, wandb_name, env_module, make_env):
     #    function = main,
     #    count = 400
     #)
+def sweep_x( args , wandb_name , env_module , make_env ):
+    import wandb
+    wandb.require("core")
+    
+    sweep_id = wandb.sweep(
+        sweep = dict(args.sweep),
+        project = "pufferlib"
+    )
+    
+    print(f"The sweep id is {sweep_id}")
+    print(f"The args sweeps is")
+    pprint(args.sweep , expand_all = True)
+    print(f"The new dictionary of the sweep is")
+    pprint(dict(args.sweep) , expand_all = True)
+    
+        
+    
     
 
 def train(args, env_module, make_env):
@@ -388,7 +419,7 @@ if __name__ == '__main__':
     wandb_name, pkg, args, env_module, make_env, make_policy = load_config(parser)
     pprint( args.__dict__ )
     print(f"The arguments of of the trains is")
-    pprint(args.train.__dict__)
+    pprint(args.train.__dict__ , expand_all = True)
     print(f"The number of step of each agents does is {args.train.batch_size / args.train.num_envs}")
     agent_steps:int = args.train.batch_size / args.train.num_envs
     print(f"The number of steps which maybe which be random because of entropy coeficient is  { agent_steps * args.train.ent_coef } ")
