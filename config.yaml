@@ -1098,9 +1098,6 @@ puffertank_pokemon_red_stable_sf_adam:
       embedd_the_x_and_y_coordinate: True
       dense_act_func: "ReLU"
       add_time: True
-    rnn:
-      input_size: 512
-      hidden_size: 512
     env:
       display_info_interval_divisor: 512 
       max_episode_steps: 16284  #2048 #4096 #8192 #16284 # 32568 #65136
@@ -1228,11 +1225,6 @@ puffertank_pokemon_red_stable_sf_adam:
               }
               mlp_width: {
                 "values": [ 256 , 512 , 1024]
-              }
-          rnn:
-            parameters:
-              hidden_size: {
-                "values": [ 512 , 1024 , 2048 ]
               }
           env:
             parameters:

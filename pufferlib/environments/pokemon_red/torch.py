@@ -11,7 +11,7 @@ torch._dynamo.config.suppress_errors = True
 
 class Recurrent(pufferlib.models.LSTMWrapper):
     def __init__(self, env, policy,
-            input_size=512, hidden_size=2048, num_layers=1):
+            input_size=512, hidden_size=512, num_layers=1):
         super().__init__(env, policy,
             input_size, hidden_size, num_layers)
 class ResnetBlock(torch.nn.Module):
