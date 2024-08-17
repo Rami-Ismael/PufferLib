@@ -43,6 +43,7 @@ def make(name, headless: bool = True, state_path=None ,
         set_enemy_pokemon_accuracy_to_zero = True , 
         add_random_moves_to_starter_pokemon = True,
         random_no_reset_probability = 0.0 ,
+        disable_return_the_number_of_pp_after_battle = True,
         set_enemy_pokemon_damage_calcuation_to_zero = True,
          ):
     #print(f"The current diosplayin of interval divisor is {display_info_interval_divisor}")
@@ -69,6 +70,7 @@ def make(name, headless: bool = True, state_path=None ,
                         reward_for_increasing_the_total_party_level = reward_for_increasing_the_total_party_level ,
                         set_enemy_pokemon_accuracy_to_zero = set_enemy_pokemon_accuracy_to_zero , 
                         add_random_moves_to_starter_pokemon = add_random_moves_to_starter_pokemon, 
+                        disable_return_the_number_of_pp_after_battle = disable_return_the_number_of_pp_after_battle,
                         random_no_reset_probability = random_no_reset_probability ,
                         set_enemy_pokemon_damage_calcuation_to_zero  = set_enemy_pokemon_damage_calcuation_to_zero,
                         )

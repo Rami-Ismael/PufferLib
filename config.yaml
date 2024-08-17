@@ -1136,6 +1136,7 @@ puffertank_pokemon_red_stable_sf_adam:
       set_enemy_pokemon_damage_calcuation_to_zero: True
       set_enemy_pokemon_accuracy_to_zero: True
       add_random_moves_to_starter_pokemon: True
+      disable_return_the_number_of_pp_after_battle: True
     train:
       compile: False
       compile_mode: "reduce-overhead"
@@ -1190,7 +1191,7 @@ puffertank_pokemon_red_stable_sf_adam:
         name: sweep
         metric:
           goal: maximize
-          name: environment/number_of_uniqiue_coordinate_it_explored
+          name: environment/size_of_total_number_of_episodes_in_store
         early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
           type: hyperband
           min_iter: 2
@@ -1320,7 +1321,7 @@ puffertank_pokemon_red_stable_sf_adam:
           rnn:
             parameters:
               hidden_size: {
-                "values": [ 512 , 1024 , 2048]
+                "values": [ 256 ,  512 , 1024 , 2048]
               }
           
 puffertank_pokemon_red_adam:
@@ -1402,7 +1403,7 @@ puffertank_pokemon_red_adam:
         name: sweep
         metric:
           goal: maximize
-          name: environment/number_of_uniqiue_coordinate_it_explored
+          name: environment/size_of_total_number_of_episodes_in_store
         early_terminate: # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
           type: hyperband
           min_iter: 2
