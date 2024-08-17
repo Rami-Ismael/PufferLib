@@ -1318,9 +1318,10 @@ puffertank_pokemon_red_stable_sf_adam:
                 "max": 1.0
               }
           rnn:
-            hidden_size: {
-              "values": [ 512 , 1024 , 2048]
-            }
+            parameters:
+              hidden_size: {
+                "values": [ 512 , 1024 , 2048]
+              }
           
 puffertank_pokemon_red_adam:
     package: pokemon_red
