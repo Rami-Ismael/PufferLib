@@ -1319,7 +1319,7 @@ puffertank_pokemon_red_stable_sf_adam:
               }
           rnn:
             hidden_size: {
-              "values": [ 256 , 512 , 1024 , 2048]
+              "values": [ 512 , 1024 , 2048]
             }
           
 puffertank_pokemon_red_adam:
