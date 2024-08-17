@@ -187,13 +187,13 @@ def sweep(args, wandb_name, env_module, make_env):
         args.track = True
         train(args, env_module, make_env)
 
-    wandb.agent(sweep_id, main, count=400)
-    #wandb.agent(
-    #    sweep_id = "pghddy2x" , 
-    #    project = "pufferlib" , 
-    #    function = main,
-    #    count = 400
-    #)
+    #wandb.agent(sweep_id, main, count=400)
+    wandb.agent(
+        sweep_id = "uiblckzl" , 
+        project = "pufferlib" , 
+        function = main,
+        count = 400
+    )
 def sweep_x( args , wandb_name , env_module , make_env ):
     import wandb
     wandb.require("core")
