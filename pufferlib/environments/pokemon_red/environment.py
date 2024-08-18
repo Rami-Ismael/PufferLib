@@ -73,6 +73,7 @@ def make(name, headless: bool = True, state_path=None ,
                         disable_return_the_number_of_pp_after_battle = disable_return_the_number_of_pp_after_battle,
                         random_no_reset_probability = random_no_reset_probability ,
                         set_enemy_pokemon_damage_calcuation_to_zero  = set_enemy_pokemon_damage_calcuation_to_zero,
+                        reward_for_increasing_the_highest_pokemon_level_in_the_team_by_battle_coef = reward_for_increasing_the_highest_pokemon_level_in_the_team_by_battle_coef , 
                         )
     env = RenderWrapper(env)
     if EpisodeStats:
