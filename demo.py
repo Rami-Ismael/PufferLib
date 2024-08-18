@@ -263,7 +263,7 @@ def train(args, env_module, make_env):
         '''
         def early_stopping_base_on_ppo_loss_func(data):
             if train_config.update_epochs == 2:
-                policy_loss_has_to_be_less_than =  0.003
+                policy_loss_has_to_be_less_than =  0.51
                 value_loss_has_to_be_greater_than = 0.00010
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
@@ -284,7 +284,7 @@ def train(args, env_module, make_env):
                     print(f"The clip frac is {data.losses.clipfrac} and it should be greater than {clip_frac_has_to_be_greater_than}")
                     return False
             if train_config.update_epochs == 4:
-                policy_loss_has_to_be_less_than = 0.019811158068478107
+                policy_loss_has_to_be_less_than = 0.51
                 value_loss_has_to_be_greater_than = 0.00010
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
