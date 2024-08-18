@@ -1448,7 +1448,7 @@ puffertank_pokemon_red_adam:
                 "values": [0.98 , 0.99 , 0.995 , 0.999 , 0.9995]
               }
               minibatch_size: {
-                "values": [16384 , 32768]
+                "values": [4096 , 8192, 16384]
               }
           policy:
             parameters:
