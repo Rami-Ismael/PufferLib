@@ -1227,7 +1227,7 @@ puffertank_pokemon_red_stable_sf_adam:
                 "values": [ 2 , 4 ]
               }
               ent_coef: {
-                "values" : [0 , 0.1 , 0.01]
+                "values" : [ 0.1 , 0.01]
               }
               clip_coef: {
                 "values": [ 0.1 , 0.2 ],
@@ -1420,13 +1420,10 @@ puffertank_pokemon_red_adam:
                 "values": [ 8 , 16 , 32 , 64]
               }
               learning_rate: {
-                "values": [0.004 , 0.003 , 0.005 , 0.0005 , 0.0025 , 1.0e-4]
-              }
-              eps: {
-                "values": [1.0e-8 , 1.0e-6 , 1.0e-5 ], 
+                "values": [0.1, 0.01, 0.001, 0.0001, 1.0e-05 , 2.5e-4 , 5.0e-4  , 1.0e-4]
               }
               weight_decay: {
-                "values": [0.0 , 0.1 , 0.5 , 0.01 , 0.08]
+                "values": [0.0 , 0.1 , 0.01 , 0.03 , .5]
               }
               beta1: {
                 "distribution": "uniform" , 
@@ -1442,7 +1439,7 @@ puffertank_pokemon_red_adam:
                 "values": [ 2 , 4 ]
               }
               ent_coef: {
-                "values" : [0 , 0.1 , 0.01]
+                "values" : [ 0.1 , 0.01]
               }
               vf_clip_coef: {
                 "values": [ 0.2 , 0.3 , 0.4 , 0.5 , 0.6 , 0.7 , 0.8 , 0.9 , 1.0]
@@ -1509,8 +1506,8 @@ puffertank_pokemon_red_adam:
                 "max": 1.0
               }
               max_episode_steps: {
-                min: 2048 , 
-                max: 8192
+                min: 4096 , 
+                max: 16384 , 
               }
               reward_for_knocking_out_enemy_pokemon_in_trainer_party_coef: {
                 "distribution": "uniform",
@@ -1525,6 +1522,17 @@ puffertank_pokemon_red_adam:
                 "min": 0 , 
                 "max": 1.0
               }
+              random_no_reset_probability: {
+                "distribution": "uniform" ,
+                "min": 0.0 ,
+                "max": 1.0
+              }
+          rnn:
+            parameters:
+              hidden_size: {
+                "values": [ 256 ,  512 , 1024 , 2048]
+              }
+  
 
 links_awaken:
   package: links_awaken
