@@ -1426,16 +1426,6 @@ puffertank_pokemon_red_adam:
               weight_decay: {
                 "values": [0.0 , 0.1 , 0.01 , 0.03 , .5]
               }
-              beta1: {
-                "distribution": "uniform" , 
-                "min": .9 ,
-                "max" : .999
-              }
-              beta2: {
-                "distribution": "uniform" ,
-                "min": .75 , 
-                "max": .999
-              }
               eps: {
                 "values": [ 1.0e-8 , 1.0e-6 , 1.0e-5 , 0.00015 , 0.015]
               }
