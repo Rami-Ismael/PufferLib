@@ -85,7 +85,7 @@ def create(config, vecenv, policy, optimizer=None, wandb=None):
                                                    eps = config.eps)
         optimizer.train()
     elif config.optimizer == "Adam":
-        ioptimizer = torch.optim.Adam(policy.parameters(),
+        optimizer = torch.optim.Adam(policy.parameters(),
             lr=config.learning_rate, 
             eps = config.eps,
             betas=(config.beta1, config.beta2),
