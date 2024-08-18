@@ -1435,6 +1435,9 @@ puffertank_pokemon_red_adam:
                 "min": .75 , 
                 "max": .999
               }
+              eps: {
+                "values": [ 1.0e-8 , 1.0e-6 , 1.0e-5 , 0.00015 , 0.015]
+              }
               update_epochs: { 
                 "values": [ 2 , 4 ]
               }
