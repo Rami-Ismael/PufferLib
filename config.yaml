@@ -1348,10 +1348,11 @@ puffertank_pokemon_red_adam:
       reward_for_using_bad_moves_coef: 1.0
       disable_wild_encounters:  True
       level_up_reward_threshold: 10
-      multiple_exp_gain_by_n: 10
+      multiple_exp_gain_by_n: 1
       set_enemy_pokemon_damage_calcuation_to_zero: True
       set_enemy_pokemon_accuracy_to_zero: True
       add_random_moves_to_starter_pokemon: True
+      disable_return_the_number_of_pp_after_battle: True
     train:
       compile: False
       compile_mode: "reduce-overhead"
