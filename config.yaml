@@ -1168,7 +1168,7 @@ puffertank_pokemon_red_stable_sf_adam:
       pool_kernel: [0]
 
 
-      minibatch_size: 16384  # if not set it will be 2048
+      minibatch_size: 16_384  # if not set it will be 2048
 
 
       learning_rate: 0.0025
@@ -1333,6 +1333,9 @@ puffertank_pokemon_red_adam:
       embedd_the_x_and_y_coordinate: True
       dense_act_func: "ReLU"
       add_time: True
+    rnn:
+      hidden_size: 2048
+      input_size: 512
     env:
       display_info_interval_divisor: 512 
       max_episode_steps: 16284  #2048 #4096 #8192 #16284 # 32568 #65136
@@ -1443,6 +1446,9 @@ puffertank_pokemon_red_adam:
               }
               gamma: {
                 "values": [0.98 , 0.99 , 0.995 , 0.999 , 0.9995]
+              }
+              minibatch_size: {
+                "values": [16384 , 32768 , 65536]
               }
           policy:
             parameters:
