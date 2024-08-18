@@ -1421,7 +1421,7 @@ puffertank_pokemon_red_adam:
                 "values": [ .8 , .9 , .95]
               }
               bptt_horizon: {
-                "values": [ 8 , 16 , 32 , 64]
+                "values": [ 8 , 16]
               }
               learning_rate: {
                 "values": [0.1, 0.01, 0.001, 0.0001, 1.0e-05 , 2.5e-4 , 5.0e-4  , 1.0e-4]
@@ -1448,7 +1448,7 @@ puffertank_pokemon_red_adam:
                 "values": [0.98 , 0.99 , 0.995 , 0.999 , 0.9995]
               }
               minibatch_size: {
-                "values": [16384 , 32768 , 65536]
+                "values": [16384 , 32768]
               }
           policy:
             parameters:
