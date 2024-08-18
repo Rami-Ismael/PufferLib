@@ -116,7 +116,7 @@ def make_policy(env, env_module, args):
 def init_wandb(args, name, id=None, resume=True):
     #os.environ["WANDB_SILENT"] = "true"
     import wandb
-    #wandb.require("core")
+    wandb.require("core")
     wandb.init(
         id=id or wandb.util.generate_id(),
         project=args.wandb_project,
@@ -137,7 +137,7 @@ def init_wandb(args, name, id=None, resume=True):
 
 def sweep(args, wandb_name, env_module, make_env):
     import wandb
-    #wandb.require("core")
+    wandb.require("core")
     
     sweep_id = wandb.sweep(
         sweep = dict(args.sweep),
@@ -196,7 +196,7 @@ def sweep(args, wandb_name, env_module, make_env):
     #)
 def sweep_x( args , wandb_name , env_module , make_env ):
     import wandb
-    #wandb.require("core")
+    wandb.require("core")
     
     sweep_id = wandb.sweep(
         sweep = dict(args.sweep),
@@ -288,7 +288,7 @@ def train(args, env_module, make_env):
                 value_loss_has_to_be_greater_than = 0.00010
                 approx_kl_has_to_be_less_than = 1.0
                 clip_frac_has_to_be_greater_than = 0.002
-                approx_kl_has_to_be_greater_than = 0.00058
+                approx_kl_has_to_be_greater_than = 0.00006
                 if data.losses.policy_loss > policy_loss_has_to_be_less_than :
                     print(f"The policy loss is {data.losses.policy_loss}")
                     return False
