@@ -11,7 +11,7 @@ torch._dynamo.config.suppress_errors = True
 
 class Recurrent(pufferlib.models.LSTMWrapper):
     def __init__(self, env, policy,
-            input_size=512, hidden_size=1024, num_layers=1):
+            input_size=512, hidden_size=512, num_layers=1):
         super().__init__(env, policy,
             input_size, hidden_size, num_layers)
 class ResnetBlock(torch.nn.Module):
@@ -80,7 +80,7 @@ def crete_mlp(dense_act_func: str = "ReLU", mlp_width:int = 512, mlp_depth:int =
 
 class Policy(nn.Module):
     def __init__(self, env, *args,
-            input_size=512, hidden_size=512, output_size=1024,
+            input_size=512, hidden_size=512, output_size=512,
             channels_last=False, downsample=1, 
             mlp_width = 512,
             mlp_depth = 3 , 
@@ -129,7 +129,7 @@ class Policy(nn.Module):
                 nn.ReLU(),
             )
         '''
-        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1349 + 16 + 4 + 8 + 12 + 4 + 4 + 16) 
+        self.encode_linear: nn.Sequential = crete_mlp(dense_act_func=dense_act_func, mlp_width=mlp_width, mlp_depth=mlp_depth, hidden_size=hidden_size , concat_input_dim = 1349 + 16 + 4 + 8 + 12 + 4 + 4 + 16 + 8 ) 
             
         
         
@@ -235,6 +235,12 @@ class Policy(nn.Module):
             nn.ReLU()
         )
         # Battle
+        self.player_move_type_power_in_battle = nn.Sequential(
+            self.embedding_pokemon_type,
+            nn.Linear(8 , 8) ,
+            nn.LayerNorm(8),
+            nn.ReLU()
+        )
         
         ## Enemey
         
@@ -304,6 +310,7 @@ class Policy(nn.Module):
                 self.enemy_move_accuracy_fc(env_outputs["enemy_pokemon_move_accuracy"].float()).squeeze(1) ,
                 self.enemy_pokemon_move_max_pp_fc(env_outputs["enemy_pokemon_move_max_pp"].float()).squeeze(1) ,
                 self.pokemon_move_effect_id_embedding_fc(env_outputs["player_selected_move_effect"].long()).squeeze(1) ,
+                self.player_move_type_power_in_battle(env_outputs["player_move_type_in_battle"].long()).squeeze(1) ,
                 ]
         if self.embedd_the_x_and_y_coordinate:
             elements_to_concatenate.append(self.coordinate_fc_x(env_outputs["x"].int()).squeeze(1))
