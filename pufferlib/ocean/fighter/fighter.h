@@ -44,7 +44,7 @@ const Color PUFF_BACKGROUND = (Color){6, 24, 24, 255};
 typedef struct Client Client;
 
 // joints
-#define NUM_JOINTS 10
+#define NUM_JOINTS 14
 #define J_TORSO      0
 #define J_HEAD       1
 #define J_SHOULDER_R 2
@@ -274,12 +274,12 @@ void init_skeleton(Character* c){
     c->parent[J_ANKLE_L]    = J_KNEE_L;
 
     // Bone lengths (approximate, tweak as needed)
-    c->length[J_HEAD]       = 0.4f;  // torso→head
+    c->length[J_HEAD]       = 0.7f;  // torso→head
     c->length[J_SHOULDER_R] = 0.35f; // upper arm
-    c->length[J_ELBOW_R]    = 0.30f; // forearm
+    c->length[J_ELBOW_R]    = 0.5f; // forearm
     c->length[J_WRIST_R]    = 0.1f;
     c->length[J_SHOULDER_L] = 0.35f;
-    c->length[J_ELBOW_L]    = 0.30f;
+    c->length[J_ELBOW_L]    = 0.5f;
     c->length[J_WRIST_L]    = 0.1f;
     c->length[J_HIP_R]      = 0.5f;  // thigh
     c->length[J_KNEE_R]     = 0.5f;  // shin
@@ -297,7 +297,7 @@ void init_skeleton(Character* c){
 }
 
 void init_shapes(Character *c) {
-    c->num_shapes = 12;  
+    c->num_shapes = 14;  
     c->shapes = calloc(c->num_shapes, sizeof(CollisionShape));
 
     // Torso
@@ -307,7 +307,7 @@ void init_shapes(Character *c) {
     c->shapes[0].off.off_x = 0.0f;
     c->shapes[0].off.off_y = 0.5f;
     c->shapes[0].off.off_z = 0.0f;
-    c->shapes[0].off.height = 1.0f;
+    c->shapes[0].off.height = 0.75f;
 
     // Head
     c->shapes[1].type = SHAPE_SPHERE_JOINT;
@@ -468,17 +468,19 @@ void adjust_skeleton(Fighter* env, int character_index) {
 void update_fk(Character *c) {
     // Root at character position
     c->world_x[J_TORSO] = c->pos_x;
-    c->world_y[J_TORSO] = c->pos_y + 1.0f; // torso at chest height
+    c->world_y[J_TORSO] = c->pos_y + 2.2f; // torso at chest height
     c->world_z[J_TORSO] = c->pos_z;
 
     // Head above torso
     c->world_x[J_HEAD] = c->world_x[J_TORSO];
     c->world_y[J_HEAD] = c->world_y[J_TORSO] + c->length[J_HEAD];
     c->world_z[J_HEAD] = c->world_z[J_TORSO];
-
+    
+    float shoulder_width = 0.25f;
+    float shoulder_height = 0.25f;
     // Right arm (straight out)
-    c->world_x[J_SHOULDER_R] = c->world_x[J_TORSO];
-    c->world_y[J_SHOULDER_R] = c->world_y[J_TORSO];
+    c->world_x[J_SHOULDER_R] = c->world_x[J_TORSO] + shoulder_width;
+    c->world_y[J_SHOULDER_R] = c->world_y[J_TORSO] + shoulder_height;
     c->world_z[J_SHOULDER_R] = c->world_z[J_TORSO];
 
     c->world_x[J_ELBOW_R] = c->world_x[J_SHOULDER_R] + c->length[J_SHOULDER_R];
@@ -490,8 +492,8 @@ void update_fk(Character *c) {
     c->world_z[J_WRIST_R] = c->world_z[J_ELBOW_R];
 
     // Left arm (mirror)
-    c->world_x[J_SHOULDER_L] = c->world_x[J_TORSO];
-    c->world_y[J_SHOULDER_L] = c->world_y[J_TORSO];
+    c->world_x[J_SHOULDER_L] = c->world_x[J_TORSO] - shoulder_width;
+    c->world_y[J_SHOULDER_L] = c->world_y[J_TORSO] + shoulder_height;
     c->world_z[J_SHOULDER_L] = c->world_z[J_TORSO];
 
     c->world_x[J_ELBOW_L] = c->world_x[J_SHOULDER_L] - c->length[J_SHOULDER_L];
@@ -503,11 +505,12 @@ void update_fk(Character *c) {
     c->world_z[J_WRIST_L] = c->world_z[J_ELBOW_L];
 
     // Hips
-    c->world_x[J_HIP_R] = c->world_x[J_TORSO];
+    float hip_spacing = 0.2f;
+    c->world_x[J_HIP_R] = c->world_x[J_TORSO] + hip_spacing;
     c->world_y[J_HIP_R] = c->world_y[J_TORSO] - 0.5f;
     c->world_z[J_HIP_R] = c->world_z[J_TORSO];
 
-    c->world_x[J_HIP_L] = c->world_x[J_TORSO];
+    c->world_x[J_HIP_L] = c->world_x[J_TORSO] - hip_spacing;
     c->world_y[J_HIP_L] = c->world_y[J_TORSO] - 0.5f;
     c->world_z[J_HIP_L] = c->world_z[J_TORSO];
 
@@ -609,8 +612,8 @@ void c_render(Fighter* env) {
         env->client = make_client(env);
     }
     Client* client = env->client;
-    UpdateCameraFighter(env, client);
-    //updatecamera(&client->camera, camera_free);
+    //UpdateCameraFighter(env, client);
+    UpdateCamera(&client->camera, CAMERA_FREE);
     BeginDrawing();
     ClearBackground(PUFF_BACKGROUND);
     BeginMode3D(client->camera);
@@ -767,6 +770,7 @@ void c_render(Fighter* env) {
 
                 Vector3 A = { chara->world_x[a], chara->world_y[a], chara->world_z[a] };
                 Vector3 B = { chara->world_x[b], chara->world_y[b], chara->world_z[b] };
+                Vector3 dir = Vector3Normalize(Vector3Subtract(B, A));
 
                 DrawCapsule(A, B, s->radius, 16, 8, fighter_color);
                 DrawCapsuleWires(A, B, s->radius, 16, 8, BLACK);
