@@ -2,10 +2,10 @@
 
 int main() {
     Fighter env = {.num_characters = 2};    
-    env.observations = (float*)calloc(1, sizeof(float));
+    env.observations = (float*)calloc(env.num_characters, sizeof(float));
     env.actions = (int*)calloc(env.num_characters, sizeof(int));
-    env.rewards = (float*)calloc(1, sizeof(float));
-    env.terminals = (unsigned char*)calloc(1, sizeof(unsigned char));
+    env.rewards = (float*)calloc(env.num_characters, sizeof(float));
+    env.terminals = (unsigned char*)calloc(env.num_characters, sizeof(unsigned char));
     init(&env);
     c_reset(&env);
     c_render(&env);
