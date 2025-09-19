@@ -44,21 +44,28 @@ const Color PUFF_BACKGROUND = (Color){6, 24, 24, 255};
 typedef struct Client Client;
 
 // joints
-#define NUM_JOINTS 14
-#define J_TORSO      0
-#define J_HEAD       1
-#define J_SHOULDER_R 2
-#define J_ELBOW_R    3
-#define J_WRIST_R    4
-#define J_SHOULDER_L 5
-#define J_ELBOW_L    6
-#define J_WRIST_L    7
-#define J_HIP_R      8
-#define J_KNEE_R     9
-#define J_ANKLE_R   10
-#define J_HIP_L    11
-#define J_KNEE_L   12
-#define J_ANKLE_L  13
+#define NUM_JOINTS 20
+#define J_PELVIS 0 
+#define J_LOWER_SPINE 1
+#define J_MID_SPINE 2
+#define J_UPPER_SPINE 3
+#define J_NECK 4
+#define J_HEAD 5
+#define J_L_CLAV 6
+#define J_L_SHOULDER 7
+#define J_L_ELBOW 8
+#define J_L_WRIST 9
+#define J_R_CLAV 10
+#define J_R_SHOULDER 11
+#define J_R_ELBOW 12
+#define J_R_WRIST 13
+#define J_L_HIP 14
+#define J_L_KNEE 15
+#define J_L_ANKLE 16
+#define J_R_HIP 17
+#define J_R_KNEE 18
+#define J_R_ANKLE 19
+
 
 // only use floats!
 typedef struct {
@@ -66,23 +73,55 @@ typedef struct {
     float n; // required as the last field 
 } Log;
 
+typedef struct { 
+    float x, y, z;
+} Vec3;
+
+typedef struct { 
+    float w, x, y, z;
+} Quat;
 
 typedef struct {
-    int type;
-    float radius;
+    float m[16];  // Column-major 4x4 matrix
+} Mat4;
+
+
+typedef struct {
+    int type;      // Enum: e.g., 0=SHAPE_CAPSULE_JOINT, 1=CAPSULE_OFFSET, 2=SPHERE
+    float radius;  // Shared for all types
 
     union {
-        // Capsule defined by two joints (limbs: shoulder→elbow, elbow→wrist, hip→knee, etc.)
-        struct { int joint_a, joint_b; float pad_a, pad_b; } jnt;
+        // Capsule between two joints (for limbs; inherits bone orientation from FK)
+        struct {
+            int joint_a;     // Start joint index
+            int joint_b;     // End joint index
+            float pad_a;     // Padding offset along bone from A (e.g., 0.1 to shorten)
+            float pad_b;     // Padding from B
+        } capsule_jnt;
 
-        // Capsule defined by one joint + a local offset (useful for torso/head)
-        struct { int parent; float off_x, off_y, off_z; float height; } off;
+        // Capsule with local offset and orientation (for torso/head; relative to parent joint)
+        struct {
+            int parent_joint;  // Anchor joint index
+            Vec3 local_offset; // Offset from parent (replaces off_x/y/z for Vec3 consistency)
+            Quat local_rot;    // Local rotation for the capsule (e.g., to tilt torso)
+            float height;      // Capsule length (along its local Y, post-rotation)
+        } capsule_off;
 
-        // Simple sphere at a single joint (good for fists, feet, head hitboxes)
-        struct { int joint; } sph;
+        // Sphere at a joint (simple; uses world_pos directly)
+        struct {
+            int joint;         // Center joint index
+            Vec3 local_offset; // Optional local offset from joint (default {0,0,0})
+        } sphere;
     };
 } CollisionShape;
 
+typedef struct {
+    int parent;
+    Vec3 local_pos;
+    Quat local_rot;
+    Vec3 world_pos;
+    Quat world_rot;
+} Joint;
 
 typedef struct { 
     // ---- root pose ----
@@ -91,16 +130,7 @@ typedef struct {
 
     // ---- joints ----
     int   num_joints;
-    int  *parent;      // parent index per joint (-1 for root)
-    float *length;     // bone length
-    float *pitch;      // joint pitch angle
-    float *yaw;        // joint yaw angle
-    float *roll;       // optional
-
-    // FK outputs
-    float *world_x;
-    float *world_y;
-    float *world_z;
+    Joint* joints;
 
     // ---- shapes ----
     int num_shapes;
@@ -125,295 +155,389 @@ typedef struct {
     Client* client;
 } Fighter;
 
-/*void init_collision_shapes(CollisionShape* hurt_shapes, CollisionShape* hit_shapes, float facing) {
-    hurt_shapes[0].type = shape_capsule;
-    hurt_shapes[0].offset_x = 0.0f;
-    hurt_shapes[0].offset_y = 1.6f;  // center at mid-body (half height)
-    hurt_shapes[0].offset_z = 0.0f;
-    hurt_shapes[0].height = 0.5f;    // character height
-    hurt_shapes[0].radius = 0.2f;    // body width
+// Vector operations
+Vec3 vec3_add(Vec3 a, Vec3 b) { return (Vec3){a.x + b.x, a.y + b.y, a.z + b.z}; }
+Vec3 vec3_sub(Vec3 a, Vec3 b) { return (Vec3){a.x - b.x, a.y - b.y, a.z - b.z}; }
+Vec3 vec3_scale(Vec3 v, float s) { return (Vec3){v.x * s, v.y * s, v.z * s}; }
+float vec3_dot(Vec3 a, Vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+Vec3 vec3_cross(Vec3 a, Vec3 b) {
+    return (Vec3){a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+}
+float vec3_length(Vec3 v) { return sqrtf(vec3_dot(v, v)); }
+Vec3 vec3_normalize(Vec3 v) {
+    float len = vec3_length(v);
+    return len > EPSILON ? vec3_scale(v, 1.0f / len) : v;
+}
 
-    // left arm: horizontal capsule, extends based on facing angle
-    hurt_shapes[1].type = shape_capsule;
-    hurt_shapes[1].offset_x = 0.0f;
-    hurt_shapes[1].offset_y = 1.8f;  // shoulder height
-    hurt_shapes[1].offset_z = -0.25f;
-    hurt_shapes[1].rotation_offset_x = 0.0f;
-    hurt_shapes[1].rotation_offset_z = 0.0f;
-    hurt_shapes[1].height = 0.35f;    // arm length (as capsule "height" along axis)
-    hurt_shapes[1].radius = 0.075f;   // arm thickness
-
-    // right arm: similar, opposite offset
-    hurt_shapes[2].type = shape_capsule;
-    hurt_shapes[2].offset_x = 0.0f;
-    hurt_shapes[2].offset_y = 1.8f;
-    hurt_shapes[2].offset_z = 0.25f;
-    hurt_shapes[2].rotation_offset_x = 0.0f;
-    hurt_shapes[2].rotation_offset_z = 0.0f;
-    hurt_shapes[2].height = 0.35f;
-    hurt_shapes[2].radius = 0.075f;
-
-    // left leg: single vertical capsule for both (or split for precision)
-    hurt_shapes[3].type = shape_capsule;
-    hurt_shapes[3].offset_x = 0.0f;
-    hurt_shapes[3].offset_y = 1.35f;  // from ground to hips
-    hurt_shapes[3].offset_z = -0.15f;
-    hurt_shapes[3].rotation_offset_x = 0.0f;
-    hurt_shapes[3].rotation_offset_z = 0.0f;
-    hurt_shapes[3].height = 0.5f;    // leg height
-    hurt_shapes[3].radius = 0.1f;   // leg width 
-    // right leg
-    hurt_shapes[4].type = shape_capsule;
-    hurt_shapes[4].offset_x = 0.0f;
-    hurt_shapes[4].offset_y = 1.35f;  // from ground to hips
-    hurt_shapes[4].offset_z = 0.15f;
-    hurt_shapes[4].rotation_offset_x = 0.0f;
-    hurt_shapes[4].rotation_offset_z = 0.0f;
-    hurt_shapes[4].height = 0.5f;    // leg height
-    hurt_shapes[4].radius = 0.1f;   // leg width
-
-    // head
-    hurt_shapes[5].type = shape_capsule;
-    hurt_shapes[5].offset_x = 0.0f;
-    hurt_shapes[5].offset_y = 2.2f;
-    hurt_shapes[5].offset_z = 0.0f;
-    hurt_shapes[5].height = 0.2f;    // head height
-    hurt_shapes[5].radius = 0.2f;    // head width
-
-    // left forearm
-    hurt_shapes[6].type = shape_capsule;
-    hurt_shapes[6].offset_x = 0.1f;
-    hurt_shapes[6].offset_y = 0.0f;   // elbow level
-    hurt_shapes[6].offset_z = 0.0f; // forward from torso
-    hurt_shapes[6].height = 0.3f;     // forearm length
-    hurt_shapes[6].radius = 0.07f;
-
-    // right forearm
-    hurt_shapes[7].type = shape_capsule;
-    hurt_shapes[7].offset_x = 0.1f;
-    hurt_shapes[7].offset_y = 0.0f;
-    hurt_shapes[7].offset_z = 0.0f;
-    hurt_shapes[7].height = 0.3f;
-    hurt_shapes[7].radius = 0.07f;
-
-    // left shin
-    hurt_shapes[8].type = shape_capsule;
-    hurt_shapes[8].offset_x = 0.0f;
-    hurt_shapes[8].offset_y = 0.0f;   // knee level
-    hurt_shapes[8].offset_z = -0.15f;
-    hurt_shapes[8].height = 0.5f;     // shin length
-    hurt_shapes[8].radius = 0.09f;
-
-    // right shin
-    hurt_shapes[9].type = shape_capsule;
-    hurt_shapes[9].offset_x = 0.0f;
-    hurt_shapes[9].offset_y = 0.0f;
-    hurt_shapes[9].offset_z = 0.15f;
-    hurt_shapes[9].height = 0.5f;
-    hurt_shapes[9].radius = 0.09f;
-    // for other shapes (hit_shapes), set to invalid until a move activates them
-    for (int i = 0; i < 6; i++) {
-        hit_shapes[i].type = shape_none;  // add shape_none to enum if needed
+// Quaternion operations (w is real part, x,y,z imaginary)
+Quat quat_from_axis_angle(Vec3 axis, float angle) {
+    float ha = angle * 0.5f;
+    float s = sinf(ha);
+    float c = cosf(ha);
+    axis = vec3_normalize(axis);
+    return (Quat){c, axis.x * s, axis.y * s, axis.z * s};
+}
+Quat quat_mul(Quat a, Quat b) {
+    return (Quat){
+        a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+        a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+        a.w * b.y + a.y * b.w + a.z * b.x - a.x * b.z,
+        a.w * b.z + a.z * b.w + a.x * b.y - a.y * b.x
+    };
+}
+Quat quat_inverse(Quat q) {
+    float len_sq = q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
+    if (len_sq > EPSILON) {
+        float inv_len_sq = 1.0f / len_sq;
+        return (Quat){q.w * inv_len_sq, -q.x * inv_len_sq, -q.y * inv_len_sq, -q.z * inv_len_sq};
     }
+    return (Quat){1.0f, 0.0f, 0.0f, 0.0f};
+}
+Vec3 quat_rotate_vec(Quat q, Vec3 v) {
+    Quat vq = {0.0f, v.x, v.y, v.z};
+    Quat res = quat_mul(quat_mul(q, vq), quat_inverse(q));
+    return (Vec3){res.x, res.y, res.z};
+}
+
+// Matrix operations (identity, multiply, from quat+pos)
+void mat4_identity(Mat4 *m) {
+    for (int i = 0; i < 16; i++) m->m[i] = 0.0f;
+    m->m[0] = m->m[5] = m->m[10] = m->m[15] = 1.0f;
+}
+void mat4_mul(Mat4 a, Mat4 b, Mat4 *res) {
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            res->m[i * 4 + j] = 0.0f;
+            for (int k = 0; k < 4; k++) {
+                res->m[i * 4 + j] += a.m[i * 4 + k] * b.m[k * 4 + j];
+            }
+        }
+    }
+}
+void mat4_from_quat_pos(Mat4 *m, Quat q, Vec3 p) {
+    float xx = q.x * q.x, xy = q.x * q.y, xz = q.x * q.z, xw = q.x * q.w;
+    float yy = q.y * q.y, yz = q.y * q.z, yw = q.y * q.w;
+    float zz = q.z * q.z, zw = q.z * q.w;
+
+    m->m[0] = 1 - 2 * (yy + zz); m->m[1] = 2 * (xy - zw); m->m[2] = 2 * (xz + yw); m->m[3] = 0;
+    m->m[4] = 2 * (xy + zw); m->m[5] = 1 - 2 * (xx + zz); m->m[6] = 2 * (yz - xw); m->m[7] = 0;
+    m->m[8] = 2 * (xz - yw); m->m[9] = 2 * (yz + xw); m->m[10] = 1 - 2 * (xx + yy); m->m[11] = 0;
+    m->m[12] = p.x; m->m[13] = p.y; m->m[14] = p.z; m->m[15] = 1;
 }
 
 
-
-void init_character(Character* character, float type) {
-    character->health = 100;
-    if (type == 0){
-        character->pos_x = -5;
-    } else {
-        character->pos_x = 5;
-    }
-    character->pos_y = 0;
-    character->pos_z = 0;
-    character->vel_x = 0;
-    character->vel_y = 0;
-    character->vel_z = 0;
-    character->facing = type;
-    character->current_move = 0;
-    character->current_action_frames = 0;
-    character->animation_frame = 0;
-    character->frame_advantage = 0;
-    character->state = state_idle;
-    character->hurt_shapes = (CollisionShape*)calloc(10, sizeof(CollisionShape));
-    character->hit_shapes = (CollisionShape*)calloc(6, sizeof(CollisionShape));
-    init_collision_shapes(character->hurt_shapes, character->hit_shapes, character->facing);
-}
-*/
 void init_skeleton(Character* c){
-    c->num_joints = NUM_JOINTS;
-    c->parent  = calloc(NUM_JOINTS, sizeof(int));
-    c->length  = calloc(NUM_JOINTS, sizeof(float));
-    c->pitch   = calloc(NUM_JOINTS, sizeof(float));
-    c->yaw     = calloc(NUM_JOINTS, sizeof(float));
-    c->roll    = calloc(NUM_JOINTS, sizeof(float));
-    c->world_x = calloc(NUM_JOINTS, sizeof(float));
-    c->world_y = calloc(NUM_JOINTS, sizeof(float));
-    c->world_z = calloc(NUM_JOINTS, sizeof(float));
-
-    // skeleton relationships
-    c->parent[J_TORSO]      = -1;        // root of skeleton
-    c->parent[J_HEAD]       = J_TORSO;
-
-    c->parent[J_SHOULDER_R] = J_TORSO;
-    c->parent[J_ELBOW_R]    = J_SHOULDER_R;
-    c->parent[J_WRIST_R]    = J_ELBOW_R;
-
-    c->parent[J_SHOULDER_L] = J_TORSO;
-    c->parent[J_ELBOW_L]    = J_SHOULDER_L;
-    c->parent[J_WRIST_L]    = J_ELBOW_L;
-
-    c->parent[J_HIP_R]      = J_TORSO;
-    c->parent[J_KNEE_R]     = J_HIP_R;
-    c->parent[J_ANKLE_R]    = J_KNEE_R;
-
-    c->parent[J_HIP_L]      = J_TORSO;
-    c->parent[J_KNEE_L]     = J_HIP_L;
-    c->parent[J_ANKLE_L]    = J_KNEE_L;
-
-    // Bone lengths (approximate, tweak as needed)
-    c->length[J_HEAD]       = 0.7f;  // torso→head
-    c->length[J_SHOULDER_R] = 0.35f; // upper arm
-    c->length[J_ELBOW_R]    = 0.5f; // forearm
-    c->length[J_WRIST_R]    = 0.1f;
-    c->length[J_SHOULDER_L] = 0.35f;
-    c->length[J_ELBOW_L]    = 0.5f;
-    c->length[J_WRIST_L]    = 0.1f;
-    c->length[J_HIP_R]      = 0.5f;  // thigh
-    c->length[J_KNEE_R]     = 0.5f;  // shin
-    c->length[J_ANKLE_R]    = 0.1f;
-    c->length[J_HIP_L]      = 0.5f;
-    c->length[J_KNEE_L]     = 0.5f;
-    c->length[J_ANKLE_L]    = 0.1f;
-
-    // Init joint angles to neutral pose
-    for (int i = 0; i < NUM_JOINTS; i++) {
-        c->pitch[i] = 0.0f;
-        c->yaw[i]   = 0.0f;
-        c->roll[i]  = 0.0f;
+    
+    for (int i = 0; i < c->num_joints; i++) {
+        c->joints[i].local_rot = (Quat){1.0f, 0.0f, 0.0f, 0.0f};
+        c->joints[i].world_rot = (Quat){1.0f, 0.0f, 0.0f, 0.0f};
+        c->joints[i].world_pos = (Vec3){0.0f, 0.0f, 0.0f};
     }
+
+    c->joints[J_PELVIS].parent = -1;
+    c->joints[J_PELVIS].local_pos = (Vec3){0.0f, 0.9f, 0.0f};
+
+    c->joints[J_LOWER_SPINE].parent = J_PELVIS;
+    c->joints[J_LOWER_SPINE].local_pos = (Vec3){0.0f, 0.2f, 0.0f};
+
+    c->joints[J_MID_SPINE].parent = J_LOWER_SPINE;
+    c->joints[J_MID_SPINE].local_pos = (Vec3){0.0f, 0.2f, 0.0f};
+
+    c->joints[J_UPPER_SPINE].parent = J_MID_SPINE;
+    c->joints[J_UPPER_SPINE].local_pos = (Vec3){0.0f, 0.2f, 0.0f};
+
+    c->joints[J_NECK].parent = J_UPPER_SPINE;
+    c->joints[J_NECK].local_pos = (Vec3){0.0f, 0.15f, 0.0f};
+
+    c->joints[J_HEAD].parent = J_NECK;
+    c->joints[J_HEAD].local_pos = (Vec3){0.0f, 0.15f, 0.0f};
+
+    c->joints[J_L_CLAV].parent = J_UPPER_SPINE;
+    c->joints[J_L_CLAV].local_pos = (Vec3){-0.1f, 0.05f, 0.0f};
+
+    c->joints[J_L_SHOULDER].parent = J_L_CLAV;
+    c->joints[J_L_SHOULDER].local_pos = (Vec3){-0.15f, 0.0f, 0.0f};
+
+    c->joints[J_L_ELBOW].parent = J_L_SHOULDER;
+    c->joints[J_L_ELBOW].local_pos = (Vec3){-0.25f, 0.0f, 0.0f};
+
+    c->joints[J_L_WRIST].parent = J_L_ELBOW;
+    c->joints[J_L_WRIST].local_pos = (Vec3){-0.25f, 0.0f, 0.0f};
+
+    c->joints[J_R_CLAV].parent = J_UPPER_SPINE;
+    c->joints[J_R_CLAV].local_pos = (Vec3){0.1f, 0.05f, 0.0f};
+
+    c->joints[J_R_SHOULDER].parent = J_R_CLAV;
+    c->joints[J_R_SHOULDER].local_pos = (Vec3){0.15f, 0.0f, 0.0f};
+
+    c->joints[J_R_ELBOW].parent = J_R_SHOULDER;
+    c->joints[J_R_ELBOW].local_pos = (Vec3){0.25f, 0.0f, 0.0f};
+
+    c->joints[J_R_WRIST].parent = J_R_ELBOW;
+    c->joints[J_R_WRIST].local_pos = (Vec3){0.25f, 0.0f, 0.0f};
+
+    c->joints[J_L_HIP].parent = J_PELVIS;
+    c->joints[J_L_HIP].local_pos = (Vec3){-0.1f, -0.05f, 0.0f};
+
+    c->joints[J_L_KNEE].parent = J_L_HIP;
+    c->joints[J_L_KNEE].local_pos = (Vec3){0.0f, -0.45f, 0.0f};
+
+    c->joints[J_L_ANKLE].parent = J_L_KNEE;
+    c->joints[J_L_ANKLE].local_pos = (Vec3){0.0f, -0.45f, 0.0f};
+
+    c->joints[J_R_HIP].parent = J_PELVIS;
+    c->joints[J_R_HIP].local_pos = (Vec3){0.1f, -0.05f, 0.0f};
+
+    c->joints[J_R_KNEE].parent = J_R_HIP;
+    c->joints[J_R_KNEE].local_pos = (Vec3){0.0f, -0.45f, 0.0f};
+
+    c->joints[J_R_ANKLE].parent = J_R_KNEE;
+    c->joints[J_R_ANKLE].local_pos = (Vec3){0.0f, -0.45f, 0.0f};
 }
 
 void init_shapes(Character *c) {
-    c->num_shapes = 14;  
-    c->shapes = calloc(c->num_shapes, sizeof(CollisionShape));
+    float bone_radius = 0.05f;
+    int shape_idx = 0;
+    // Spine chain
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;  // CAPSULE_JOINT
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_PELVIS;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_LOWER_SPINE;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    // Torso
-    c->shapes[0].type = SHAPE_CAPSULE_OFFSET;
-    c->shapes[0].radius = 0.20f;
-    c->shapes[0].off.parent = J_TORSO;
-    c->shapes[0].off.off_x = 0.0f;
-    c->shapes[0].off.off_y = 0.5f;
-    c->shapes[0].off.off_z = 0.0f;
-    c->shapes[0].off.height = 0.75f;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_LOWER_SPINE;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_MID_SPINE;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    // Head
-    c->shapes[1].type = SHAPE_SPHERE_JOINT;
-    c->shapes[1].radius = 0.20f;
-    c->shapes[1].sph.joint = J_HEAD;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_MID_SPINE;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_UPPER_SPINE;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    // Right arm
-    c->shapes[2].type = SHAPE_CAPSULE_JOINT;  // upper arm
-    c->shapes[2].radius = 0.075f;
-    c->shapes[2].jnt.joint_a = J_SHOULDER_R;
-    c->shapes[2].jnt.joint_b = J_ELBOW_R;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_UPPER_SPINE;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_NECK;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    c->shapes[3].type = SHAPE_CAPSULE_JOINT;  // forearm
-    c->shapes[3].radius = 0.07f;
-    c->shapes[3].jnt.joint_a = J_ELBOW_R;
-    c->shapes[3].jnt.joint_b = J_WRIST_R;
-
-    c->shapes[4].type = SHAPE_SPHERE_JOINT;   // wrist sphere
-    c->shapes[4].radius = 0.10f;
-    c->shapes[4].sph.joint = J_WRIST_R;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_NECK;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_HEAD;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
     // Left arm
-    c->shapes[5].type = SHAPE_CAPSULE_JOINT;
-    c->shapes[5].radius = 0.075f;
-    c->shapes[5].jnt.joint_a = J_SHOULDER_L;
-    c->shapes[5].jnt.joint_b = J_ELBOW_L;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_UPPER_SPINE;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_L_CLAV;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    c->shapes[6].type = SHAPE_CAPSULE_JOINT;
-    c->shapes[6].radius = 0.07f;
-    c->shapes[6].jnt.joint_a = J_ELBOW_L;
-    c->shapes[6].jnt.joint_b = J_WRIST_L;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_L_CLAV;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_L_SHOULDER;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    c->shapes[7].type = SHAPE_SPHERE_JOINT;
-    c->shapes[7].radius = 0.10f;
-    c->shapes[7].sph.joint = J_WRIST_L;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_L_SHOULDER;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_L_ELBOW;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    // Right leg
-    c->shapes[8].type = SHAPE_CAPSULE_JOINT;  // thigh
-    c->shapes[8].radius = 0.10f;
-    c->shapes[8].jnt.joint_a = J_HIP_R;
-    c->shapes[8].jnt.joint_b = J_KNEE_R;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_L_ELBOW;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_L_WRIST;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    c->shapes[9].type = SHAPE_CAPSULE_JOINT;  // shin
-    c->shapes[9].radius = 0.09f;
-    c->shapes[9].jnt.joint_a = J_KNEE_R;
-    c->shapes[9].jnt.joint_b = J_ANKLE_R;
+    // Right arm
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_UPPER_SPINE;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_R_CLAV;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    c->shapes[10].type = SHAPE_SPHERE_JOINT;  // ankle sphere
-    c->shapes[10].radius = 0.10f;
-    c->shapes[10].sph.joint = J_ANKLE_R;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_R_CLAV;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_R_SHOULDER;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
+
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_R_SHOULDER;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_R_ELBOW;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
+
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_R_ELBOW;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_R_WRIST;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
     // Left leg
-    c->shapes[11].type = SHAPE_CAPSULE_JOINT;
-    c->shapes[11].radius = 0.10f;
-    c->shapes[11].jnt.joint_a = J_HIP_L;
-    c->shapes[11].jnt.joint_b = J_KNEE_L;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_PELVIS;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_L_HIP;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    c->shapes[12].type = SHAPE_CAPSULE_JOINT;
-    c->shapes[12].radius = 0.09f;
-    c->shapes[12].jnt.joint_a = J_KNEE_L;
-    c->shapes[12].jnt.joint_b = J_ANKLE_L;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_L_HIP;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_L_KNEE;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 
-    c->shapes[13].type = SHAPE_SPHERE_JOINT;
-    c->shapes[13].radius = 0.10f;
-    c->shapes[13].sph.joint = J_ANKLE_L;
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_L_KNEE;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_L_ANKLE;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
+
+    // Right leg
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_PELVIS;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_R_HIP;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
+
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_R_HIP;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_R_KNEE;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
+
+    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
+    c->shapes[shape_idx].radius = bone_radius;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_R_KNEE;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_R_ANKLE;
+    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
+    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    shape_idx++;
 }
 
+void compute_fk(Joint *joints, int joint_idx, Quat parent_rot, Vec3 parent_pos) {
+    Joint *j = &joints[joint_idx];
+    j->world_rot = quat_mul(parent_rot, j->local_rot);
+    Vec3 local_offset = quat_rotate_vec(parent_rot, j->local_pos);
+    j->world_pos = vec3_add(parent_pos, local_offset);
 
+    // Recurse to children (hardcoded for your 20-joint hierarchy)
+    if (joint_idx == J_PELVIS) {  // Root: Pelvis
+        compute_fk(joints, J_LOWER_SPINE, j->world_rot, j->world_pos);
+        compute_fk(joints, J_L_HIP, j->world_rot, j->world_pos);
+        compute_fk(joints, J_R_HIP, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_LOWER_SPINE) {
+        compute_fk(joints, J_MID_SPINE, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_MID_SPINE) {
+        compute_fk(joints, J_UPPER_SPINE, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_UPPER_SPINE) {
+        compute_fk(joints, J_NECK, j->world_rot, j->world_pos);
+        compute_fk(joints, J_L_CLAV, j->world_rot, j->world_pos);
+        compute_fk(joints, J_R_CLAV, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_NECK) {
+        compute_fk(joints, J_HEAD, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_L_CLAV) {
+        compute_fk(joints, J_L_SHOULDER, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_L_SHOULDER) {
+        compute_fk(joints, J_L_ELBOW, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_L_ELBOW) {
+        compute_fk(joints, J_L_WRIST, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_R_CLAV) {
+        compute_fk(joints, J_R_SHOULDER, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_R_SHOULDER) {
+        compute_fk(joints, J_R_ELBOW, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_R_ELBOW) {
+        compute_fk(joints, J_R_WRIST, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_L_HIP) {
+        compute_fk(joints, J_L_KNEE, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_L_KNEE) {
+        compute_fk(joints, J_L_ANKLE, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_R_HIP) {
+        compute_fk(joints, J_R_KNEE, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_R_KNEE) {
+        compute_fk(joints, J_R_ANKLE, j->world_rot, j->world_pos);
+    }
+    // No recursion for leaf nodes like head, wrists, ankles
+}
+
+// Usage: After updating local_rots or init, call compute_fk(c->joints, J_PELVIS, (Quat){1.0f, 0.0f, 0.0f, 0.0f}, (Vec3){c->pos_x, c->pos_y, c->pos_z});
 
 void init(Fighter* env) {
     env->num_characters = 2;
     env->characters = (Character*)calloc(env->num_characters, sizeof(Character));
-    /*init_character(&env->characters[0], 0);
-    init_character(&env->characters[1], pi);*/
-
-    
     for (int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
         c->health = 100;
         c->pos_x = (i == 0) ? -5.0f : 5.0f; // spawn left/right
-        c->pos_y = 0.0f;
+        c->pos_y = 1.0f;
         c->pos_z = 0.0f;
-        c->facing = (i == 0) ? 0.0f : PI;   // face each other
+        c->facing = (i == 0) ? -PI/2.0f : PI/2.0f;
         c->state  = 0;
-
+        c->num_shapes = 19;  
+        c->shapes = calloc(c->num_shapes, sizeof(CollisionShape));
+        c->num_joints = NUM_JOINTS;
+        c->joints  = calloc(NUM_JOINTS, sizeof(Joint));;
         init_skeleton(c); // joints + hierarchy
         init_shapes(c);   // collision capsules/spheres
+        compute_fk(c->joints, J_PELVIS, (Quat){1.0f, 0.0f, 0.0f, 0.0f}, (Vec3){c->pos_x, c->pos_y, c->pos_z});
     }
     printf("init\n");
 }
 
 void c_reset(Fighter* env) {
-    /*init_collision_shapes(env->characters[0].hurt_shapes, env->characters[0].hit_shapes, 1);
-    init_collision_shapes(env->characters[1].hurt_shapes, env->characters[1].hit_shapes, -1);
-    */
     for (int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
         c->health = 100;
         c->pos_x = (i == 0) ? -5.0f : 5.0f; // spawn left/right
         c->pos_y = 0.0f;
         c->pos_z = 0.0f;
-        c->facing = (i == 0) ? 0.0f : PI;   // face each other
+        c->facing = (i==0) ? -PI/2.0f : PI/2.0f;
         c->state  = 0;
 
         init_skeleton(c); // joints + hierarchy
         init_shapes(c);   // collision capsules/spheres
+        compute_fk(c->joints, J_PELVIS, (Quat){1.0f, 0.0f, 0.0f, 0.0f}, (Vec3){c->pos_x, c->pos_y, c->pos_z});
     }
 
     printf("reset\n");
@@ -454,95 +578,17 @@ void sidestep(Fighter* env, Character* character, float direction, int target_in
     } 
 }
 
-void adjust_skeleton(Fighter* env, int character_index) {
-    Character* character = &env->characters[character_index];
-    for (int i = 0; i < 10; i++) {   
-        if(i == 1 || i == 2 || i == 3 || i == 4 || i == 6 || i==7 || i==8 || i==9){  // fixed the condition
-            CollisionShape* shape = &character->hurt_shapes[i];
-            // store rotated positions in rotation_offset fields, preserve original offsets
-            shape->rotation_offset_x = shape->offset_x * cos(character->facing) - shape->offset_z * sin(character->facing);
-            shape->rotation_offset_z = shape->offset_x * sin(character->facing) + shape->offset_z * cos(character->facing);
-        }
-    }
-}*/
-void update_fk(Character *c) {
-    // Root at character position
-    c->world_x[J_TORSO] = c->pos_x;
-    c->world_y[J_TORSO] = c->pos_y + 2.2f; // torso at chest height
-    c->world_z[J_TORSO] = c->pos_z;
 
-    // Head above torso
-    c->world_x[J_HEAD] = c->world_x[J_TORSO];
-    c->world_y[J_HEAD] = c->world_y[J_TORSO] + c->length[J_HEAD];
-    c->world_z[J_HEAD] = c->world_z[J_TORSO];
-    
-    float shoulder_width = 0.25f;
-    float shoulder_height = 0.25f;
-    // Right arm (straight out)
-    c->world_x[J_SHOULDER_R] = c->world_x[J_TORSO] + shoulder_width;
-    c->world_y[J_SHOULDER_R] = c->world_y[J_TORSO] + shoulder_height;
-    c->world_z[J_SHOULDER_R] = c->world_z[J_TORSO];
-
-    c->world_x[J_ELBOW_R] = c->world_x[J_SHOULDER_R] + c->length[J_SHOULDER_R];
-    c->world_y[J_ELBOW_R] = c->world_y[J_SHOULDER_R];
-    c->world_z[J_ELBOW_R] = c->world_z[J_SHOULDER_R];
-
-    c->world_x[J_WRIST_R] = c->world_x[J_ELBOW_R] + c->length[J_ELBOW_R];
-    c->world_y[J_WRIST_R] = c->world_y[J_ELBOW_R];
-    c->world_z[J_WRIST_R] = c->world_z[J_ELBOW_R];
-
-    // Left arm (mirror)
-    c->world_x[J_SHOULDER_L] = c->world_x[J_TORSO] - shoulder_width;
-    c->world_y[J_SHOULDER_L] = c->world_y[J_TORSO] + shoulder_height;
-    c->world_z[J_SHOULDER_L] = c->world_z[J_TORSO];
-
-    c->world_x[J_ELBOW_L] = c->world_x[J_SHOULDER_L] - c->length[J_SHOULDER_L];
-    c->world_y[J_ELBOW_L] = c->world_y[J_SHOULDER_L];
-    c->world_z[J_ELBOW_L] = c->world_z[J_SHOULDER_L];
-
-    c->world_x[J_WRIST_L] = c->world_x[J_ELBOW_L] - c->length[J_ELBOW_L];
-    c->world_y[J_WRIST_L] = c->world_y[J_ELBOW_L];
-    c->world_z[J_WRIST_L] = c->world_z[J_ELBOW_L];
-
-    // Hips
-    float hip_spacing = 0.2f;
-    c->world_x[J_HIP_R] = c->world_x[J_TORSO] + hip_spacing;
-    c->world_y[J_HIP_R] = c->world_y[J_TORSO] - 0.5f;
-    c->world_z[J_HIP_R] = c->world_z[J_TORSO];
-
-    c->world_x[J_HIP_L] = c->world_x[J_TORSO] - hip_spacing;
-    c->world_y[J_HIP_L] = c->world_y[J_TORSO] - 0.5f;
-    c->world_z[J_HIP_L] = c->world_z[J_TORSO];
-
-    // Right leg down
-    c->world_x[J_KNEE_R] = c->world_x[J_HIP_R];
-    c->world_y[J_KNEE_R] = c->world_y[J_HIP_R] - c->length[J_HIP_R];
-    c->world_z[J_KNEE_R] = c->world_z[J_HIP_R];
-
-    c->world_x[J_ANKLE_R] = c->world_x[J_KNEE_R];
-    c->world_y[J_ANKLE_R] = c->world_y[J_KNEE_R] - c->length[J_KNEE_R];
-    c->world_z[J_ANKLE_R] = c->world_z[J_KNEE_R];
-
-    // Left leg down
-    c->world_x[J_KNEE_L] = c->world_x[J_HIP_L];
-    c->world_y[J_KNEE_L] = c->world_y[J_HIP_L] - c->length[J_HIP_L];
-    c->world_z[J_KNEE_L] = c->world_z[J_HIP_L];
-
-    c->world_x[J_ANKLE_L] = c->world_x[J_KNEE_L];
-    c->world_y[J_ANKLE_L] = c->world_y[J_KNEE_L] - c->length[J_KNEE_L];
-    c->world_z[J_ANKLE_L] = c->world_z[J_KNEE_L];
-}
-
+*/
 void c_step(Fighter* env) {
     for(int i = 0; i < env->num_characters; i++) {
+        Character *c = &env->characters[i];
         env->rewards[i] = 0;
         env->terminals[i] = 0;
-        update_fk(&env->characters[i]);
-        //move_character(env, i, (i + 1) % env->num_characters, env->actions[i]);
-        //adjust_skeleton(env, i);
+        Quat yaw_rot = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
+        compute_fk(c->joints, J_PELVIS, yaw_rot, (Vec3){c->pos_x, c->pos_y, c->pos_z});
     }
 }
-
 
 typedef struct Client Client;
 struct Client {
@@ -581,7 +627,7 @@ Client* make_client(Fighter* env){
     return client;
 }
 
-void UpdateCameraFighter(Fighter* env, Client* client){
+/*void UpdateCameraFighter(Fighter* env, Client* client){
     Character* f1 = &env->characters[0];
     Character* f2 = &env->characters[1];
     Vector3 pos1 = (Vector3){f1->pos_x, f1->pos_y, f1->pos_z};
@@ -605,7 +651,7 @@ void UpdateCameraFighter(Fighter* env, Client* client){
     float smooth = 0.1f;
     client->camera.position = Vector3Lerp(client->camera.position, next_pos, smooth);
     client->camera.target = Vector3Lerp(client->camera.target, midpoint, smooth);    
-}
+}*/
 
 void c_render(Fighter* env) {
     if (env->client == NULL) {
@@ -624,177 +670,73 @@ void c_render(Fighter* env) {
     // draw grid for depth perception
     DrawGrid(20, 1.0f);
     // render each character's hurt_shapes as capsules (visualize the fighters)
-    /*for (int c = 0; c < env->num_characters; c++) {
-        character* chara = &env->characters[c];
-        color fighter_color = (c == 0) ? red : blue;  // differentiate players
-        
-        for (int i = 0; i < 10; i++) {  // assuming 4 hurt_shapes
-            collisionshape* shape = &chara->hurt_shapes[i];
-            if (shape->type != shape_capsule) continue;
-
-            // compute absolute positions, adjusted by character's pos and facing
-            vector3 center = (vector3){
-                chara->pos_x + shape->rotation_offset_x,
-                chara->pos_y + shape->offset_y,
-                chara->pos_z + shape->rotation_offset_z
-            };
-            //drawsphere(center, shape->radius+0.01,  black);
-
-            // determine start and end points based on orientation
-            // assume: torso/legs vertical (along y), arms horizontal (along x)
-            vector3 start_pos, end_pos;
-            if (i == 0) {  // vertical (torso/legs): start at bottom, end at top
-                start_pos = (vector3){ center.x, center.y - (shape->height / 2.0f), center.z };
-                end_pos = (vector3){ center.x, center.y + (shape->height / 2.0f), center.z };
-            } else if (i==1 || i==2){
-                // arms: use pre-computed rotation offsets from adjust_skeleton
-                start_pos = (vector3){ 
-                    center.x,
-                    center.y, 
-                    center.z
-                };
-                
-                // arm extends outward from shoulder in the facing direction
-                float facing_x = cos(chara->facing);
-                float facing_z = sin(chara->facing);
-                end_pos = (vector3){ 
-                    start_pos.x + (shape->height) * facing_x, 
-                    center.y, 
-                    start_pos.z + (shape->height) * facing_z 
-                };
-            } else if (i==3 || i==4){
-                // legs: hips rotate with body, feet stay planted
-                float facing_x = cos(chara->facing);
-                float facing_z = sin(chara->facing);
-                if (i == 3) {  // left leg
-                    vector3 hip_pos = (vector3){
-                        center.x,
-                        center.y,  // top of leg (hip level)
-                        center.z
-                    };
-                    
-                    vector3 knee_pos = (vector3){
-                        hip_pos.x,  // original offset, no rotation
-                        center.y - shape->height,  // bottom of leg (foot level)
-                        hip_pos.z   // original offset, no rotation
-                    };
-                    printf("knee_pos y: %f\n", knee_pos.y);
-                    start_pos = hip_pos;   // bottom of leg (foot)
-                    end_pos = knee_pos;      // top of leg (hip)
-                } else {  // right leg
-                    vector3 hip_pos = (vector3){
-                        center.x,
-                        center.y,  // top of leg (hip level)
-                        center.z
-                    };
-                    vector3 knee_pos = (vector3){
-                        hip_pos.x,  // original offset, no rotation
-                        center.y - shape->height,  // bottom of leg (foot level)
-                        hip_pos.z   // original offset, no rotation
-                    };
-                    start_pos = hip_pos;   // bottom of leg (foot)
-                    end_pos = knee_pos;      // top of leg (hip)
-                }
-            }
-            else if (i == 6 | i == 7){
-                collisionshape* left_arm = &chara->hurt_shapes[1];
-                collisionshape* right_arm = &chara->hurt_shapes[2];
-                
-                float facing_x = cos(chara->facing);
-                float facing_z = sin(chara->facing);
-                collisionshape* arm = (i==6) ? left_arm : right_arm;
-                start_pos = (vector3){
-                    center.x + arm->rotation_offset_x + (arm->height) * facing_x,
-                    center.y + arm->offset_y, 
-                    center.z + arm->rotation_offset_z + (arm->height) * facing_z
-                };
-
-                end_pos = (vector3){ 
-                    start_pos.x + (shape->height) * facing_x, 
-                    chara->pos_y + arm->offset_y, 
-                    start_pos.z + (shape->height) * facing_z 
-                };
-            }
-            else if (i==8 || i==9){
-                collisionshape* left_thigh = &chara->hurt_shapes[3];
-                collisionshape* right_thigh = &chara->hurt_shapes[4];
-
-                float facing_x = cos(chara->facing);
-                float facing_z = sin(chara->facing);
-                collisionshape* leg = (i==8)? left_thigh : right_thigh;
-                vector3 knee_pos = (vector3){
-                    chara->pos_x + leg->rotation_offset_x,
-                    center.y + leg->offset_y - (leg->height),
-                    chara->pos_z + leg->rotation_offset_z
-                };
-
-                vector3 foot_pos = (vector3){
-                    knee_pos.x,
-                    knee_pos.y - (shape->height),
-                    knee_pos.z,
-                };
-
-                start_pos = knee_pos;
-                end_pos = foot_pos;
-                
-            }
-            else {
-                // head: stays centered
-                start_pos = (vector3){ center.x, center.y, center.z };
-                end_pos = (vector3){ center.x, center.y, center.z };
-            }
-            if(i ==1) fighter_color = pink;
-            if(i ==2) fighter_color = green;
-            if(i ==3) fighter_color = yellow;
-            if(i ==4) fighter_color = purple;
-            if(i ==6) fighter_color = red;
-            if(i ==7) fighter_color = blue;
-            if(i ==8) fighter_color = orange;
-            if(i ==9) fighter_color = brown;
-            // draw the capsule (solid for body, or use drawcapsulewires for outline)
-            drawcapsule(start_pos, end_pos, shape->radius, 16, 8, fighter_color);  // 16 slices, 8 rings for smoothness
-            drawcapsulewires(start_pos, end_pos, shape->radius, 16, 8, black);  // wireframe for debug
-        }
-    }
-    */
+    //
     for (int ci = 0; ci < env->num_characters; ci++) {
         Character *chara = &env->characters[ci];
         Color fighter_color = (ci == 0) ? RED : BLUE;
 
         for (int i = 0; i < chara->num_shapes; i++) {
             CollisionShape *s = &chara->shapes[i];
+            if(i ==2) fighter_color = PINK;
+            if(i ==3) fighter_color = GREEN;
+            if(i ==4) fighter_color = YELLOW;
+            if(i ==5) fighter_color = PURPLE;
+            if(i ==6) fighter_color = GRAY;
+            if(i ==7) fighter_color = BLACK;
+            if(i ==8) fighter_color = ORANGE;
+            if(i ==9) fighter_color = BROWN;
+            if(i ==10) fighter_color = VIOLET;
+            if(i ==11) fighter_color = PUFF_CYAN;
+            if(i ==12) fighter_color = LIME;
+            if(i ==13) fighter_color = BEIGE;
 
             if (s->type == SHAPE_CAPSULE_JOINT) {
-                int a = s->jnt.joint_a;
-                int b = s->jnt.joint_b;
+                int a = s->capsule_jnt.joint_a;
+                int b = s->capsule_jnt.joint_b;
 
-                Vector3 A = { chara->world_x[a], chara->world_y[a], chara->world_z[a] };
-                Vector3 B = { chara->world_x[b], chara->world_y[b], chara->world_z[b] };
-                Vector3 dir = Vector3Normalize(Vector3Subtract(B, A));
+                Vec3 A_base = chara->joints[a].world_pos;
+                Vec3 B_base = chara->joints[b].world_pos;
+                Vector3 dir = Vector3Normalize((Vector3){B_base.x - A_base.x, B_base.y - A_base.y, B_base.z - A_base.z});
+                Vector3 dir_inv = Vector3Scale(dir, -1.0f);
+
+                // Apply padding
+                Vector3 A = (Vector3){A_base.x + dir.x * s->capsule_jnt.pad_a, A_base.y + dir.y * s->capsule_jnt.pad_a, A_base.z + dir.z * s->capsule_jnt.pad_a};
+                Vector3 B = (Vector3){B_base.x + dir_inv.x * s->capsule_jnt.pad_b, B_base.y + dir_inv.y * s->capsule_jnt.pad_b, B_base.z + dir_inv.z * s->capsule_jnt.pad_b};
 
                 DrawCapsule(A, B, s->radius, 16, 8, fighter_color);
                 DrawCapsuleWires(A, B, s->radius, 16, 8, BLACK);
             }
 
             else if (s->type == SHAPE_CAPSULE_OFFSET) {
-                int p = s->off.parent;
-                Vector3 P = { chara->world_x[p], chara->world_y[p], chara->world_z[p] };
+                int p = s->capsule_off.parent_joint;
+                Vec3 P = chara->joints[p].world_pos;
 
-                Vector3 A = { P.x, P.y - (s->off.height / 2.0f), P.z };
-                Vector3 B = { P.x, P.y + (s->off.height / 2.0f), P.z };
+                Quat parent_rot = chara->joints[p].world_rot;
+                Quat world_rot = quat_mul(parent_rot, s->capsule_off.local_rot);
+
+                Vec3 rotated_offset = quat_rotate_vec(world_rot, s->capsule_off.local_offset);
+                Vec3 base = vec3_add(P, rotated_offset);
+
+                Vec3 height_dir = quat_rotate_vec(world_rot, (Vec3){0.0f, s->capsule_off.height / 2.0f, 0.0f});
+                Vector3 A = (Vector3){base.x - height_dir.x, base.y - height_dir.y, base.z - height_dir.z};
+                Vector3 B = (Vector3){base.x + height_dir.x, base.y + height_dir.y, base.z + height_dir.z};
 
                 DrawCapsule(A, B, s->radius, 16, 8, fighter_color);
                 DrawCapsuleWires(A, B, s->radius, 16, 8, BLACK);
             }
 
             else if (s->type == SHAPE_SPHERE_JOINT) {
-                int j = s->sph.joint;
-                Vector3 J = { chara->world_x[j], chara->world_y[j], chara->world_z[j] };
+                int j = s->sphere.joint;
+                Vec3 J_base = chara->joints[j].world_pos;
+
+                Quat joint_rot = chara->joints[j].world_rot;
+                Vec3 rotated_offset = quat_rotate_vec(joint_rot, s->sphere.local_offset);
+                Vector3 J = (Vector3){J_base.x + rotated_offset.x, J_base.y + rotated_offset.y, J_base.z + rotated_offset.z};
+
                 DrawSphere(J, s->radius, fighter_color);
             }
         }
     }
- 
     EndMode3D();
     
     // draw health bars on top of screen (2d overlay)
