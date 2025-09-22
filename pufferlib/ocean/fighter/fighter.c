@@ -69,7 +69,7 @@ void test_performance(int timeout) {
 }
 
 int main() {
-    //demo();
-    test_performance(10);
+    demo();
+    //test_performance(10);
 }
 

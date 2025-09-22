@@ -135,7 +135,11 @@ typedef struct {
     // ---- shapes ----
     int num_shapes;
     CollisionShape *shapes;
-
+    // animation
+    int anim_timestep;
+    int anim_total_frames;
+    Quat shoulder_kfs[4];
+    Quat elbow_kfs[4];
     // ---- gameplay ----
     float health;
     int state;
@@ -150,6 +154,7 @@ typedef struct {
     int size;
     int x;
     int goal;
+    int tick;
     Character* characters;
     int num_characters;
     Client* client;
@@ -225,6 +230,65 @@ void mat4_from_quat_pos(Mat4 *m, Quat q, Vec3 p) {
     m->m[12] = p.x; m->m[13] = p.y; m->m[14] = p.z; m->m[15] = 1;
 }
 
+// Quaternion slerp (for interpolation; helper for splines)
+Quat quat_slerp(Quat a, Quat b, float t) {
+    float dot = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
+    if (dot < 0) {  // Shortest path
+        b = (Quat){-b.w, -b.x, -b.y, -b.z};
+        dot = -dot;
+    }
+    if (dot > 0.9995f) {  // Linear if nearly same
+        return (Quat){
+            a.w + t * (b.w - a.w),
+            a.x + t * (b.x - a.x),
+            a.y + t * (b.y - a.y),
+            a.z + t * (b.z - a.z)
+        };
+    }
+    float theta = acosf(dot);
+    float sin_theta = sinf(theta);
+    return (Quat){
+        sinf((1 - t) * theta) / sin_theta * a.w + sinf(t * theta) / sin_theta * b.w,
+        sinf((1 - t) * theta) / sin_theta * a.x + sinf(t * theta) / sin_theta * b.x,
+        sinf((1 - t) * theta) / sin_theta * a.y + sinf(t * theta) / sin_theta * b.y,
+        sinf((1 - t) * theta) / sin_theta * a.z + sinf(t * theta) / sin_theta * b.z
+    };
+}
+
+// Quaternion log and exp for tangent space (for Catmull-Rom)
+Vec3 quat_log(Quat q) {
+    float len = sqrtf(q.x*q.x + q.y*q.y + q.z*q.z);
+    if (len < EPSILON) return (Vec3){0,0,0};
+    float angle = acosf(q.w) * 2.0f;
+    return vec3_scale((Vec3){q.x / len, q.y / len, q.z / len}, angle);
+}
+
+Quat quat_exp(Vec3 v) {
+    float len = vec3_length(v);
+    if (len < EPSILON) return (Quat){1, 0, 0, 0};
+    float ha = len / 2.0f;
+    float s = sinf(ha);
+    return (Quat){cosf(ha), v.x * s / len, v.y * s / len, v.z * s / len};
+}
+
+// Catmull-Rom spline for quaternions (u in [0,1] between p1 and p2; needs 4 keys)
+Quat catmull_rom_quat(Quat p0, Quat p1, Quat p2, Quat p3, float u) {
+    // Tangent space relative to p1
+    Vec3 t0 = quat_log(quat_mul(quat_inverse(p1), p0));
+    Vec3 t1 = (Vec3){0,0,0};
+    Vec3 t2 = quat_log(quat_mul(quat_inverse(p1), p2));
+    Vec3 t3 = quat_log(quat_mul(quat_inverse(p1), p3));
+
+    // Catmull-Rom hermite in tangent space (tension alpha=0.5)
+    float u2 = u * u, u3 = u2 * u;
+    Vec3 h1 = vec3_scale(t1, 2*u3 - 3*u2 + 1);
+    Vec3 m1 = vec3_scale(vec3_sub(t2, t0), 0.5f * (u3 - 2*u2 + u));
+    Vec3 h3 = vec3_scale(t2, -2*u3 + 3*u2);
+    Vec3 m2 = vec3_scale(vec3_sub(t3, t1), 0.5f * (u3 - u2));
+
+    Vec3 tangent = vec3_add(vec3_add(h1, m1), vec3_add(h3, m2));
+    return quat_mul(p1, quat_exp(tangent));
+}
 
 void init_skeleton(Character* c){
     
@@ -235,7 +299,7 @@ void init_skeleton(Character* c){
     }
 
     c->joints[J_PELVIS].parent = -1;
-    c->joints[J_PELVIS].local_pos = (Vec3){0.0f, 0.9f, 0.0f};
+    c->joints[J_PELVIS].local_pos = (Vec3){0.0f, 1.0f, 0.0f};
 
     c->joints[J_LOWER_SPINE].parent = J_PELVIS;
     c->joints[J_LOWER_SPINE].local_pos = (Vec3){0.0f, 0.2f, 0.0f};
@@ -501,9 +565,26 @@ void compute_fk(Joint *joints, int joint_idx, Quat parent_rot, Vec3 parent_pos) 
     // No recursion for leaf nodes like head, wrists, ankles
 }
 
-// Usage: After updating local_rots or init, call compute_fk(c->joints, J_PELVIS, (Quat){1.0f, 0.0f, 0.0f, 0.0f}, (Vec3){c->pos_x, c->pos_y, c->pos_z});
+void init_animation(Character *c) {
+    c->anim_timestep = 0;
+    c->anim_total_frames = 29;  // Loop duration
+
+    // Keyframes for left shoulder (rotate around Z for swing; adjust axes as needed)
+    c->shoulder_kfs[0] = quat_from_axis_angle((Vec3){1,0,0}, 0.0f);  // Start: neutral
+    c->shoulder_kfs[1] = quat_from_axis_angle((Vec3){0,1,0}, PI/4);  // Wind-up
+    c->shoulder_kfs[2] = quat_from_axis_angle((Vec3){0,1,0}, -PI/2); // Swing forward
+    c->shoulder_kfs[3] = quat_from_axis_angle((Vec3){0,1,0}, 0.0f);  // End: back to neutral
+
+    // Keyframes for left elbow (bend around X)
+    c->elbow_kfs[0] = quat_from_axis_angle((Vec3){1,0,0}, 0.0f);     // Straight
+    c->elbow_kfs[1] = quat_from_axis_angle((Vec3){0,1,0}, -PI/4);     // Slight bend
+    c->elbow_kfs[2] = quat_from_axis_angle((Vec3){1,0,0}, 0.0);     // Full bend
+    c->elbow_kfs[3] = quat_from_axis_angle((Vec3){1,0,0}, 0.0f);     // Straight
+}
+
 
 void init(Fighter* env) {
+    env->tick = 0;
     env->num_characters = 2;
     env->characters = (Character*)calloc(env->num_characters, sizeof(Character));
     for (int i = 0; i < env->num_characters; i++) {
@@ -519,6 +600,7 @@ void init(Fighter* env) {
         c->num_joints = NUM_JOINTS;
         c->joints  = calloc(NUM_JOINTS, sizeof(Joint));;
         init_skeleton(c); // joints + hierarchy
+        init_animation(c);
         init_shapes(c);   // collision capsules/spheres
         compute_fk(c->joints, J_PELVIS, (Quat){1.0f, 0.0f, 0.0f, 0.0f}, (Vec3){c->pos_x, c->pos_y, c->pos_z});
     }
@@ -526,6 +608,7 @@ void init(Fighter* env) {
 }
 
 void c_reset(Fighter* env) {
+    env->tick = 0;
     for (int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
         c->health = 100;
@@ -536,6 +619,7 @@ void c_reset(Fighter* env) {
         c->state  = 0;
 
         init_skeleton(c); // joints + hierarchy
+        init_animation(c);
         init_shapes(c);   // collision capsules/spheres
         compute_fk(c->joints, J_PELVIS, (Quat){1.0f, 0.0f, 0.0f, 0.0f}, (Vec3){c->pos_x, c->pos_y, c->pos_z});
     }
@@ -585,9 +669,21 @@ void c_step(Fighter* env) {
         Character *c = &env->characters[i];
         env->rewards[i] = 0;
         env->terminals[i] = 0;
+        // animate
+        float u = (float)c->anim_timestep / (float)c->anim_total_frames;
+        c->joints[J_L_CLAV].local_rot = catmull_rom_quat(
+            c->shoulder_kfs[0], c->shoulder_kfs[1], c->shoulder_kfs[2], c->shoulder_kfs[3], u
+        );
+        c->joints[J_L_ELBOW].local_rot = catmull_rom_quat(
+            c->elbow_kfs[0], c->elbow_kfs[1], c->elbow_kfs[2], c->elbow_kfs[3], u
+        );
+        // fk 
         Quat yaw_rot = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
         compute_fk(c->joints, J_PELVIS, yaw_rot, (Vec3){c->pos_x, c->pos_y, c->pos_z});
+        c->anim_timestep+=1;
+        if (c->anim_timestep >= c->anim_total_frames) c->anim_timestep = 0;
     }
+    env->tick+=1;
 }
 
 typedef struct Client Client;
