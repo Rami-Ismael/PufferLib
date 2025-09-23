@@ -66,6 +66,11 @@ typedef struct Client Client;
 #define J_R_KNEE 18
 #define J_R_ANKLE 19
 
+// Gizmo types
+#define GIZMO_AXIS_X 0
+#define GIZMO_AXIS_Y 1
+#define GIZMO_AXIS_Z 2
+#define GIZMO_AXIS_NONE -1
 
 // only use floats!
 typedef struct {
@@ -395,12 +400,10 @@ void init_shapes(Character *c) {
     c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
     shape_idx++;
 
-    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
-    c->shapes[shape_idx].radius = bone_radius;
-    c->shapes[shape_idx].capsule_jnt.joint_a = J_NECK;
-    c->shapes[shape_idx].capsule_jnt.joint_b = J_HEAD;
-    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
-    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
+    c->shapes[shape_idx].type = SHAPE_SPHERE_JOINT;
+    c->shapes[shape_idx].radius = 0.15;
+    c->shapes[shape_idx].sphere.joint = J_NECK;
+    c->shapes[shape_idx].sphere.local_offset = (Vec3){0.0, 0.15, 0.0};
     shape_idx++;
 
     // Left arm
@@ -567,7 +570,7 @@ void compute_fk(Joint *joints, int joint_idx, Quat parent_rot, Vec3 parent_pos) 
 
 void init_animation(Character *c) {
     c->anim_timestep = 0;
-    c->anim_total_frames = 29;  // Loop duration
+    c->anim_total_frames = 90;  // Loop duration
 
     // Keyframes for left shoulder (rotate around Z for swing; adjust axes as needed)
     c->shoulder_kfs[0] = quat_from_axis_angle((Vec3){1,0,0}, 0.0f);  // Start: neutral
@@ -670,21 +673,36 @@ void c_step(Fighter* env) {
         env->rewards[i] = 0;
         env->terminals[i] = 0;
         // animate
-        float u = (float)c->anim_timestep / (float)c->anim_total_frames;
+        /*int cycle = c->anim_timestep % (2 * c->anim_total_frames);
+        float u;
+        if (cycle <= c->anim_total_frames) {
+            u = (float)cycle / (float)c->anim_total_frames;  // Forward: 0 to 1
+        } else {
+            u = 1.0f - ((float)(cycle - c->anim_total_frames) / (float)c->anim_total_frames);  // Reverse: 1 to 0
+        }
         c->joints[J_L_CLAV].local_rot = catmull_rom_quat(
             c->shoulder_kfs[0], c->shoulder_kfs[1], c->shoulder_kfs[2], c->shoulder_kfs[3], u
         );
         c->joints[J_L_ELBOW].local_rot = catmull_rom_quat(
             c->elbow_kfs[0], c->elbow_kfs[1], c->elbow_kfs[2], c->elbow_kfs[3], u
-        );
+        );*/
         // fk 
         Quat yaw_rot = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
         compute_fk(c->joints, J_PELVIS, yaw_rot, (Vec3){c->pos_x, c->pos_y, c->pos_z});
         c->anim_timestep+=1;
-        if (c->anim_timestep >= c->anim_total_frames) c->anim_timestep = 0;
     }
     env->tick+=1;
 }
+
+typedef struct {
+    int active_joint;
+    int hover_axis;
+    int drag_axis;
+    Vector2 drag_start;
+    Quat initial_rotation;
+    float gizmo_scale;
+    bool enabled;
+} Gizmo;
 
 typedef struct Client Client;
 struct Client {
@@ -696,7 +714,165 @@ struct Client {
     Camera3D camera;
     Vector3 default_camera_position;
     Vector3 default_camera_target;
+    Gizmo* gizmo;
 };
+
+
+Gizmo* init_gizmo() {
+    Gizmo* g = (Gizmo*)calloc(1, sizeof(Gizmo));
+    g->active_joint = -1;
+    g->hover_axis = GIZMO_AXIS_NONE;
+    g->drag_axis = GIZMO_AXIS_NONE;
+    g->gizmo_scale = 1.0f;
+    g->enabled = true;
+    return g;
+}
+
+
+// Check if ray intersects with a torus (rotation ring)
+bool ray_intersects_torus(Ray ray, Vector3 center, Vector3 axis, float major_radius, float minor_radius) {
+    // Simplified intersection test - check distance from ray to circle
+    // This is an approximation that works well for thin tori
+    
+    // Project ray onto plane perpendicular to axis
+    Vector3 n = Vector3Normalize(axis);
+    float d = Vector3DotProduct(Vector3Subtract(center, ray.position), n) / Vector3DotProduct(ray.direction, n);
+    
+    if (d < 0) return false;
+    
+    Vector3 hit_point = Vector3Add(ray.position, Vector3Scale(ray.direction, d));
+    Vector3 to_hit = Vector3Subtract(hit_point, center);
+    
+    // Remove component along axis
+    to_hit = Vector3Subtract(to_hit, Vector3Scale(n, Vector3DotProduct(to_hit, n)));
+    
+    float dist_to_circle = fabsf(Vector3Length(to_hit) - major_radius);
+    return dist_to_circle < minor_radius * 3.0f; // Generous hit zone
+}
+
+// Draw a rotation ring (torus) for the gizmo
+void draw_rotation_ring(Vector3 center, Vector3 axis, float radius, Color color, bool highlighted) {
+    int segments = 32;
+    Vector3 perpendicular1, perpendicular2;
+    
+    // Find two vectors perpendicular to axis
+    if (fabsf(axis.y) < 0.99f) {
+        perpendicular1 = Vector3Normalize(Vector3CrossProduct(axis, (Vector3){0, 1, 0}));
+    } else {
+        perpendicular1 = Vector3Normalize(Vector3CrossProduct(axis, (Vector3){1, 0, 0}));
+    }
+    perpendicular2 = Vector3CrossProduct(axis, perpendicular1);
+    
+    // Draw the ring
+    rlPushMatrix();
+    rlTranslatef(center.x, center.y, center.z);
+    
+    if (highlighted) {
+        rlSetLineWidth(4.0f);
+    } else {
+        rlSetLineWidth(2.0f);
+    }
+    
+    rlBegin(RL_LINES);
+    rlColor4ub(color.r, color.g, color.b, highlighted ? 255 : 200);
+    
+    for (int i = 0; i < segments; i++) {
+        float angle1 = (float)i * 2.0f * PI / segments;
+        float angle2 = (float)((i + 1) % segments) * 2.0f * PI / segments;
+        
+        Vector3 p1 = Vector3Add(
+            Vector3Scale(perpendicular1, cosf(angle1) * radius),
+            Vector3Scale(perpendicular2, sinf(angle1) * radius)
+        );
+        Vector3 p2 = Vector3Add(
+            Vector3Scale(perpendicular1, cosf(angle2) * radius),
+            Vector3Scale(perpendicular2, sinf(angle2) * radius)
+        );
+        
+        rlVertex3f(p1.x, p1.y, p1.z);
+        rlVertex3f(p2.x, p2.y, p2.z);
+    }
+    
+    rlEnd();
+    rlPopMatrix();
+}
+
+// Update gizmo interaction
+void update_gizmo(Gizmo* g, Character* character, Camera3D* camera) {
+    if (!g->enabled || g->active_joint < 0) return;
+    
+    Joint* joint = &character->joints[g->active_joint];
+    Vector3 joint_pos = (Vector3){joint->world_pos.x, joint->world_pos.y, joint->world_pos.z};
+    
+    Ray mouse_ray = GetMouseRay(GetMousePosition(), *camera);
+    float gizmo_radius = g->gizmo_scale * 0.5f;
+    float ring_thickness = 0.02f;
+    
+    // Check for hover if not dragging
+    if (g->drag_axis == GIZMO_AXIS_NONE) {
+        g->hover_axis = GIZMO_AXIS_NONE;
+        
+        // Check X axis (red)
+        if (ray_intersects_torus(mouse_ray, joint_pos, (Vector3){1, 0, 0}, gizmo_radius, ring_thickness)) {
+            g->hover_axis = GIZMO_AXIS_X;
+        }
+        // Check Y axis (green)
+        else if (ray_intersects_torus(mouse_ray, joint_pos, (Vector3){0, 1, 0}, gizmo_radius, ring_thickness)) {
+            g->hover_axis = GIZMO_AXIS_Y;
+        }
+        // Check Z axis (blue)
+        else if (ray_intersects_torus(mouse_ray, joint_pos, (Vector3){0, 0, 1}, gizmo_radius, ring_thickness)) {
+            g->hover_axis = GIZMO_AXIS_Z;
+        }
+        
+        // Start drag on mouse down
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && g->hover_axis != GIZMO_AXIS_NONE) {
+            g->drag_axis = g->hover_axis;
+            g->drag_start = GetMousePosition();
+            g->initial_rotation = joint->local_rot;
+        }
+    }
+    
+    // Handle dragging
+    if (g->drag_axis != GIZMO_AXIS_NONE) {
+        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
+            g->drag_axis = GIZMO_AXIS_NONE;
+        } else {
+            Vector2 mouse_delta = Vector2Subtract(GetMousePosition(), g->drag_start);
+            float rotation_speed = 0.01f;
+            float angle = (mouse_delta.x - mouse_delta.y) * rotation_speed; // Use both x and y for rotation
+            
+            Vec3 axis;
+            switch (g->drag_axis) {
+                case GIZMO_AXIS_X: axis = (Vec3){1, 0, 0}; break;
+                case GIZMO_AXIS_Y: axis = (Vec3){0, 1, 0}; break;
+                case GIZMO_AXIS_Z: axis = (Vec3){0, 0, 1}; break;
+            }
+            
+            // Apply rotation as delta from initial
+            Quat delta_rot = quat_from_axis_angle(axis, angle);
+            joint->local_rot = quat_mul(g->initial_rotation, delta_rot);
+        }
+    }
+}
+
+// Draw the gizmo
+void draw_gizmo(Gizmo* g, Character* character, Camera3D* camera) {
+    if (!g->enabled || g->active_joint < 0) return;
+    
+    Joint* joint = &character->joints[g->active_joint];
+    Vector3 joint_pos = (Vector3){joint->world_pos.x, joint->world_pos.y, joint->world_pos.z};
+    
+    float radius = g->gizmo_scale * 0.5f;
+    
+    // Draw rotation rings
+    draw_rotation_ring(joint_pos, (Vector3){1, 0, 0}, radius, RED, g->hover_axis == GIZMO_AXIS_X || g->drag_axis == GIZMO_AXIS_X);
+    draw_rotation_ring(joint_pos, (Vector3){0, 1, 0}, radius, GREEN, g->hover_axis == GIZMO_AXIS_Y || g->drag_axis == GIZMO_AXIS_Y);
+    draw_rotation_ring(joint_pos, (Vector3){0, 0, 1}, radius, BLUE, g->hover_axis == GIZMO_AXIS_Z || g->drag_axis == GIZMO_AXIS_Z);
+    
+    // Draw center sphere
+    DrawSphere(joint_pos, 0.05f, WHITE);
+}
 
 Client* make_client(Fighter* env){    
     Client* client = (Client*)calloc(1, sizeof(Client));
@@ -708,17 +884,20 @@ Client* make_client(Fighter* env){
     client->puffers = LoadTexture("resources/puffers_128.png");
     
     client->default_camera_position = (Vector3){ 
-        0,           // same x as target
-        10.0f,   // 20 units above target
-        20.0f    // 20 units behind target
+        -1.0f,           // same x as target
+        4.0f,   // 20 units above target
+        0.0f    // 20 units behind target
     };
-    client->default_camera_target = (Vector3){0, 0, 0};
+
+    client->default_camera_target = (Vector3){-5, 2, 0};
     client->camera.position = client->default_camera_position;
     client->camera.target = client->default_camera_target;
     client->camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };  // y is up
     client->camera.fovy = 45.0f;
     client->camera.projection = CAMERA_PERSPECTIVE;
     client->camera_zoom = 1.0f;
+    client->gizmo = init_gizmo();
+    client->gizmo->active_joint = J_L_ELBOW;
     //DisableCursor(); 
     return client;
 }
@@ -754,8 +933,15 @@ void c_render(Fighter* env) {
         env->client = make_client(env);
     }
     Client* client = env->client;
+    if (IsKeyPressed(KEY_ONE)) client->gizmo->active_joint = J_L_ELBOW;
+    if (IsKeyPressed(KEY_TWO)) client->gizmo->active_joint = J_R_ELBOW;
+    if (IsKeyPressed(KEY_THREE)) client->gizmo->active_joint = J_L_SHOULDER;
+    if (IsKeyPressed(KEY_FOUR)) client->gizmo->active_joint = J_R_SHOULDER;
+    if (IsKeyPressed(KEY_FIVE)) client->gizmo->active_joint = J_L_WRIST;
+    if (IsKeyPressed(KEY_SIX)) client->gizmo->active_joint = J_R_WRIST;
+    update_gizmo(client->gizmo, &env->characters[0], &client->camera);
     //UpdateCameraFighter(env, client);
-    UpdateCamera(&client->camera, CAMERA_FREE);
+    //UpdateCamera(&client->camera, CAMERA_FREE);
     BeginDrawing();
     ClearBackground(PUFF_BACKGROUND);
     BeginMode3D(client->camera);
@@ -833,6 +1019,7 @@ void c_render(Fighter* env) {
             }
         }
     }
+    draw_gizmo(client->gizmo, &env->characters[0], &client->camera);
     EndMode3D();
     
     // draw health bars on top of screen (2d overlay)
@@ -850,7 +1037,12 @@ void c_render(Fighter* env) {
     DrawRectangleRec(char1_health, RED);
     DrawRectangleLinesEx(char1_background, 2, WHITE);
     DrawText(TextFormat("player 1: %d", (int)env->characters[0].health), char1_x + 10, health_bar_y + 25, 20, WHITE);
-    
+    float elbow_x = env->characters[0].joints[8].local_rot.x;
+    float elbow_y = env->characters[0].joints[8].local_rot.y;
+    float elbow_z = env->characters[0].joints[8].local_rot.z;
+    float elbow_w = env->characters[0].joints[8].local_rot.w;
+
+    DrawText(TextFormat("elbow quat w:%f x:%f y:%f z:%f\n", elbow_w, elbow_x, elbow_y, elbow_z), char1_x + 10, health_bar_y + 50, 20, WHITE);    
     // character 2 health bar (top right)
     float char2_x = client->width - health_bar_width - health_bar_margin;
     float char2_health_ratio = env->characters[1].health / 100.0f;
