@@ -44,28 +44,24 @@ const Color PUFF_BACKGROUND = (Color){6, 24, 24, 255};
 typedef struct Client Client;
 
 // joints
-#define NUM_JOINTS 20
+#define NUM_JOINTS 17
 #define J_PELVIS 0 
-#define J_LOWER_SPINE 1
-#define J_MID_SPINE 2
-#define J_UPPER_SPINE 3
-#define J_NECK 4
-#define J_HEAD 5
-#define J_L_CLAV 6
-#define J_L_SHOULDER 7
-#define J_L_ELBOW 8
-#define J_L_WRIST 9
-#define J_R_CLAV 10
-#define J_R_SHOULDER 11
-#define J_R_ELBOW 12
-#define J_R_WRIST 13
-#define J_L_HIP 14
-#define J_L_KNEE 15
-#define J_L_ANKLE 16
-#define J_R_HIP 17
-#define J_R_KNEE 18
-#define J_R_ANKLE 19
-
+#define J_R_HIP 1
+#define J_R_KNEE 2
+#define J_R_ANKLE 3
+#define J_L_HIP 4
+#define J_L_KNEE 5
+#define J_L_ANKLE 6
+#define J_SPINE 7
+#define J_THORAX 8
+#define J_NECK 9
+#define J_HEAD 10
+#define J_L_SHOULDER 11
+#define J_L_ELBOW 12
+#define J_L_WRIST 13
+#define J_R_SHOULDER 14
+#define J_R_ELBOW 15
+#define J_R_WRIST 16
 // Gizmo types
 #define GIZMO_AXIS_X 0
 #define GIZMO_AXIS_Y 1
@@ -75,6 +71,9 @@ typedef struct Client Client;
 // only use floats!
 typedef struct {
     float score;
+    float perf;
+    float episode_length;
+    float episode_return;
     float n; // required as the last field 
 } Log;
 
@@ -148,6 +147,11 @@ typedef struct {
     // ---- gameplay ----
     float health;
     int state;
+    // moves
+    int move_frame_count;
+    float* joint_move_x;
+    float* joint_move_y;
+    float* joint_move_z;
 } Character;
 
 typedef struct {
@@ -162,6 +166,7 @@ typedef struct {
     int tick;
     Character* characters;
     int num_characters;
+    int human_agent_idx;
     Client* client;
 } Fighter;
 
@@ -306,26 +311,20 @@ void init_skeleton(Character* c){
     c->joints[J_PELVIS].parent = -1;
     c->joints[J_PELVIS].local_pos = (Vec3){0.0f, 1.0f, 0.0f};
 
-    c->joints[J_LOWER_SPINE].parent = J_PELVIS;
-    c->joints[J_LOWER_SPINE].local_pos = (Vec3){0.0f, 0.2f, 0.0f};
+    c->joints[J_SPINE].parent = J_PELVIS;
+    c->joints[J_SPINE].local_pos = (Vec3){0.0f, 0.3f, 0.0f};
 
-    c->joints[J_MID_SPINE].parent = J_LOWER_SPINE;
-    c->joints[J_MID_SPINE].local_pos = (Vec3){0.0f, 0.2f, 0.0f};
+    c->joints[J_THORAX].parent = J_SPINE;
+    c->joints[J_THORAX].local_pos = (Vec3){0.0f, 0.4f, 0.0f};
 
-    c->joints[J_UPPER_SPINE].parent = J_MID_SPINE;
-    c->joints[J_UPPER_SPINE].local_pos = (Vec3){0.0f, 0.2f, 0.0f};
-
-    c->joints[J_NECK].parent = J_UPPER_SPINE;
+    c->joints[J_NECK].parent = J_THORAX;
     c->joints[J_NECK].local_pos = (Vec3){0.0f, 0.15f, 0.0f};
 
     c->joints[J_HEAD].parent = J_NECK;
     c->joints[J_HEAD].local_pos = (Vec3){0.0f, 0.15f, 0.0f};
 
-    c->joints[J_L_CLAV].parent = J_UPPER_SPINE;
-    c->joints[J_L_CLAV].local_pos = (Vec3){-0.1f, 0.05f, 0.0f};
-
-    c->joints[J_L_SHOULDER].parent = J_L_CLAV;
-    c->joints[J_L_SHOULDER].local_pos = (Vec3){-0.15f, 0.0f, 0.0f};
+    c->joints[J_L_SHOULDER].parent = J_THORAX;
+    c->joints[J_L_SHOULDER].local_pos = (Vec3){-0.15f, -0.1f, 0.0f};
 
     c->joints[J_L_ELBOW].parent = J_L_SHOULDER;
     c->joints[J_L_ELBOW].local_pos = (Vec3){-0.25f, 0.0f, 0.0f};
@@ -333,11 +332,8 @@ void init_skeleton(Character* c){
     c->joints[J_L_WRIST].parent = J_L_ELBOW;
     c->joints[J_L_WRIST].local_pos = (Vec3){-0.25f, 0.0f, 0.0f};
 
-    c->joints[J_R_CLAV].parent = J_UPPER_SPINE;
-    c->joints[J_R_CLAV].local_pos = (Vec3){0.1f, 0.05f, 0.0f};
-
-    c->joints[J_R_SHOULDER].parent = J_R_CLAV;
-    c->joints[J_R_SHOULDER].local_pos = (Vec3){0.15f, 0.0f, 0.0f};
+    c->joints[J_R_SHOULDER].parent = J_THORAX;
+    c->joints[J_R_SHOULDER].local_pos = (Vec3){0.15f, -0.1f, 0.0f};
 
     c->joints[J_R_ELBOW].parent = J_R_SHOULDER;
     c->joints[J_R_ELBOW].local_pos = (Vec3){0.25f, 0.0f, 0.0f};
@@ -371,30 +367,22 @@ void init_shapes(Character *c) {
     c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;  // CAPSULE_JOINT
     c->shapes[shape_idx].radius = bone_radius;
     c->shapes[shape_idx].capsule_jnt.joint_a = J_PELVIS;
-    c->shapes[shape_idx].capsule_jnt.joint_b = J_LOWER_SPINE;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_SPINE;
     c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
     c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
     shape_idx++;
 
     c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
     c->shapes[shape_idx].radius = bone_radius;
-    c->shapes[shape_idx].capsule_jnt.joint_a = J_LOWER_SPINE;
-    c->shapes[shape_idx].capsule_jnt.joint_b = J_MID_SPINE;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_SPINE;
+    c->shapes[shape_idx].capsule_jnt.joint_b = J_THORAX;
     c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
     c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
     shape_idx++;
 
     c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
     c->shapes[shape_idx].radius = bone_radius;
-    c->shapes[shape_idx].capsule_jnt.joint_a = J_MID_SPINE;
-    c->shapes[shape_idx].capsule_jnt.joint_b = J_UPPER_SPINE;
-    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
-    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
-    shape_idx++;
-
-    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
-    c->shapes[shape_idx].radius = bone_radius;
-    c->shapes[shape_idx].capsule_jnt.joint_a = J_UPPER_SPINE;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_THORAX;
     c->shapes[shape_idx].capsule_jnt.joint_b = J_NECK;
     c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
     c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
@@ -409,15 +397,7 @@ void init_shapes(Character *c) {
     // Left arm
     c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
     c->shapes[shape_idx].radius = bone_radius;
-    c->shapes[shape_idx].capsule_jnt.joint_a = J_UPPER_SPINE;
-    c->shapes[shape_idx].capsule_jnt.joint_b = J_L_CLAV;
-    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
-    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
-    shape_idx++;
-
-    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
-    c->shapes[shape_idx].radius = bone_radius;
-    c->shapes[shape_idx].capsule_jnt.joint_a = J_L_CLAV;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_THORAX;
     c->shapes[shape_idx].capsule_jnt.joint_b = J_L_SHOULDER;
     c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
     c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
@@ -442,15 +422,7 @@ void init_shapes(Character *c) {
     // Right arm
     c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
     c->shapes[shape_idx].radius = bone_radius;
-    c->shapes[shape_idx].capsule_jnt.joint_a = J_UPPER_SPINE;
-    c->shapes[shape_idx].capsule_jnt.joint_b = J_R_CLAV;
-    c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
-    c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
-    shape_idx++;
-
-    c->shapes[shape_idx].type = SHAPE_CAPSULE_JOINT;
-    c->shapes[shape_idx].radius = bone_radius;
-    c->shapes[shape_idx].capsule_jnt.joint_a = J_R_CLAV;
+    c->shapes[shape_idx].capsule_jnt.joint_a = J_THORAX;
     c->shapes[shape_idx].capsule_jnt.joint_b = J_R_SHOULDER;
     c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
     c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
@@ -531,27 +503,21 @@ void compute_fk(Joint *joints, int joint_idx, Quat parent_rot, Vec3 parent_pos) 
 
     // Recurse to children (hardcoded for your 20-joint hierarchy)
     if (joint_idx == J_PELVIS) {  // Root: Pelvis
-        compute_fk(joints, J_LOWER_SPINE, j->world_rot, j->world_pos);
+        compute_fk(joints, J_SPINE, j->world_rot, j->world_pos);
         compute_fk(joints, J_L_HIP, j->world_rot, j->world_pos);
         compute_fk(joints, J_R_HIP, j->world_rot, j->world_pos);
-    } else if (joint_idx == J_LOWER_SPINE) {
-        compute_fk(joints, J_MID_SPINE, j->world_rot, j->world_pos);
-    } else if (joint_idx == J_MID_SPINE) {
-        compute_fk(joints, J_UPPER_SPINE, j->world_rot, j->world_pos);
-    } else if (joint_idx == J_UPPER_SPINE) {
+    } else if (joint_idx == J_SPINE) {
+        compute_fk(joints, J_THORAX, j->world_rot, j->world_pos);
+    } else if (joint_idx == J_THORAX) {
         compute_fk(joints, J_NECK, j->world_rot, j->world_pos);
-        compute_fk(joints, J_L_CLAV, j->world_rot, j->world_pos);
-        compute_fk(joints, J_R_CLAV, j->world_rot, j->world_pos);
+        compute_fk(joints, J_L_SHOULDER, j->world_rot, j->world_pos);
+        compute_fk(joints, J_R_SHOULDER, j->world_rot, j->world_pos);
     } else if (joint_idx == J_NECK) {
         compute_fk(joints, J_HEAD, j->world_rot, j->world_pos);
-    } else if (joint_idx == J_L_CLAV) {
-        compute_fk(joints, J_L_SHOULDER, j->world_rot, j->world_pos);
     } else if (joint_idx == J_L_SHOULDER) {
         compute_fk(joints, J_L_ELBOW, j->world_rot, j->world_pos);
     } else if (joint_idx == J_L_ELBOW) {
         compute_fk(joints, J_L_WRIST, j->world_rot, j->world_pos);
-    } else if (joint_idx == J_R_CLAV) {
-        compute_fk(joints, J_R_SHOULDER, j->world_rot, j->world_pos);
     } else if (joint_idx == J_R_SHOULDER) {
         compute_fk(joints, J_R_ELBOW, j->world_rot, j->world_pos);
     } else if (joint_idx == J_R_ELBOW) {
