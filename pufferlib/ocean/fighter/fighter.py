@@ -1,6 +1,7 @@
 import numpy as np
 import gymnasium
-
+import struct
+import os
 import pufferlib
 from pufferlib.ocean.fighter import binding
 
@@ -64,6 +65,8 @@ class Fighter(pufferlib.PufferEnv):
     def close(self):
         binding.vec_close(self.c_envs)
 
+
+
 def load_moves():
     import os
     from pathlib import Path
@@ -77,22 +80,21 @@ def load_moves():
 
     # Get all npz files
     npz_files = sorted(data_dir.glob("*.npz"))
-
-    # Process each file
-    for i, character_path in enumerate(npz_files):
-        binary_file = "paul.bin"
-        binary_path = binary_dir / binary_file
-        move_data = np.load(character_path, allow_pickle=True)
-        joints = move_data["joints"]
-        print(character_path)
-        print(joints.shape)
-        print("Frames: ", joints.shape[0])
-        print("Joints: ", joints.shape[1])
-        print("XYZ per joint: ", joints.shape[2])
-
-        print("Pelvis frame 0:", joints[0,0])
-        #save_move_binary(move_data, str(binary_path))
-
+    binary_file = "paul.bin"
+    binary_path = binary_dir / binary_file
+    with open(binary_path, 'wb') as f:
+        num_moves = len(npz_files)
+        f.write(struct.pack('i', num_moves))
+        # Process each file
+        for i, character_path in enumerate(npz_files):
+            move_data = np.load(character_path, allow_pickle=True)
+            joints = move_data["joints"]
+            # frame count
+            f.write(struct.pack('i', joints.shape[0]))
+            for frame in joints:  # shape (17, 3)
+                packed = np.concatenate([frame[:, 0], frame[:, 1], frame[:, 2]])
+                f.write(struct.pack(f"{packed.size}f", *packed))   
+    print("moves loaded")
 def test_performance(timeout=10, atn_cache=1024):
     num_envs=1000;
     env = Fighter(num_envs=num_envs)

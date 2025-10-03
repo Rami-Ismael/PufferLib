@@ -127,6 +127,13 @@ typedef struct {
     Quat world_rot;
 } Joint;
 
+typedef struct {
+    int move_frame_count;
+    float* joint_move_x;
+    float* joint_move_y;
+    float* joint_move_z;
+} Move;
+
 typedef struct { 
     // ---- root pose ----
     float pos_x, pos_y, pos_z;   // translation
@@ -147,11 +154,6 @@ typedef struct {
     // ---- gameplay ----
     float health;
     int state;
-    // moves
-    int move_frame_count;
-    float* joint_move_x;
-    float* joint_move_y;
-    float* joint_move_z;
 } Character;
 
 typedef struct {
@@ -167,8 +169,32 @@ typedef struct {
     Character* characters;
     int num_characters;
     int human_agent_idx;
+    Move* moveset;
+    int num_moves;
     Client* client;
 } Fighter;
+
+// Load moveset
+void load_moveset(const char* filename, Fighter* env){
+    FILE* file = fopen(filename, "rb");
+    if(!file) return;
+    fread(&env->num_moves, sizeof(int), 1, file);
+    env->moveset = (Move*)malloc(env->num_moves * sizeof(Move));
+    for(int i = 0; i < env->num_moves; i++){
+        fread(&env->moveset[i].move_frame_count, sizeof(int), 1, file);
+        int frame_count = env->moveset[i].move_frame_count;
+        printf("frame count: %d\n", frame_count);
+        env->moveset[i].joint_move_x = (float*)malloc(frame_count*17*sizeof(float));
+        env->moveset[i].joint_move_y = (float*)malloc(frame_count*17*sizeof(float));
+        env->moveset[i].joint_move_z = (float*)malloc(frame_count*17*sizeof(float));
+        for(int f_idx = 0; f_idx < frame_count; f_idx++){
+            fread(&env->moveset[i].joint_move_x[f_idx*17], sizeof(float), 17, file);
+            fread(&env->moveset[i].joint_move_y[f_idx*17], sizeof(float), 17, file);
+            fread(&env->moveset[i].joint_move_z[f_idx*17], sizeof(float), 17, file);
+        }
+    }
+    fclose(file);
+}
 
 // Vector operations
 Vec3 vec3_add(Vec3 a, Vec3 b) { return (Vec3){a.x + b.x, a.y + b.y, a.z + b.z}; }
@@ -315,7 +341,7 @@ void init_skeleton(Character* c){
     c->joints[J_SPINE].local_pos = (Vec3){0.0f, 0.3f, 0.0f};
 
     c->joints[J_THORAX].parent = J_SPINE;
-    c->joints[J_THORAX].local_pos = (Vec3){0.0f, 0.4f, 0.0f};
+    c->joints[J_THORAX].local_pos = (Vec3){0.0f, 0.3f, 0.0f};
 
     c->joints[J_NECK].parent = J_THORAX;
     c->joints[J_NECK].local_pos = (Vec3){0.0f, 0.15f, 0.0f};
@@ -324,7 +350,7 @@ void init_skeleton(Character* c){
     c->joints[J_HEAD].local_pos = (Vec3){0.0f, 0.15f, 0.0f};
 
     c->joints[J_L_SHOULDER].parent = J_THORAX;
-    c->joints[J_L_SHOULDER].local_pos = (Vec3){-0.15f, -0.1f, 0.0f};
+    c->joints[J_L_SHOULDER].local_pos = (Vec3){-0.15f, -0.05f, 0.0f};
 
     c->joints[J_L_ELBOW].parent = J_L_SHOULDER;
     c->joints[J_L_ELBOW].local_pos = (Vec3){-0.25f, 0.0f, 0.0f};
@@ -333,7 +359,7 @@ void init_skeleton(Character* c){
     c->joints[J_L_WRIST].local_pos = (Vec3){-0.25f, 0.0f, 0.0f};
 
     c->joints[J_R_SHOULDER].parent = J_THORAX;
-    c->joints[J_R_SHOULDER].local_pos = (Vec3){0.15f, -0.1f, 0.0f};
+    c->joints[J_R_SHOULDER].local_pos = (Vec3){0.15f, -0.05f, 0.0f};
 
     c->joints[J_R_ELBOW].parent = J_R_SHOULDER;
     c->joints[J_R_ELBOW].local_pos = (Vec3){0.25f, 0.0f, 0.0f};
@@ -389,7 +415,7 @@ void init_shapes(Character *c) {
     shape_idx++;
 
     c->shapes[shape_idx].type = SHAPE_SPHERE_JOINT;
-    c->shapes[shape_idx].radius = 0.15;
+    c->shapes[shape_idx].radius = 0.1;
     c->shapes[shape_idx].sphere.joint = J_NECK;
     c->shapes[shape_idx].sphere.local_offset = (Vec3){0.0, 0.15, 0.0};
     shape_idx++;
@@ -556,6 +582,7 @@ void init(Fighter* env) {
     env->tick = 0;
     env->num_characters = 2;
     env->characters = (Character*)calloc(env->num_characters, sizeof(Character));
+    load_moveset("resources/fighter/binaries/paul.bin", env);
     for (int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
         c->health = 100;
@@ -633,6 +660,20 @@ void sidestep(Fighter* env, Character* character, float direction, int target_in
 
 
 */
+void replay_motion(Fighter* env, int frame, int move_idx){
+    int frame_count = env->moveset[move_idx].move_frame_count;
+    frame = frame % frame_count;
+    for(int i = 0; i < NUM_JOINTS; i++){
+        if(i==J_HEAD) continue;
+        //printf("data: %d frame_count: %d\n", i+frame*17, env->moveset[0].move_frame_count);
+        float x = env->moveset[move_idx].joint_move_x[i+frame*17];
+        float y = env->moveset[move_idx].joint_move_y[i+frame*17];
+        float z = env->moveset[move_idx].joint_move_z[i+frame*17];
+        printf("x: %f, y: %f, z: %f i: %d\n", x,y,z,i);
+        env->characters[0].joints[i].world_pos = (Vec3){z,-y+1,x};
+    }
+}
+
 void c_step(Fighter* env) {
     for(int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
@@ -653,9 +694,12 @@ void c_step(Fighter* env) {
             c->elbow_kfs[0], c->elbow_kfs[1], c->elbow_kfs[2], c->elbow_kfs[3], u
         );*/
         // fk 
-        Quat yaw_rot = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
+        /*Quat yaw_rot = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
         compute_fk(c->joints, J_PELVIS, yaw_rot, (Vec3){c->pos_x, c->pos_y, c->pos_z});
         c->anim_timestep+=1;
+        */
+        // replay motion
+        replay_motion(env,env->tick, 3);
     }
     env->tick+=1;
 }
@@ -846,7 +890,7 @@ Client* make_client(Fighter* env){
     client->height = 704;
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(client->width, client->height, "pufferlib fighter");
-    SetTargetFPS(60);
+    SetTargetFPS(10);
     client->puffers = LoadTexture("resources/puffers_128.png");
     
     client->default_camera_position = (Vector3){ 
@@ -864,7 +908,7 @@ Client* make_client(Fighter* env){
     client->camera_zoom = 1.0f;
     client->gizmo = init_gizmo();
     client->gizmo->active_joint = J_L_ELBOW;
-    //DisableCursor(); 
+    DisableCursor(); 
     return client;
 }
 
@@ -905,9 +949,12 @@ void c_render(Fighter* env) {
     if (IsKeyPressed(KEY_FOUR)) client->gizmo->active_joint = J_R_SHOULDER;
     if (IsKeyPressed(KEY_FIVE)) client->gizmo->active_joint = J_L_WRIST;
     if (IsKeyPressed(KEY_SIX)) client->gizmo->active_joint = J_R_WRIST;
+    if (IsKeyPressed(KEY_SEVEN)) client->gizmo->active_joint = J_SPINE;
+    if (IsKeyPressed(KEY_EIGHT)) client->gizmo->active_joint = J_THORAX;
+
     update_gizmo(client->gizmo, &env->characters[0], &client->camera);
     //UpdateCameraFighter(env, client);
-    //UpdateCamera(&client->camera, CAMERA_FREE);
+    UpdateCamera(&client->camera, CAMERA_FREE);
     BeginDrawing();
     ClearBackground(PUFF_BACKGROUND);
     BeginMode3D(client->camera);
@@ -985,7 +1032,7 @@ void c_render(Fighter* env) {
             }
         }
     }
-    draw_gizmo(client->gizmo, &env->characters[0], &client->camera);
+    //draw_gizmo(client->gizmo, &env->characters[0], &client->camera);
     EndMode3D();
     
     // draw health bars on top of screen (2d overlay)
