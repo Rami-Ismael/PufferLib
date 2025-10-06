@@ -132,6 +132,8 @@ typedef struct {
     float* joint_move_x;
     float* joint_move_y;
     float* joint_move_z;
+    Quat* local_rot;
+    float scale;
 } Move;
 
 typedef struct { 
@@ -142,6 +144,7 @@ typedef struct {
     // ---- joints ----
     int   num_joints;
     Joint* joints;
+    float* bone_lengths;
 
     // ---- shapes ----
     int num_shapes;
@@ -240,6 +243,35 @@ Vec3 quat_rotate_vec(Quat q, Vec3 v) {
     return (Vec3){res.x, res.y, res.z};
 }
 
+Quat rotation_between_vectors(Vec3 a, Vec3 b) {
+    a = vec3_normalize(a);
+    b = vec3_normalize(b);
+    float dot = vec3_dot(a,b);
+    if (dot < -0.9999f) {
+        // 180°: pick any axis orthogonal to a
+        Vec3 axis = fabsf(a.x) < 0.1f ? vec3_normalize(vec3_cross(a, (Vec3){1,0,0}))
+                                      : vec3_normalize(vec3_cross(a, (Vec3){0,1,0}));
+        return quat_from_axis_angle(axis, PI);
+    }
+    Vec3 cross = vec3_cross(a,b);
+    Quat q;
+    q.w = 1.0f + dot;
+    q.x = cross.x;
+    q.y = cross.y;
+    q.z = cross.z;
+    
+    float len = sqrtf(q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z);
+    if (len > 1e-8f){
+        q.w /= len;
+        q.x /= len;
+        q.y /= len;
+        q.z /= len;
+    } else {
+        q = (Quat){1,0,0,0};
+    }
+    return q;
+}
+
 // Matrix operations (identity, multiply, from quat+pos)
 void mat4_identity(Mat4 *m) {
     for (int i = 0; i < 16; i++) m->m[i] = 0.0f;
@@ -326,6 +358,117 @@ Quat catmull_rom_quat(Quat p0, Quat p1, Quat p2, Quat p3, float u) {
     return quat_mul(p1, quat_exp(tangent));
 }
 
+static inline Vec3 to_engine(Vec3 p){
+    return (Vec3){p.z, -p.y, p.x};
+}
+
+static inline void build_primary_child_map(int out_child[NUM_JOINTS]) {
+    for (int i=0;i<NUM_JOINTS;i++) out_child[i] = -1;
+    out_child[J_PELVIS]     = J_SPINE;
+    out_child[J_SPINE]      = J_THORAX;
+    out_child[J_THORAX]     = J_NECK;
+    out_child[J_NECK]       = J_HEAD;
+
+    out_child[J_L_SHOULDER] = J_L_ELBOW;
+    out_child[J_L_ELBOW]    = J_L_WRIST;
+
+    out_child[J_R_SHOULDER] = J_R_ELBOW;
+    out_child[J_R_ELBOW]    = J_R_WRIST;
+
+    out_child[J_L_HIP]      = J_L_KNEE;
+    out_child[J_L_KNEE]     = J_L_ANKLE;
+
+    out_child[J_R_HIP]      = J_R_KNEE;
+    out_child[J_R_KNEE]     = J_R_ANKLE;
+}
+
+// Parent-first traversal order
+static const int ORDER[NUM_JOINTS] = {
+    J_PELVIS, J_SPINE, J_THORAX, J_NECK, J_HEAD,
+    J_L_HIP, J_L_KNEE, J_L_ANKLE,
+    J_R_HIP, J_R_KNEE, J_R_ANKLE,
+    J_L_SHOULDER, J_L_ELBOW, J_L_WRIST,
+    J_R_SHOULDER, J_R_ELBOW, J_R_WRIST
+};
+
+void compute_local_rotations(Move* move, Character* c) {
+    move->local_rot = (Quat*)malloc(sizeof(Quat) * move->move_frame_count * NUM_JOINTS);
+
+    int primary_child[NUM_JOINTS];
+    build_primary_child_map(primary_child);
+
+    // Precompute each joint’s rest “bone” (in parent local): vector from parent -> primary child
+    Vec3 bone_rest_local[NUM_JOINTS];  // in parent space
+    for (int p = 0; p < NUM_JOINTS; ++p) {
+        int child = primary_child[p];
+        if (child < 0) { bone_rest_local[p] = (Vec3){0,0,1}; continue; } // arbitrary for leaves
+        // In your rig, child local position is already parent-local. The parent->child vector = child.local_pos.
+        bone_rest_local[p] = vec3_normalize(c->joints[child].local_pos);
+    }
+
+    // For each frame, solve local rotations top-down
+    for (int f = 0; f < move->move_frame_count; f++) {
+        // 1) mocap positions in engine coords
+        Vec3 mpos[NUM_JOINTS];
+        for (int j = 0; j < NUM_JOINTS; j++) {
+            mpos[j] = to_engine((Vec3){
+                move->joint_move_x[f*NUM_JOINTS + j],
+                move->joint_move_y[f*NUM_JOINTS + j],
+                move->joint_move_z[f*NUM_JOINTS + j]
+            });
+        }
+
+        // 2) temp world rotations for this frame (parent-first)
+        Quat world_rot[NUM_JOINTS];
+
+        for (int oi = 0; oi < NUM_JOINTS; oi++) {
+            int p = ORDER[oi];
+            int par = c->joints[p].parent;
+            Quat parent_world = (par < 0) ? (Quat){1,0,0,0} : world_rot[par];
+
+            // default: identity (for leaves)
+            Quat local = (Quat){1,0,0,0};
+
+            int child = primary_child[p];
+            if (child >= 0) {
+                // Desired bone direction in WORLD this frame:
+                Vec3 bone_curr_world = vec3_normalize(vec3_sub(mpos[child], mpos[p]));
+                // Bring that into the PARENT's local space:
+                Vec3 target_in_parent =
+                    (par < 0) ? bone_curr_world
+                              : quat_rotate_vec(quat_inverse(parent_world), bone_curr_world);
+                // Rotate parent’s rest bone into this target (both in parent local space):
+                local = rotation_between_vectors(bone_rest_local[p], target_in_parent);
+            }
+
+            // Store solved local rotation on the PARENT joint (correct place)
+            move->local_rot[f*NUM_JOINTS + p] = local;
+
+            // Propagate world rotation for descendants
+            world_rot[p] = quat_mul(parent_world, local);
+        }
+    }
+}
+
+void align_skeleton_to_mocap(Character *c, Move *move) {
+    Vec3 mocap_rest[NUM_JOINTS], mocap_dir[NUM_JOINTS];
+    for (int j = 0; j < NUM_JOINTS; j++) {
+        mocap_rest[j] = to_engine((Vec3){
+            move->joint_move_x[j],
+            move->joint_move_y[j],
+            move->joint_move_z[j]
+        });
+    }
+    for (int j = 0; j < NUM_JOINTS; j++) {
+        int p = c->joints[j].parent;
+        if (p < 0) continue;
+        Vec3 dir = vec3_sub(mocap_rest[j], mocap_rest[p]);
+        Vec3 unit_dir = vec3_normalize(dir);
+        Vec3 target_pos = vec3_scale(unit_dir, c->bone_lengths[j]);
+        c->joints[j].local_pos = target_pos;
+    } 
+}
+
 void init_skeleton(Character* c){
     
     for (int i = 0; i < c->num_joints; i++) {
@@ -384,6 +527,14 @@ void init_skeleton(Character* c){
 
     c->joints[J_R_ANKLE].parent = J_R_KNEE;
     c->joints[J_R_ANKLE].local_pos = (Vec3){0.0f, -0.45f, 0.0f};
+}
+
+void store_bone_lengths(Character* c){
+    for (int j = 0; j < NUM_JOINTS; j++) {
+        int p = c->joints[j].parent;
+        if (p < 0) { c->bone_lengths[j] = 0; continue; }
+        c->bone_lengths[j] = vec3_length(c->joints[j].local_pos);
+    }
 }
 
 void init_shapes(Character *c) {
@@ -527,7 +678,7 @@ void compute_fk(Joint *joints, int joint_idx, Quat parent_rot, Vec3 parent_pos) 
     Vec3 local_offset = quat_rotate_vec(parent_rot, j->local_pos);
     j->world_pos = vec3_add(parent_pos, local_offset);
 
-    // Recurse to children (hardcoded for your 20-joint hierarchy)
+    // Recurse to children (hardcoded for your 17-joint hierarchy)
     if (joint_idx == J_PELVIS) {  // Root: Pelvis
         compute_fk(joints, J_SPINE, j->world_rot, j->world_pos);
         compute_fk(joints, J_L_HIP, j->world_rot, j->world_pos);
@@ -578,27 +729,36 @@ void init_animation(Character *c) {
 }
 
 
+
 void init(Fighter* env) {
     env->tick = 0;
     env->num_characters = 2;
     env->characters = (Character*)calloc(env->num_characters, sizeof(Character));
     load_moveset("resources/fighter/binaries/paul.bin", env);
+
     for (int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
         c->health = 100;
         c->pos_x = (i == 0) ? -5.0f : 5.0f; // spawn left/right
         c->pos_y = 1.0f;
         c->pos_z = 0.0f;
-        c->facing = (i == 0) ? -PI/2.0f : PI/2.0f;
+        c->facing = (i == 0) ? 0 : PI/2.0f;
         c->state  = 0;
         c->num_shapes = 19;  
         c->shapes = calloc(c->num_shapes, sizeof(CollisionShape));
         c->num_joints = NUM_JOINTS;
-        c->joints  = calloc(NUM_JOINTS, sizeof(Joint));;
+        c->joints  = calloc(NUM_JOINTS, sizeof(Joint));
+        c->bone_lengths = calloc(NUM_JOINTS, sizeof(float));
         init_skeleton(c); // joints + hierarchy
+        store_bone_lengths(c);
+        align_skeleton_to_mocap(c, &env->moveset[0]);
         init_animation(c);
         init_shapes(c);   // collision capsules/spheres
+        for(int j = 0; j < env->num_moves; j++){
+            compute_local_rotations(&env->moveset[j], c);
+        };
         compute_fk(c->joints, J_PELVIS, (Quat){1.0f, 0.0f, 0.0f, 0.0f}, (Vec3){c->pos_x, c->pos_y, c->pos_z});
+
     }
     printf("init\n");
 }
@@ -643,24 +803,22 @@ void sidestep(Fighter* env, Character* character, float direction, int target_in
     character->facing = atan2(env->characters[target_index].pos_z - character->pos_z, env->characters[target_index].pos_x - character->pos_x);
 }
 
-/*void move_character(Fighter* env, int character_index, int target_index, int action) {
+void move_character(Fighter* env, int character_index, int target_index, int action) {
     Character* character = &env->characters[character_index];
-    if (action == action_left) {
+    if (action == ACTION_LEFT) {
         character->pos_x -= 0.15 * cos(character->facing);
         character->pos_z -= 0.15 * sin(character->facing);
-    } else if (action == action_right) {
+    } else if (action == ACTION_RIGHT) {
         character->pos_x += 0.15 * cos(character->facing);
         character->pos_z += 0.15 * sin(character->facing);
-    } else if (action == action_up){
+    } else if (action == ACTION_UP){
         sidestep(env, character, 1, target_index);
-    } else if (action == action_down){
+    } else if (action == ACTION_DOWN){
         sidestep(env, character, -1, target_index);
     } 
 }
 
-
-*/
-void replay_motion(Fighter* env, int frame, int move_idx){
+void replay_motion(Fighter* env, int frame, int move_idx, Character* c){
     int frame_count = env->moveset[move_idx].move_frame_count;
     frame = frame % frame_count;
     for(int i = 0; i < NUM_JOINTS; i++){
@@ -669,8 +827,16 @@ void replay_motion(Fighter* env, int frame, int move_idx){
         float x = env->moveset[move_idx].joint_move_x[i+frame*17];
         float y = env->moveset[move_idx].joint_move_y[i+frame*17];
         float z = env->moveset[move_idx].joint_move_z[i+frame*17];
-        printf("x: %f, y: %f, z: %f i: %d\n", x,y,z,i);
-        env->characters[0].joints[i].world_pos = (Vec3){z,-y+1,x};
+        //printf("x: %f, y: %f, z: %f i: %d\n", x,y,z,i);
+        c->joints[i].world_pos = (Vec3){z,-y+1,x};
+    }
+}
+
+void apply_move_frame(Character* c, Move* move, int frame) {
+    frame = frame % move->move_frame_count;
+    for (int j = 0; j < NUM_JOINTS; j++){
+        printf("Bone %d length = %.3f\n", j, vec3_length(c->joints[j].local_pos));
+        c->joints[j].local_rot = move->local_rot[frame*NUM_JOINTS + j];
     }
 }
 
@@ -679,27 +845,19 @@ void c_step(Fighter* env) {
         Character *c = &env->characters[i];
         env->rewards[i] = 0;
         env->terminals[i] = 0;
-        // animate
-        /*int cycle = c->anim_timestep % (2 * c->anim_total_frames);
-        float u;
-        if (cycle <= c->anim_total_frames) {
-            u = (float)cycle / (float)c->anim_total_frames;  // Forward: 0 to 1
-        } else {
-            u = 1.0f - ((float)(cycle - c->anim_total_frames) / (float)c->anim_total_frames);  // Reverse: 1 to 0
+        //move_character(env, i, 1, env->actions[i]);
+        // move
+        if(i ==0){
+            Move* move = &env->moveset[3];
+            int frame = env->tick % move->move_frame_count;
+            apply_move_frame(c, move, frame);
+            Quat facing = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
+            compute_fk(c->joints, J_PELVIS, facing, (Vec3){c->pos_x, c->pos_y, c->pos_z});
         }
-        c->joints[J_L_CLAV].local_rot = catmull_rom_quat(
-            c->shoulder_kfs[0], c->shoulder_kfs[1], c->shoulder_kfs[2], c->shoulder_kfs[3], u
-        );
-        c->joints[J_L_ELBOW].local_rot = catmull_rom_quat(
-            c->elbow_kfs[0], c->elbow_kfs[1], c->elbow_kfs[2], c->elbow_kfs[3], u
-        );*/
-        // fk 
-        /*Quat yaw_rot = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
-        compute_fk(c->joints, J_PELVIS, yaw_rot, (Vec3){c->pos_x, c->pos_y, c->pos_z});
-        c->anim_timestep+=1;
-        */
-        // replay motion
-        replay_motion(env,env->tick, 3);
+        else {
+            // replay motion
+            replay_motion(env,env->tick, 3, c);
+        }
     }
     env->tick+=1;
 }
@@ -912,7 +1070,7 @@ Client* make_client(Fighter* env){
     return client;
 }
 
-/*void UpdateCameraFighter(Fighter* env, Client* client){
+void UpdateCameraFighter(Fighter* env, Client* client){
     Character* f1 = &env->characters[0];
     Character* f2 = &env->characters[1];
     Vector3 pos1 = (Vector3){f1->pos_x, f1->pos_y, f1->pos_z};
@@ -936,7 +1094,7 @@ Client* make_client(Fighter* env){
     float smooth = 0.1f;
     client->camera.position = Vector3Lerp(client->camera.position, next_pos, smooth);
     client->camera.target = Vector3Lerp(client->camera.target, midpoint, smooth);    
-}*/
+}
 
 void c_render(Fighter* env) {
     if (env->client == NULL) {
@@ -953,8 +1111,8 @@ void c_render(Fighter* env) {
     if (IsKeyPressed(KEY_EIGHT)) client->gizmo->active_joint = J_THORAX;
 
     update_gizmo(client->gizmo, &env->characters[0], &client->camera);
-    //UpdateCameraFighter(env, client);
-    UpdateCamera(&client->camera, CAMERA_FREE);
+    UpdateCameraFighter(env, client);
+    //UpdateCamera(&client->camera, CAMERA_FREE);
     BeginDrawing();
     ClearBackground(PUFF_BACKGROUND);
     BeginMode3D(client->camera);

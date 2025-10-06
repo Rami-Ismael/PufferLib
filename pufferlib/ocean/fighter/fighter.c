@@ -8,7 +8,7 @@ int demo() {
     env.rewards = (float*)calloc(env.num_characters, sizeof(float));
     env.terminals = (unsigned char*)calloc(env.num_characters, sizeof(unsigned char));
     init(&env);
-    c_reset(&env);
+    //c_reset(&env);
     c_render(&env);
     printf("render done\n");
     while (!WindowShouldClose()) {
