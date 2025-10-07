@@ -20,9 +20,13 @@ const Color PUFF_BACKGROUND = (Color){6, 24, 24, 255};
 #define ACTION_NONE 0
 #define ACTION_LEFT 1
 #define ACTION_RIGHT 2
-#define ACTION_UP 3
-#define ACTION_DOWN 4
-#define ACTION_JUMP 5
+#define ACTION_SIDESTEP_UP 3
+#define ACTION_SIDESTEP_DOWN 4
+#define ACTION_CROUCH 5
+#define ACTION_LIGHT_PUNCH 6
+#define ACTION_LOW_KICK 7
+#define ACTION_MEDIUM_KICK 8
+#define ACTION_MEDIUM_PUNCH 9
 
 // states
 #define state_idle 0 
@@ -129,6 +133,10 @@ typedef struct {
 
 typedef struct {
     int move_frame_count;
+    int move_frame_end;
+    int move_frame_start;
+    int motion_end_frame;
+    float total_root_distance;
     float* joint_move_x;
     float* joint_move_y;
     float* joint_move_z;
@@ -150,10 +158,9 @@ typedef struct {
     int num_shapes;
     CollisionShape *shapes;
     // animation
+    int active_animation_idx;
     int anim_timestep;
     int anim_total_frames;
-    Quat shoulder_kfs[4];
-    Quat elbow_kfs[4];
     // ---- gameplay ----
     float health;
     int state;
@@ -359,7 +366,7 @@ Quat catmull_rom_quat(Quat p0, Quat p1, Quat p2, Quat p3, float u) {
 }
 
 static inline Vec3 to_engine(Vec3 p){
-    return (Vec3){p.z, -p.y, p.x};
+    return (Vec3){p.x, -p.y, -p.z};
 }
 
 static inline void build_primary_child_map(int out_child[NUM_JOINTS]) {
@@ -401,8 +408,7 @@ void compute_local_rotations(Move* move, Character* c) {
     Vec3 bone_rest_local[NUM_JOINTS];  // in parent space
     for (int p = 0; p < NUM_JOINTS; ++p) {
         int child = primary_child[p];
-        if (child < 0) { bone_rest_local[p] = (Vec3){0,0,1}; continue; } // arbitrary for leaves
-        // In your rig, child local position is already parent-local. The parent->child vector = child.local_pos.
+        if (child < 0) { bone_rest_local[p] = (Vec3){0,0,1}; continue; } 
         bone_rest_local[p] = vec3_normalize(c->joints[child].local_pos);
     }
 
@@ -711,38 +717,46 @@ void compute_fk(Joint *joints, int joint_idx, Quat parent_rot, Vec3 parent_pos) 
     // No recursion for leaf nodes like head, wrists, ankles
 }
 
-void init_animation(Character *c) {
-    c->anim_timestep = 0;
-    c->anim_total_frames = 90;  // Loop duration
+void set_frames(Fighter* env){
+    env->moveset[0].move_frame_start = 48;
+    env->moveset[0].move_frame_end = env->moveset[0].move_frame_start + 12;
+    env->moveset[0].total_root_distance = 0;
+    env->moveset[0].motion_end_frame = env->moveset[0].move_frame_end;
+    
+    env->moveset[1].move_frame_start = 5;
+    env->moveset[1].move_frame_end = env->moveset[1].move_frame_start + 29;
+    env->moveset[1].total_root_distance = 0.6;
+    env->moveset[1].motion_end_frame = env->moveset[1].move_frame_end - 14;
 
-    // Keyframes for left shoulder (rotate around Z for swing; adjust axes as needed)
-    c->shoulder_kfs[0] = quat_from_axis_angle((Vec3){1,0,0}, 0.0f);  // Start: neutral
-    c->shoulder_kfs[1] = quat_from_axis_angle((Vec3){0,1,0}, PI/4);  // Wind-up
-    c->shoulder_kfs[2] = quat_from_axis_angle((Vec3){0,1,0}, -PI/2); // Swing forward
-    c->shoulder_kfs[3] = quat_from_axis_angle((Vec3){0,1,0}, 0.0f);  // End: back to neutral
+    env->moveset[2].move_frame_start = 16;
+    env->moveset[2].move_frame_end = env->moveset[2].move_frame_start + 12 + 44;
+    env->moveset[2].total_root_distance = 0.1;
+    env->moveset[2].motion_end_frame = env->moveset[2].move_frame_end - 30;
 
-    // Keyframes for left elbow (bend around X)
-    c->elbow_kfs[0] = quat_from_axis_angle((Vec3){1,0,0}, 0.0f);     // Straight
-    c->elbow_kfs[1] = quat_from_axis_angle((Vec3){0,1,0}, -PI/4);     // Slight bend
-    c->elbow_kfs[2] = quat_from_axis_angle((Vec3){1,0,0}, 0.0);     // Full bend
-    c->elbow_kfs[3] = quat_from_axis_angle((Vec3){1,0,0}, 0.0f);     // Straight
+    env->moveset[3].move_frame_start = 0;
+    env->moveset[3].move_frame_end = env->moveset[3].move_frame_start + 40;
+    env->moveset[3].total_root_distance = 0.7;
+    env->moveset[3].motion_end_frame = env->moveset[3].move_frame_end - 20;
+
+    env->moveset[4].move_frame_start = 5;
+    env->moveset[4].move_frame_end = env->moveset[4].move_frame_start + 29;
+    env->moveset[4].total_root_distance = 0.5;
+    env->moveset[4].motion_end_frame = env->moveset[4].move_frame_end - 19;
 }
-
-
 
 void init(Fighter* env) {
     env->tick = 0;
     env->num_characters = 2;
     env->characters = (Character*)calloc(env->num_characters, sizeof(Character));
     load_moveset("resources/fighter/binaries/paul.bin", env);
-
+    set_frames(env);
     for (int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
         c->health = 100;
-        c->pos_x = (i == 0) ? -5.0f : 5.0f; // spawn left/right
+        c->pos_x = (i == 0) ? -2.0f : 5.0f; // spawn left/right
         c->pos_y = 1.0f;
         c->pos_z = 0.0f;
-        c->facing = (i == 0) ? 0 : PI/2.0f;
+        c->facing = (i == 0) ? PI/2.0f : -PI/2.0f;
         c->state  = 0;
         c->num_shapes = 19;  
         c->shapes = calloc(c->num_shapes, sizeof(CollisionShape));
@@ -752,13 +766,18 @@ void init(Fighter* env) {
         init_skeleton(c); // joints + hierarchy
         store_bone_lengths(c);
         align_skeleton_to_mocap(c, &env->moveset[0]);
-        init_animation(c);
         init_shapes(c);   // collision capsules/spheres
         for(int j = 0; j < env->num_moves; j++){
             compute_local_rotations(&env->moveset[j], c);
         };
-        compute_fk(c->joints, J_PELVIS, (Quat){1.0f, 0.0f, 0.0f, 0.0f}, (Vec3){c->pos_x, c->pos_y, c->pos_z});
-
+        
+    }
+    for(int i =0; i< env->num_characters; i++){
+        int target = i == 0;
+        Character *c = &env->characters[i];
+        c->facing = atan2(env->characters[target].pos_z - c->pos_z, env->characters[target].pos_x - c->pos_x);
+        Quat facing = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
+        compute_fk(c->joints, J_PELVIS, facing, (Vec3){c->pos_x, c->pos_y, c->pos_z});
     }
     printf("init\n");
 }
@@ -775,7 +794,6 @@ void c_reset(Fighter* env) {
         c->state  = 0;
 
         init_skeleton(c); // joints + hierarchy
-        init_animation(c);
         init_shapes(c);   // collision capsules/spheres
         compute_fk(c->joints, J_PELVIS, (Quat){1.0f, 0.0f, 0.0f, 0.0f}, (Vec3){c->pos_x, c->pos_y, c->pos_z});
     }
@@ -811,9 +829,9 @@ void move_character(Fighter* env, int character_index, int target_index, int act
     } else if (action == ACTION_RIGHT) {
         character->pos_x += 0.15 * cos(character->facing);
         character->pos_z += 0.15 * sin(character->facing);
-    } else if (action == ACTION_UP){
+    } else if (action == ACTION_SIDESTEP_UP){
         sidestep(env, character, 1, target_index);
-    } else if (action == ACTION_DOWN){
+    } else if (action == ACTION_SIDESTEP_DOWN){
         sidestep(env, character, -1, target_index);
     } 
 }
@@ -835,29 +853,50 @@ void replay_motion(Fighter* env, int frame, int move_idx, Character* c){
 void apply_move_frame(Character* c, Move* move, int frame) {
     frame = frame % move->move_frame_count;
     for (int j = 0; j < NUM_JOINTS; j++){
-        printf("Bone %d length = %.3f\n", j, vec3_length(c->joints[j].local_pos));
         c->joints[j].local_rot = move->local_rot[frame*NUM_JOINTS + j];
+    }
+    float distance_per_frame = move->total_root_distance / (move->motion_end_frame - move->move_frame_start);
+    if(frame < move->motion_end_frame){
+
+        float cos_facing = cosf(c->facing);
+        float sin_facing = sinf(c->facing);
+        
+        c->pos_x += distance_per_frame * cos_facing;
+        c->pos_z += distance_per_frame * sin_facing;
     }
 }
 
 void c_step(Fighter* env) {
     for(int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
+        int action = env->actions[i];
         env->rewards[i] = 0;
         env->terminals[i] = 0;
-        //move_character(env, i, 1, env->actions[i]);
-        // move
-        if(i ==0){
-            Move* move = &env->moveset[3];
-            int frame = env->tick % move->move_frame_count;
-            apply_move_frame(c, move, frame);
-            Quat facing = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
-            compute_fk(c->joints, J_PELVIS, facing, (Vec3){c->pos_x, c->pos_y, c->pos_z});
+        // movement
+        if(action < 5){
+            int target = i==0;
+            move_character(env, i, target , action);
         }
-        else {
-            // replay motion
-            replay_motion(env,env->tick, 3, c);
+        // fighting
+        if(action >=5 || c->anim_timestep > 0){
+            if(c->anim_timestep == 0){
+                c->active_animation_idx = action - 5;
+                c->anim_timestep = env->moveset[c->active_animation_idx].move_frame_start;
+                printf("start frame: %d\n", c->anim_timestep);
+            }
+            Move* move = &env->moveset[c->active_animation_idx];
+            apply_move_frame(c, move, c->anim_timestep);
+            c->anim_timestep++;
+            if(c->anim_timestep+1 == move->move_frame_end){
+                c->anim_timestep =0;
+                c->active_animation_idx=-1;
+            }
         }
+        //replay_motion(env,env->tick, 3, c);
+        Quat facing = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
+        //Quat identity = {1,0,0,0}
+        compute_fk(c->joints, J_PELVIS, facing, (Vec3){c->pos_x, c->pos_y, c->pos_z});
+
     }
     env->tick+=1;
 }
@@ -1048,7 +1087,7 @@ Client* make_client(Fighter* env){
     client->height = 704;
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(client->width, client->height, "pufferlib fighter");
-    SetTargetFPS(10);
+    SetTargetFPS(60);
     client->puffers = LoadTexture("resources/puffers_128.png");
     
     client->default_camera_position = (Vector3){ 
@@ -1112,7 +1151,6 @@ void c_render(Fighter* env) {
 
     update_gizmo(client->gizmo, &env->characters[0], &client->camera);
     UpdateCameraFighter(env, client);
-    //UpdateCamera(&client->camera, CAMERA_FREE);
     BeginDrawing();
     ClearBackground(PUFF_BACKGROUND);
     BeginMode3D(client->camera);
@@ -1127,7 +1165,40 @@ void c_render(Fighter* env) {
     for (int ci = 0; ci < env->num_characters; ci++) {
         Character *chara = &env->characters[ci];
         Color fighter_color = (ci == 0) ? RED : BLUE;
-
+        float arrow_length = 2.0f;
+        float arrow_head_size = 0.3f;
+        
+        // Starting position
+        Vector3 start = { chara->pos_x, chara->pos_y, chara->pos_z };
+        DrawSphere(start, 0.20f, fighter_color);
+        // Calculate arrow endpoint (assuming facing is rotation around Y-axis)
+        Vector3 arrow_end = {
+            chara->pos_x + cosf(chara->facing) * arrow_length,
+            chara->pos_y,  // Keep same height
+            chara->pos_z + sinf(chara->facing) * arrow_length
+        };
+        
+        // Draw main arrow line
+        DrawLine3D(start, arrow_end, fighter_color);
+        
+        // Draw arrowhead
+        float head_angle1 = chara->facing + 2.8f;
+        float head_angle2 = chara->facing - 2.8f;
+        
+        Vector3 head1 = {
+            arrow_end.x + cosf(head_angle1) * arrow_head_size,
+            arrow_end.y,
+            arrow_end.z + sinf(head_angle1) * arrow_head_size
+        };
+        Vector3 head2 = {
+            arrow_end.x + cosf(head_angle2) * arrow_head_size,
+            arrow_end.y,
+            arrow_end.z + sinf(head_angle2) * arrow_head_size
+        };
+        
+        DrawLine3D(arrow_end, head1, fighter_color);
+        DrawLine3D(arrow_end, head2, fighter_color);
+        
         for (int i = 0; i < chara->num_shapes; i++) {
             CollisionShape *s = &chara->shapes[i];
             if(i ==2) fighter_color = PINK;

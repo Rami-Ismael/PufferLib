@@ -13,16 +13,28 @@ int demo() {
     printf("render done\n");
     while (!WindowShouldClose()) {
         if (IsKeyDown(KEY_LEFT_SHIFT)) {
-            if (IsKeyDown(KEY_LEFT)) {
+            if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) {
                 env.actions[0] = 1;
-            } else if (IsKeyDown(KEY_RIGHT)) {
+            } else if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) {
                 env.actions[0] = 2;
-            } else if (IsKeyDown(KEY_UP)) {
+            } else if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) {
                 env.actions[0] = 3;
-            } else if (IsKeyDown(KEY_DOWN)) {
+            } else if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) {
                 env.actions[0] = 4;
             } else if (IsKeyPressed(KEY_SPACE)) {
                 env.actions[0] = 5;
+            }
+            else if (IsKeyPressed(KEY_U)){
+                env.actions[0] = 6;
+            }
+            else if (IsKeyPressed(KEY_I)){
+                env.actions[0] = 9;
+            }
+            else if (IsKeyPressed(KEY_J)){
+                env.actions[0] = 7;
+            }
+            else if (IsKeyPressed(KEY_K)){
+                env.actions[0] = 8;
             }
             else {
                 env.actions[0] = 0;
