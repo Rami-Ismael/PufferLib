@@ -876,6 +876,7 @@ void c_step(Fighter* env) {
         if(action < 5){
             int target = i==0;
             move_character(env, i, target , action);
+
         }
         // fighting
         if(action >=5 || c->anim_timestep > 0){
@@ -893,8 +894,8 @@ void c_step(Fighter* env) {
             }
         }
         //replay_motion(env,env->tick, 3, c);
-        Quat facing = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
-        //Quat identity = {1,0,0,0}
+        Quat facing = quat_from_axis_angle((Vec3){0.0f, -1.0f, 0.0f}, c->facing);
+        Quat identity = {1,0,0,0};
         compute_fk(c->joints, J_PELVIS, facing, (Vec3){c->pos_x, c->pos_y, c->pos_z});
 
     }
