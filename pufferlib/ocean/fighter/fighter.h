@@ -157,6 +157,7 @@ typedef struct {
     // ---- shapes ----
     int num_shapes;
     CollisionShape *shapes;
+    CollisionShape* push_shapes;
     // animation
     int active_animation_idx;
     int anim_timestep;
@@ -676,6 +677,56 @@ void init_shapes(Character *c) {
     c->shapes[shape_idx].capsule_jnt.pad_a = 0.0f;
     c->shapes[shape_idx].capsule_jnt.pad_b = 0.0f;
     shape_idx++;
+
+    int p_idx = 0;
+    c->push_shapes[p_idx].type = SHAPE_SPHERE_JOINT;
+    c->push_shapes[p_idx].radius = 0.4;
+    c->push_shapes[p_idx].sphere.joint = J_SPINE;
+    c->push_shapes[p_idx].sphere.local_offset = (Vec3){0.0, 0.0, 0.0};
+    p_idx++;
+
+    c->push_shapes[p_idx].type = SHAPE_SPHERE_JOINT;
+    c->push_shapes[p_idx].radius = 0.25;
+    c->push_shapes[p_idx].sphere.joint = J_THORAX;
+    c->push_shapes[p_idx].sphere.local_offset = (Vec3){0.0, 0.0, 0.0};
+    p_idx++;
+
+ 
+    c->push_shapes[p_idx].type = SHAPE_SPHERE_JOINT;
+    c->push_shapes[p_idx].radius = 0.1;
+    c->push_shapes[p_idx].sphere.joint = J_L_ELBOW;
+    c->push_shapes[p_idx].sphere.local_offset = (Vec3){0.0, 0.0, 0.0};
+    p_idx++;
+
+    c->push_shapes[p_idx].type = SHAPE_SPHERE_JOINT;
+    c->push_shapes[p_idx].radius = 0.1;
+    c->push_shapes[p_idx].sphere.joint = J_R_ELBOW;
+    c->push_shapes[p_idx].sphere.local_offset = (Vec3){0.0, 0.0, 0.0};
+    p_idx++;
+    
+    c->push_shapes[p_idx].type = SHAPE_SPHERE_JOINT;
+    c->push_shapes[p_idx].radius = 0.1;
+    c->push_shapes[p_idx].sphere.joint = J_L_KNEE;
+    c->push_shapes[p_idx].sphere.local_offset = (Vec3){0.0, 0.0, 0.0};
+    p_idx++;
+
+    c->push_shapes[p_idx].type = SHAPE_SPHERE_JOINT;
+    c->push_shapes[p_idx].radius = 0.1;
+    c->push_shapes[p_idx].sphere.joint = J_R_KNEE;
+    c->push_shapes[p_idx].sphere.local_offset = (Vec3){0.0, 0.0, 0.0};
+    p_idx++;
+
+    c->push_shapes[p_idx].type = SHAPE_SPHERE_JOINT;
+    c->push_shapes[p_idx].radius = 0.1;
+    c->push_shapes[p_idx].sphere.joint = J_L_ANKLE;
+    c->push_shapes[p_idx].sphere.local_offset = (Vec3){0.0, 0.0, 0.0};
+    p_idx++;
+
+    c->push_shapes[p_idx].type = SHAPE_SPHERE_JOINT;
+    c->push_shapes[p_idx].radius = 0.1;
+    c->push_shapes[p_idx].sphere.joint = J_R_ANKLE;
+    c->push_shapes[p_idx].sphere.local_offset = (Vec3){0.0, 0.0, 0.0};
+    p_idx++;
 }
 
 void compute_fk(Joint *joints, int joint_idx, Quat parent_rot, Vec3 parent_pos) {
@@ -760,6 +811,7 @@ void init(Fighter* env) {
         c->state  = 0;
         c->num_shapes = 19;  
         c->shapes = calloc(c->num_shapes, sizeof(CollisionShape));
+        c->push_shapes = calloc(8, sizeof(CollisionShape));
         c->num_joints = NUM_JOINTS;
         c->joints  = calloc(NUM_JOINTS, sizeof(Joint));
         c->bone_lengths = calloc(NUM_JOINTS, sizeof(float));
@@ -824,11 +876,11 @@ void sidestep(Fighter* env, Character* character, float direction, int target_in
 void move_character(Fighter* env, int character_index, int target_index, int action) {
     Character* character = &env->characters[character_index];
     if (action == ACTION_LEFT) {
-        character->pos_x -= 0.15 * cos(character->facing);
-        character->pos_z -= 0.15 * sin(character->facing);
+        character->pos_x -= 0.05 * cos(character->facing);
+        character->pos_z -= 0.05 * sin(character->facing);
     } else if (action == ACTION_RIGHT) {
-        character->pos_x += 0.15 * cos(character->facing);
-        character->pos_z += 0.15 * sin(character->facing);
+        character->pos_x += 0.05 * cos(character->facing);
+        character->pos_z += 0.05 * sin(character->facing);
     } else if (action == ACTION_SIDESTEP_UP){
         sidestep(env, character, 1, target_index);
     } else if (action == ACTION_SIDESTEP_DOWN){
@@ -866,6 +918,42 @@ void apply_move_frame(Character* c, Move* move, int frame) {
     }
 }
 
+int sphere_collision(CollisionShape* c1, Character* char1, int c1_act, CollisionShape* c2, Character* char2, int c2_act){
+    if(c1->type!=3 || c2->type!=3) return 0;
+    Vec3 p1 = char1->joints[c1->sphere.joint].world_pos;
+    Vec3 p2 = char2->joints[c2->sphere.joint].world_pos;
+    float r1 = c1->radius;
+    float r2 = c2->radius;
+    float rsum = r1+r2;
+
+    Vec3 delta = vec3_sub(p2,p1);
+    float dist2 = vec3_dot(delta,delta);
+    if(dist2 >= rsum*rsum || dist2 < 1e-8f) return 0;
+    // push back on characters
+    float dist = sqrtf(dist2);
+    float penetration = rsum - dist;
+    if(penetration <= 0.001f)return 0;
+    Character* mover = (c1_act == 0 && c2_act < 5 && c2_act>0) ? char2 : char1;
+    Character* target = (c1_act == 0 && c2_act < 5 && c2_act>0) ? char1: char2;
+    Vec3 forward = {
+        sinf(mover->facing),
+        0.0f,
+        cosf(mover->facing)
+    };
+    forward = vec3_normalize(forward);
+    // push
+    float push_strength = 0.4f;
+    target->pos_x += forward.x * penetration * push_strength;
+    target->pos_z += forward.z * penetration * push_strength;
+
+    mover->pos_x  += forward.x * -penetration * (1.0f - push_strength);
+    mover->pos_z  += forward.z * -penetration * (1.0f - push_strength);
+
+    return 1;
+
+}
+
+
 void c_step(Fighter* env) {
     for(int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
@@ -876,8 +964,28 @@ void c_step(Fighter* env) {
         if(action < 5){
             int target = i==0;
             move_character(env, i, target , action);
-
         }
+    }
+
+    // push collision resolution
+    Character* c1 = &env->characters[0];
+    Character* c2 = &env->characters[1];
+    int c1_act = env->actions[0];
+    int c2_act = env->actions[1];
+    int collided = 0;
+    for (int i = 0; i < 8 && !collided; i++) {
+        for (int j = 0; j < 8; j++) {
+            collided = sphere_collision(&c1->push_shapes[i], c1, c1_act,
+                             &c2->push_shapes[j], c2, c2_act);
+            if(collided){
+                printf("colliding joints %d & %d\n", i,j);
+                break;
+            }
+        }
+    }
+    for(int i = 0; i < env->num_characters; i++){
+        Character* c = &env->characters[i];
+        int action = env->actions[i];
         // fighting
         if(action >=5 || c->anim_timestep > 0){
             if(c->anim_timestep == 0){
@@ -1136,6 +1244,47 @@ void UpdateCameraFighter(Fighter* env, Client* client){
     client->camera.target = Vector3Lerp(client->camera.target, midpoint, smooth);    
 }
 
+void DrawWireSphere(Vector3 center, float radius, int rings, int slices, Color color) {
+    for (int i = 0; i <= rings; i++) {
+        float lat = PI * ((float)i / (float)rings - 0.5f);  // from -PI/2 to PI/2
+        float y = sinf(lat);
+        float r = cosf(lat);
+        Vector3 prev = {0};
+        for (int j = 0; j <= slices; j++) {
+            float lon = 2.0f * PI * (float)j / (float)slices;
+            float x = cosf(lon) * r;
+            float z = sinf(lon) * r;
+            Vector3 curr = {
+                center.x + radius * x,
+                center.y + radius * y,
+                center.z + radius * z
+            };
+            if (j > 0) DrawLine3D(prev, curr, color);
+            prev = curr;
+        }
+    }
+
+    // Draw longitude lines (vertical)
+    for (int j = 0; j <= slices; j++) {
+        float lon = 2.0f * PI * (float)j / (float)slices;
+        Vector3 prev = {0};
+        for (int i = 0; i <= rings; i++) {
+            float lat = PI * ((float)i / (float)rings - 0.5f);
+            float y = sinf(lat);
+            float r = cosf(lat);
+            float x = cosf(lon) * r;
+            float z = sinf(lon) * r;
+            Vector3 curr = {
+                center.x + radius * x,
+                center.y + radius * y,
+                center.z + radius * z
+            };
+            if (i > 0) DrawLine3D(prev, curr, color);
+            prev = curr;
+        }
+    }
+}
+
 void c_render(Fighter* env) {
     if (env->client == NULL) {
         env->client = make_client(env);
@@ -1260,6 +1409,17 @@ void c_render(Fighter* env) {
 
                 DrawSphere(J, s->radius, fighter_color);
             }
+        }
+        for(int i = 0; i < 8; i++){
+            CollisionShape *s = &chara->push_shapes[i];
+            int j = s->sphere.joint;
+            Vec3 J_base = chara->joints[j].world_pos;
+
+            Quat joint_rot = chara->joints[j].world_rot;
+            Vec3 rotated_offset = quat_rotate_vec(joint_rot, s->sphere.local_offset);
+            Vector3 J = (Vector3){J_base.x + rotated_offset.x, J_base.y + rotated_offset.y, J_base.z + rotated_offset.z};
+
+            DrawWireSphere(J, s->radius, 5, 24, fighter_color);
         }
     }
     //draw_gizmo(client->gizmo, &env->characters[0], &client->camera);
