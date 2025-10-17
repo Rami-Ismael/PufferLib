@@ -876,9 +876,12 @@ void sidestep(Fighter* env, Character* character, float direction, int target_in
 void move_character(Fighter* env, int character_index, int target_index, int action) {
     Character* character = &env->characters[character_index];
     if (action == ACTION_LEFT) {
+        character->facing = atan2(env->characters[target_index].pos_z - character->pos_z, env->characters[target_index].pos_x - character->pos_x);
         character->pos_x -= 0.05 * cos(character->facing);
         character->pos_z -= 0.05 * sin(character->facing);
     } else if (action == ACTION_RIGHT) {
+        character->facing = atan2(env->characters[target_index].pos_z - character->pos_z, env->characters[target_index].pos_x - character->pos_x);
+
         character->pos_x += 0.05 * cos(character->facing);
         character->pos_z += 0.05 * sin(character->facing);
     } else if (action == ACTION_SIDESTEP_UP){
