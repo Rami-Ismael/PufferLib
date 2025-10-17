@@ -935,20 +935,17 @@ int sphere_collision(CollisionShape* c1, Character* char1, int c1_act, Collision
     if(penetration <= 0.001f)return 0;
     Character* mover = (c1_act == 0 && c2_act < 5 && c2_act>0) ? char2 : char1;
     Character* target = (c1_act == 0 && c2_act < 5 && c2_act>0) ? char1: char2;
-    Vec3 forward = {
-        sinf(mover->facing),
-        0.0f,
-        cosf(mover->facing)
-    };
-    forward = vec3_normalize(forward);
+
+    Vec3 body1 = {mover->pos_x, mover->pos_y, mover->pos_z};
+    Vec3 body2 = {target->pos_x, target->pos_y, target->pos_z};
+    Vec3 push_dir = vec3_normalize(vec3_sub(body2,body1));
     // push
     float push_strength = 0.4f;
-    target->pos_x += forward.x * penetration * push_strength;
-    target->pos_z += forward.z * penetration * push_strength;
+    target->pos_x += push_dir.x * penetration * push_strength;
+    target->pos_z += push_dir.z * penetration * push_strength;
 
-    mover->pos_x  += forward.x * -penetration * (1.0f - push_strength);
-    mover->pos_z  += forward.z * -penetration * (1.0f - push_strength);
-
+    mover->pos_x  += push_dir.x * -penetration * (1.0f - push_strength);
+    mover->pos_z  += push_dir.z * -penetration * (1.0f - push_strength);
     return 1;
 
 }
