@@ -5,41 +5,28 @@ import os
 import pufferlib
 from pufferlib.ocean.fighter import binding
 
-PLAYER_OBS_N = 27
-
 class Fighter(pufferlib.PufferEnv):
     def __init__(self, num_envs=1, render_mode=None, report_interval=1,
-            num_agents=2,
+            num_agents=1,
             human_agent_idx=0,
             buf = None, seed=0):
 
         # env
-        self.num_agents = num_envs*num_agents
+        self.num_agents = num_envs
         self.render_mode = render_mode
         self.report_interval = report_interval
         
-        self.num_obs = 27
+        self.num_obs = 14
         self.single_observation_space = gymnasium.spaces.Box(low=0, high=1,
             shape=(self.num_obs,), dtype=np.float32)
-        self.single_action_space = gymnasium.spaces.Discrete(5)
+        self.single_action_space = gymnasium.spaces.Discrete(9)
 
         super().__init__(buf=buf)
         c_envs = []
-        for i in range(num_envs):
-            env_id = binding.env_init(
-                self.observations[i*num_agents:(i+1)*num_agents],
-                self.actions[i*num_agents:(i+1)*num_agents],
-                self.rewards[i*num_agents:(i+1)*num_agents],
-                self.terminals[i*num_agents:(i+1)*num_agents],
-                self.truncations[i*num_agents:(i+1)*num_agents],
-                i + seed * num_envs,
-                num_agents=num_agents,
-                human_agent_idx=human_agent_idx
-            )
-            c_envs.append(env_id)
-
-        self.c_envs = binding.vectorize(*c_envs)
-
+        self.c_envs = binding.vec_init(self.observations, self.actions, self.rewards, 
+            self.terminals, self.truncations,num_envs, seed, num_agents = num_agents, 
+            human_agent_idx = human_agent_idx
+        )
     def reset(self, seed=0):
         binding.vec_reset(self.c_envs, seed)
         self.tick = 0

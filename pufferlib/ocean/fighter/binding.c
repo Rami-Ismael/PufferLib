@@ -4,7 +4,7 @@
 #include "../env_binding.h"
 
 static int my_init(Env* env, PyObject* args, PyObject* kwargs) {
-    env->num_characters = unpack(kwargs, "num_agents");
+    env->num_agents = unpack(kwargs, "num_agents");
     env->human_agent_idx = unpack(kwargs, "human_agent_idx");
     init(env);
     return 0;

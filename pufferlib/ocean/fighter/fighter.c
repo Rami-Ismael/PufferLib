@@ -2,11 +2,11 @@
 #include <time.h>
 #include <unistd.h>
 int demo() {
-    Fighter env = {.num_characters = 2};    
-    env.observations = (float*)calloc(env.num_characters, sizeof(float));
-    env.actions = (int*)calloc(env.num_characters, sizeof(int));
-    env.rewards = (float*)calloc(env.num_characters, sizeof(float));
-    env.terminals = (unsigned char*)calloc(env.num_characters, sizeof(unsigned char));
+    Fighter env = {.num_characters = 2, .num_agents = 1};    
+    env.observations = (float*)calloc(env.num_agents * 14, sizeof(float));
+    env.actions = (int*)calloc(env.num_agents, sizeof(int));
+    env.rewards = (float*)calloc(env.num_agents, sizeof(float));
+    env.terminals = (unsigned char*)calloc(env.num_agents, sizeof(unsigned char));
     init(&env);
     //c_reset(&env);
     c_render(&env);
@@ -17,9 +17,9 @@ int demo() {
                 env.actions[0] = 1;
             } else if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) {
                 env.actions[0] = 2;
-            } else if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) {
+            } else if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
                 env.actions[0] = 3;
-            } else if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) {
+            } else if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
                 env.actions[0] = 4;
             } else if (IsKeyPressed(KEY_SPACE)) {
                 env.actions[0] = 5;
@@ -51,28 +51,29 @@ int demo() {
     free(env.rewards);
     free(env.terminals);
     c_close(&env);
+    return 0;
 }
 
 
 void test_performance(int timeout) {
-    Fighter env = {.num_characters = 2};    
-    env.observations = (float*)calloc(env.num_characters, sizeof(float));
-    env.actions = (int*)calloc(env.num_characters, sizeof(int));
-    env.rewards = (float*)calloc(env.num_characters, sizeof(float));
-    env.terminals = (unsigned char*)calloc(env.num_characters, sizeof(unsigned char));
+    Fighter env = {.num_characters = 2, .num_agents = 1};    
+    env.observations = (float*)calloc(env.num_agents*14, sizeof(float));
+    env.actions = (int*)calloc(env.num_agents, sizeof(int));
+    env.rewards = (float*)calloc(env.num_agents, sizeof(float));
+    env.terminals = (unsigned char*)calloc(env.num_agents, sizeof(unsigned char));
     init(&env);
     c_reset(&env);
 
     int start = time(NULL);
     int num_steps = 0;
     while (time(NULL) - start < timeout) {
-        env.actions[0] = rand() % 3;
+        env.actions[0] = rand() % 9;
         c_step(&env);
         num_steps++;
     }
 
     int end = time(NULL);
-    float sps = num_steps*env.num_characters / (end - start);
+    float sps = num_steps*env.num_agents / (end - start);
     printf("Test Environment SPS: %f\n", sps);
     free(env.observations);
     free(env.actions);

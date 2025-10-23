@@ -45,6 +45,7 @@ const Color PUFF_BACKGROUND = (Color){6, 24, 24, 255};
 #define SHAPE_CAPSULE_JOINT 1
 #define SHAPE_CAPSULE_OFFSET 2
 #define SHAPE_SPHERE_JOINT 3
+#define SHAPE_CYLINDER_JOINT 4
 typedef struct Client Client;
 
 // joints
@@ -120,8 +121,24 @@ typedef struct {
             int joint;         // Center joint index
             Vec3 local_offset; // Optional local offset from joint (default {0,0,0})
         } sphere;
+
+        struct {
+            int joint;
+            float height;
+            Vec3 local_offset;
+        } cylinder;
     };
 } CollisionShape;
+
+typedef struct {
+    int   hit;
+    float toi;
+    int attacker;
+    int defender;
+    int anchor_id;
+    int hurt_id;
+    Vec3  contact, normal;
+} HitEvent;
 
 typedef struct {
     int parent;
@@ -142,6 +159,12 @@ typedef struct {
     float* joint_move_z;
     Quat* local_rot;
     float scale;
+    int hit_type;
+    int dmg; 
+    int anchors[3];
+    Vec3 anchor_prev[3];
+    Vec3 anchor_cur[3];
+    int active_frame;
 } Move;
 
 typedef struct { 
@@ -158,6 +181,7 @@ typedef struct {
     int num_shapes;
     CollisionShape *shapes;
     CollisionShape* push_shapes;
+    CollisionShape* hurt_shapes;
     // animation
     int active_animation_idx;
     int anim_timestep;
@@ -165,6 +189,7 @@ typedef struct {
     // ---- gameplay ----
     float health;
     int state;
+    HitEvent hit;
 } Character;
 
 typedef struct {
@@ -179,6 +204,7 @@ typedef struct {
     int tick;
     Character* characters;
     int num_characters;
+    int num_agents;
     int human_agent_idx;
     Move* moveset;
     int num_moves;
@@ -194,7 +220,7 @@ void load_moveset(const char* filename, Fighter* env){
     for(int i = 0; i < env->num_moves; i++){
         fread(&env->moveset[i].move_frame_count, sizeof(int), 1, file);
         int frame_count = env->moveset[i].move_frame_count;
-        printf("frame count: %d\n", frame_count);
+        //printf("frame count: %d\n", frame_count);
         env->moveset[i].joint_move_x = (float*)malloc(frame_count*17*sizeof(float));
         env->moveset[i].joint_move_y = (float*)malloc(frame_count*17*sizeof(float));
         env->moveset[i].joint_move_z = (float*)malloc(frame_count*17*sizeof(float));
@@ -219,6 +245,9 @@ float vec3_length(Vec3 v) { return sqrtf(vec3_dot(v, v)); }
 Vec3 vec3_normalize(Vec3 v) {
     float len = vec3_length(v);
     return len > EPSILON ? vec3_scale(v, 1.0f / len) : v;
+}
+Vec3 vec3_lerp(Vec3 a, Vec3 b, float t){
+    return (Vec3){ a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t, a.z + (b.z-a.z)*t };
 }
 
 // Quaternion operations (w is real part, x,y,z imaginary)
@@ -364,6 +393,64 @@ Quat catmull_rom_quat(Quat p0, Quat p1, Quat p2, Quat p3, float u) {
 
     Vec3 tangent = vec3_add(vec3_add(h1, m1), vec3_add(h3, m2));
     return quat_mul(p1, quat_exp(tangent));
+}
+
+
+static inline int overlap_sphere_vs_cyl(Vec3 P, float rA,
+                                         Vec3 C, float R, float halfH) {
+    // y range (with sphere padding)
+    float yMin = C.y - halfH - rA;
+    float yMax = C.y + halfH + rA;
+    if (P.y < yMin || P.y > yMax) return 0;
+
+    // radial distance in XZ
+    float dx = P.x - C.x;
+    float dz = P.z - C.z;
+    float sumR = R + rA;
+    return (dx*dx + dz*dz) <= (sumR * sumR);
+}
+
+static inline HitEvent sweepSphereVsCyl(Vec3 prev, Vec3 curr, float rA,
+                                            Vec3 C, float R, float halfH) {
+    const int   STEPS = 8;     // coarse (increase if your moves are insanely fast)
+    const int   REFINE = 2;    // bisection iterations
+    HitEvent H = {0};
+
+    // Coarse scan
+    float tPrev = 0.0f;
+    int   hitNow = 0;
+    for (int i = 1; i <= STEPS; ++i) {
+        float t = (float)i / (float)STEPS;
+        Vec3  P = vec3_lerp(prev, curr, t);
+        if (overlap_sphere_vs_cyl(P, rA, C, R, halfH)) {
+            // refine in [tPrev, t]
+            float lo = tPrev, hi = t;
+            for (int k = 0; k < REFINE; ++k) {
+                float mid = 0.5f*(lo + hi);
+                Vec3 M = vec3_lerp(prev, curr, mid);
+                if (overlap_sphere_vs_cyl(M, rA, C, R, halfH)) hi = mid; else lo = mid;
+            }
+            float tHit = hi;
+            Vec3  PH   = vec3_lerp(prev, curr, tHit);
+
+            // horizontal normal (from cylinder center towards PH in XZ)
+            float nx = PH.x - C.x, nz = PH.z - C.z;
+            float invLen = 1.0f / fmaxf(1e-8f, sqrtf(nx*nx + nz*nz));
+            Vec3  n = (Vec3){ nx*invLen, 0.0f, nz*invLen };
+
+            H.hit = 1;
+            H.toi = tHit;
+            // contact at cylinder "skin" height clamped into the band (debug info)
+            float yClamped = fmaxf(C.y - halfH, fminf(PH.y, C.y + halfH));
+            H.contact = (Vec3){ C.x + n.x * R, yClamped, C.z + n.z * R };
+            H.normal  = n;
+            hitNow = 1;
+            break;
+        }
+        tPrev = t;
+    }
+
+    return H;
 }
 
 static inline Vec3 to_engine(Vec3 p){
@@ -727,6 +814,79 @@ void init_shapes(Character *c) {
     c->push_shapes[p_idx].sphere.joint = J_R_ANKLE;
     c->push_shapes[p_idx].sphere.local_offset = (Vec3){0.0, 0.0, 0.0};
     p_idx++;
+
+    int hurt_idx = 0;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .25;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_THORAX;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = .5;
+    hurt_idx++;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .25;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_L_HIP;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = .75;
+    hurt_idx++; 
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .25;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_R_HIP;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = .75;
+    hurt_idx++;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .2;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_NECK;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = 0.3;
+    hurt_idx++;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .1;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_L_ELBOW;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = 0.2;
+    hurt_idx++;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .1;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_R_ELBOW;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = 0.2;
+    hurt_idx++;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .1;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_L_WRIST;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = 0.2;
+    hurt_idx++;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .1;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_R_WRIST;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = 0.2;
+    hurt_idx++;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .25;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_R_KNEE;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = 0.7;
+    hurt_idx++;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .25;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_L_KNEE;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = 0.7;
+    hurt_idx++;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .2;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_L_ANKLE;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = 0.2;
+    hurt_idx++;
+    c->hurt_shapes[hurt_idx].type = SHAPE_CYLINDER_JOINT;
+    c->hurt_shapes[hurt_idx].radius = .2;
+    c->hurt_shapes[hurt_idx].cylinder.joint = J_R_ANKLE;
+    c->hurt_shapes[hurt_idx].cylinder.local_offset = (Vec3){0.0,0.0,0.0};
+    c->hurt_shapes[hurt_idx].cylinder.height = 0.2;
 }
 
 void compute_fk(Joint *joints, int joint_idx, Quat parent_rot, Vec3 parent_pos) {
@@ -773,26 +933,59 @@ void set_frames(Fighter* env){
     env->moveset[0].move_frame_end = env->moveset[0].move_frame_start + 12;
     env->moveset[0].total_root_distance = 0;
     env->moveset[0].motion_end_frame = env->moveset[0].move_frame_end;
+    env->moveset[0].hit_type = 0;
+    env->moveset[0].dmg = 0;
+    env->moveset[0].anchors[0] = 0;
+    env->moveset[0].anchors[1] = 0;
+    env->moveset[0].anchors[2] = 0;
     
-    env->moveset[1].move_frame_start = 5;
+    env->moveset[1].move_frame_start = 0;
     env->moveset[1].move_frame_end = env->moveset[1].move_frame_start + 29;
     env->moveset[1].total_root_distance = 0.6;
     env->moveset[1].motion_end_frame = env->moveset[1].move_frame_end - 14;
+    env->moveset[1].hit_type = 3;
+    env->moveset[1].dmg = 5;
+    env->moveset[1].active_frame = env->moveset[1].move_frame_start + 7;
+    env->moveset[1].anchors[0] = 11;
+    env->moveset[1].anchors[1] = 12;
+    env->moveset[1].anchors[2] = 13;
 
     env->moveset[2].move_frame_start = 16;
     env->moveset[2].move_frame_end = env->moveset[2].move_frame_start + 12 + 44;
     env->moveset[2].total_root_distance = 0.1;
     env->moveset[2].motion_end_frame = env->moveset[2].move_frame_end - 30;
+    env->moveset[2].hit_type = 1;
+    env->moveset[2].dmg = 6;
+    env->moveset[2].active_frame = env->moveset[2].move_frame_start + 11;
+    env->moveset[2].anchors[0] = 1;
+    env->moveset[2].anchors[1] = 2;
+    env->moveset[2].anchors[2] = 3;
 
     env->moveset[3].move_frame_start = 0;
     env->moveset[3].move_frame_end = env->moveset[3].move_frame_start + 40;
     env->moveset[3].total_root_distance = 0.7;
     env->moveset[3].motion_end_frame = env->moveset[3].move_frame_end - 20;
+    env->moveset[3].hit_type = 2;
+    env->moveset[3].dmg = 13;
+    env->moveset[3].active_frame = env->moveset[3].move_frame_start + 15;
+    env->moveset[3].anchors[0] = 4;
+    env->moveset[3].anchors[1] = 5;
+    env->moveset[3].anchors[2] = 6;
 
     env->moveset[4].move_frame_start = 5;
     env->moveset[4].move_frame_end = env->moveset[4].move_frame_start + 29;
     env->moveset[4].total_root_distance = 0.5;
     env->moveset[4].motion_end_frame = env->moveset[4].move_frame_end - 19;
+    env->moveset[4].hit_type = 3;
+    env->moveset[4].dmg = 8;
+    env->moveset[4].active_frame = env->moveset[4].move_frame_start + 10;
+    env->moveset[4].anchors[0] = 14;
+    env->moveset[4].anchors[1] = 15;
+    env->moveset[4].anchors[2] = 16;
+    for(int i= 0; i < 5; i++){
+        memset(env->moveset[i].anchor_prev, 0, sizeof(env->moveset[i].anchor_prev));
+        memset(env->moveset[i].anchor_cur, 0, sizeof(env->moveset[i].anchor_cur));
+    }
 }
 
 void init(Fighter* env) {
@@ -801,6 +994,7 @@ void init(Fighter* env) {
     env->characters = (Character*)calloc(env->num_characters, sizeof(Character));
     load_moveset("resources/fighter/binaries/paul.bin", env);
     set_frames(env);
+
     for (int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
         c->health = 100;
@@ -812,9 +1006,12 @@ void init(Fighter* env) {
         c->num_shapes = 19;  
         c->shapes = calloc(c->num_shapes, sizeof(CollisionShape));
         c->push_shapes = calloc(8, sizeof(CollisionShape));
+        c->hurt_shapes = calloc(12, sizeof(CollisionShape));
         c->num_joints = NUM_JOINTS;
         c->joints  = calloc(NUM_JOINTS, sizeof(Joint));
         c->bone_lengths = calloc(NUM_JOINTS, sizeof(float));
+        c->anim_timestep = 0;
+        c->active_animation_idx = -1;
         init_skeleton(c); // joints + hierarchy
         store_bone_lengths(c);
         align_skeleton_to_mocap(c, &env->moveset[0]);
@@ -831,7 +1028,6 @@ void init(Fighter* env) {
         Quat facing = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
         compute_fk(c->joints, J_PELVIS, facing, (Vec3){c->pos_x, c->pos_y, c->pos_z});
     }
-    printf("init\n");
 }
 
 void c_reset(Fighter* env) {
@@ -839,23 +1035,32 @@ void c_reset(Fighter* env) {
     for (int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
         c->health = 100;
-        c->pos_x = (i == 0) ? -5.0f : 5.0f; // spawn left/right
-        c->pos_y = 0.0f;
+        c->pos_x = (i == 0) ? -2.0f : 5.0f; // spawn left/right
+        c->pos_y = 1.0f;
         c->pos_z = 0.0f;
-        c->facing = (i==0) ? -PI/2.0f : PI/2.0f;
+        c->facing = (i==0) ? PI/2.0f : -PI/2.0f;
         c->state  = 0;
+        c->anim_timestep = 0;
+        c->active_animation_idx =-1;
+        
+        for (int i = 0; i < c->num_joints; i++) {
+            c->joints[i].local_rot = (Quat){1.0f, 0.0f, 0.0f, 0.0f};
+        }
 
-        init_skeleton(c); // joints + hierarchy
-        init_shapes(c);   // collision capsules/spheres
-        compute_fk(c->joints, J_PELVIS, (Quat){1.0f, 0.0f, 0.0f, 0.0f}, (Vec3){c->pos_x, c->pos_y, c->pos_z});
+    }
+    for(int i =0; i< env->num_characters; i++){
+        int target = i == 0;
+        Character *c = &env->characters[i];
+        c->facing = atan2(env->characters[target].pos_z - c->pos_z, env->characters[target].pos_x - c->pos_x);
+        Quat facing = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
+        compute_fk(c->joints, J_PELVIS, facing, (Vec3){c->pos_x, c->pos_y, c->pos_z});
     }
 
-    printf("reset\n");
 }
 
 void sidestep(Fighter* env, Character* character, float direction, int target_index) {
     float sidestep_radius = 4.0f;
-    float sidestep_speed = 0.05f;
+    float sidestep_speed = 0.25f;
     float cos_facing = cos(character->facing);
     float sin_facing = sin(character->facing);
     // calculate current position relative to circle center
@@ -907,6 +1112,7 @@ void replay_motion(Fighter* env, int frame, int move_idx, Character* c){
 
 void apply_move_frame(Character* c, Move* move, int frame) {
     frame = frame % move->move_frame_count;
+    //frame = move->active_frame; //visibly confirm active frame is max reach
     for (int j = 0; j < NUM_JOINTS; j++){
         c->joints[j].local_rot = move->local_rot[frame*NUM_JOINTS + j];
     }
@@ -953,13 +1159,119 @@ int sphere_collision(CollisionShape* c1, Character* char1, int c1_act, Collision
 
 }
 
+HitEvent check_hit_collision(Fighter* env, int attacker_idx, Move* move, int defender_idx){
+    //Character* A = &env->characters[attacker_idx];
+    Character* D = &env->characters[defender_idx];
+    // radius of hitline anchor
+    float anchorR = 0.06f;
+    float minDot = 0.015f;
+    int num_hurt_shapes = 12;
+
+    HitEvent best = {0};
+    best.toi = 1.0f;
+    for(int i = 0; i < 3; i++){
+        int anchor = move->anchors[i];
+        Vec3 P0 = move->anchor_prev[i];
+        Vec3 P1 = move->anchor_cur[i];
+        Vec3 v = vec3_sub(P1, P0); // velocity direction 
+        for(int j = 0; j < num_hurt_shapes; j++){
+            CollisionShape* S = &D->hurt_shapes[j];
+            int joint = S->cylinder.joint;
+            // cylinder details
+            Vec3 C = vec3_add(D->joints[joint].world_pos, S->cylinder.local_offset);
+            float R = S->radius;
+            float halfH = 0.5f * S->cylinder.height;
+            // Sweep through hurt shape
+            HitEvent H = sweepSphereVsCyl(P0, P1, anchorR, C, R, halfH);
+            if(!H.hit) continue;
+            // check anchor moving toward shape and not away
+            if(vec3_dot(v, H.normal) <= minDot) continue;
+            if(H.toi < best.toi){
+                best = H;
+                best.hit = 1;
+                best.attacker = attacker_idx;
+                best.defender = defender_idx;
+                best.anchor_id = i;
+                best.hurt_id = j;
+            }
+        }
+    }
+    return best;
+}
+
+void add_log(Fighter* env) {
+    int score = env->characters[0].health - env->characters[1].health;
+    env->log.episode_length = env->tick;
+    env->log.score += score;
+    env->log.perf += score / 100;
+    env->log.n += 1;
+}
+
+void apply_hit(Fighter* env, HitEvent* hit){
+    Character* attacker = &env->characters[hit->attacker];
+    Character* defender = &env->characters[hit->defender];
+    int dmg = env->moveset[attacker->active_animation_idx].dmg;
+    defender->health -= dmg; 
+    int type = hit->attacker == 0 ? 1 : -1;
+    env->rewards[0] += (float)(type*dmg) / 100.0f;
+    env->log.episode_return += (float)(type*dmg) / 100.0f;
+    if(defender->health <=0){
+        env->rewards[0] = 1.0f;
+        env->log.episode_return += 1.0f;
+        add_log(env);
+        c_reset(env);
+    };
+}
+
+void compute_observations(Fighter* env){
+    Character *self = &env->characters[0];
+    Character *opp  = &env->characters[1];
+
+    env->observations[0] = self->joints[J_PELVIS].world_pos.x / 10.0f;
+    env->observations[1] = self->joints[J_PELVIS].world_pos.y / 10.0f;
+    env->observations[2] = self->joints[J_PELVIS].world_pos.z / 10.0f;
+    env->observations[3] = (float)self->health / 100.0f;
+    env->observations[4] = (float)self->active_animation_idx / 9.0f;
+    float cy = cosf(self->facing);
+    float sy = sinf(self->facing);
+    Vec3 fwd = {cy, 0.0f, sy};
+    Vec3 right = {-sy, 0.0, cy};
+    env->observations[5] = cy;
+    env->observations[6] = sy;
+    // enemy
+    
+    float delta_x = opp->joints[J_PELVIS].world_pos.x - self->joints[J_PELVIS].world_pos.x;
+    float delta_y = opp->joints[J_PELVIS].world_pos.y - self->joints[J_PELVIS].world_pos.y;
+    float delta_z = opp->joints[J_PELVIS].world_pos.z - self->joints[J_PELVIS].world_pos.z;
+    
+    float rel_x = delta_x*fwd.x + delta_z*fwd.z;
+    float rel_z = delta_x*right.x + delta_z*right.z;
+    env->observations[7] = rel_x / 10.0f;
+    env->observations[8] = rel_z / 10.0f;
+    env->observations[9] = delta_y / 10.0f;
+
+    float delta_facing = opp->facing - self->facing;
+    env->observations[10] = (float)opp->health / 100.0f;
+    env->observations[11] = (float)opp->active_animation_idx / 9.0f;
+    env->observations[12] = cosf(delta_facing);
+    env->observations[13] = sinf(delta_facing);
+}
+
 
 void c_step(Fighter* env) {
+    int agent_action = env->actions[0];
+    int bot_action = 0;
+    //int bot_action = rand() % 9;
     for(int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
-        int action = env->actions[i];
-        env->rewards[i] = 0;
-        env->terminals[i] = 0;
+        int action;
+        if(i < env->num_agents){
+            action = agent_action;
+            env->rewards[i] = 0;
+            env->terminals[i] = 0;
+        } else {
+            action = bot_action;
+        }
         // movement
         if(action < 5){
             int target = i==0;
@@ -967,36 +1279,28 @@ void c_step(Fighter* env) {
         }
     }
 
-    // push collision resolution
-    Character* c1 = &env->characters[0];
-    Character* c2 = &env->characters[1];
-    int c1_act = env->actions[0];
-    int c2_act = env->actions[1];
-    int collided = 0;
-    for (int i = 0; i < 8 && !collided; i++) {
-        for (int j = 0; j < 8; j++) {
-            collided = sphere_collision(&c1->push_shapes[i], c1, c1_act,
-                             &c2->push_shapes[j], c2, c2_act);
-            if(collided){
-                printf("colliding joints %d & %d\n", i,j);
-                break;
-            }
-        }
-    }
     for(int i = 0; i < env->num_characters; i++){
         Character* c = &env->characters[i];
-        int action = env->actions[i];
+        int action;
+        if( i < env->num_agents){
+            action = agent_action; 
+        } else {
+            action = bot_action;
+        }
         // fighting
         if(action >=5 || c->anim_timestep > 0){
             if(c->anim_timestep == 0){
                 c->active_animation_idx = action - 5;
                 c->anim_timestep = env->moveset[c->active_animation_idx].move_frame_start;
-                printf("start frame: %d\n", c->anim_timestep);
+                for(int j= 0; j < 3; j++){
+                    int anchor = env->moveset[c->active_animation_idx].anchors[j];
+                    env->moveset[i].anchor_prev[j] = c->joints[anchor].world_pos;
+                }
             }
             Move* move = &env->moveset[c->active_animation_idx];
             apply_move_frame(c, move, c->anim_timestep);
             c->anim_timestep++;
-            if(c->anim_timestep+1 == move->move_frame_end){
+            if(c->anim_timestep+1 >= move->move_frame_end){
                 c->anim_timestep =0;
                 c->active_animation_idx=-1;
             }
@@ -1007,7 +1311,76 @@ void c_step(Fighter* env) {
         compute_fk(c->joints, J_PELVIS, facing, (Vec3){c->pos_x, c->pos_y, c->pos_z});
 
     }
+    // push collision resolution
+    Character* c1 = &env->characters[0];
+    Character* c2 = &env->characters[1];
+    int c1_act = agent_action;
+    int c2_act = bot_action;
+    int collided = 0;
+    for (int i = 0; i < 8 && !collided; i++) {
+        for (int j = 0; j < 8; j++) {
+            /*if(c1->active_animation_idx > -1 || c2->active_animation_idx > -1){
+                break;
+            }*/
+            collided = sphere_collision(&c1->push_shapes[i], c1, c1_act,
+                             &c2->push_shapes[j], c2, c2_act);
+            if(collided){
+                break;
+            }
+        }
+    }
+
+    // check hit collisions
+    HitEvent e0 = {0};
+    HitEvent e1 = {0};
+    for(int i = 0; i < env->num_characters; i++){
+        Character* c = &env->characters[i];
+        if (c->active_animation_idx < 6 && c->anim_timestep == 0){
+            continue;
+        }
+        Move* move = &env->moveset[c->active_animation_idx];
+        for(int j=0; j<3; j++){
+            int anchor = move->anchors[j];
+            move->anchor_cur[j] = c->joints[anchor].world_pos;
+        }
+
+        if(c->anim_timestep != move->active_frame){
+            memcpy(move->anchor_prev, move->anchor_cur, sizeof(move->anchor_prev));
+            continue;
+        }
+        HitEvent e =check_hit_collision(env, i, move, (i+1)%2);
+        if(e.hit && i ==0) {
+            e0 = e;
+        } else if(e.hit && i == 1){
+            e1 = e;
+        }
+
+    }
+
+    // compare hits to decide priority
+    if(e0.hit && (!e1.hit || e0.toi < e1.toi)){
+        apply_hit(env, &e0);
+    } else if (e1.hit && (!e0.hit || e1.toi < e0.toi)){
+        apply_hit(env, &e1);
+    } else if(e0.hit && e1.hit){
+        apply_hit(env, &e0);
+        apply_hit(env, &e1);
+    }
+    // new anchor
+    for (int i = 0; i < env->num_characters; i++){
+        Character* c = &env->characters[i];
+        if (c->active_animation_idx < 0) continue;
+        Move* move = &env->moveset[c->active_animation_idx];
+        memcpy(move->anchor_prev, move->anchor_cur, sizeof(move->anchor_prev));
+    }
+
+    compute_observations(env);
+
     env->tick+=1;
+    if(env->tick == 512){
+        add_log(env);
+        c_reset(env);
+    }
 }
 
 typedef struct {
@@ -1197,7 +1570,6 @@ Client* make_client(Fighter* env){
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(client->width, client->height, "pufferlib fighter");
     SetTargetFPS(60);
-    client->puffers = LoadTexture("resources/puffers_128.png");
     
     client->default_camera_position = (Vector3){ 
         -1.0f,           // same x as target
@@ -1285,6 +1657,37 @@ void DrawWireSphere(Vector3 center, float radius, int rings, int slices, Color c
     }
 }
 
+void DrawWireCylinder(Vector3 center, float radius, float height, int slices, Color color) {
+    if (slices < 3) slices = 3;
+    if (height < 0) height = -height;  // tolerate negative input
+
+    float h2 = 0.5f * height;
+    Vector3 botC = (Vector3){ center.x, center.y - h2, center.z };
+    Vector3 topC = (Vector3){ center.x, center.y + h2, center.z };
+
+    Vector3 prevTop = {0}, prevBot = {0};
+    for (int i = 0; i <= slices; i++) {
+        float t = (float)i / (float)slices;
+        float ang = 2.0f*PI*t;
+        float cx = cosf(ang)*radius;
+        float cz = sinf(ang)*radius;
+
+        Vector3 bot = (Vector3){ botC.x + cx, botC.y, botC.z + cz };
+        Vector3 top = (Vector3){ topC.x + cx, topC.y, topC.z + cz };
+
+        if (i > 0) {
+            // ring segments
+            DrawLine3D(prevBot, bot, color);
+            DrawLine3D(prevTop, top, color);
+        }
+        // spokes
+        DrawLine3D(bot, top, color);
+
+        prevBot = bot;
+        prevTop = top;
+    }
+}
+
 void c_render(Fighter* env) {
     if (env->client == NULL) {
         env->client = make_client(env);
@@ -1348,7 +1751,15 @@ void c_render(Fighter* env) {
         
         DrawLine3D(arrow_end, head1, fighter_color);
         DrawLine3D(arrow_end, head2, fighter_color);
-        
+        // Draw hit trajectory
+        /*if(chara->active_animation_idx > -1){
+           Move* move = &env->moveset[chara->active_animation_idx];
+           Vector3 anchor_1 = (Vector3){move->anchor_cur[0].x, move->anchor_cur[0].y+1, move->anchor_cur[0].z};
+           Vector3 anchor_2 = (Vector3){move->anchor_cur[1].x, move->anchor_cur[1].y+1, move->anchor_cur[1].z};
+           Vector3 anchor_3 = (Vector3){move->anchor_cur[2].x, move->anchor_cur[2].y+1, move->anchor_cur[2].z};
+           DrawLine3D(anchor_1, anchor_2, RED);
+           DrawLine3D(anchor_2, anchor_3, RED);
+        }*/
         for (int i = 0; i < chara->num_shapes; i++) {
             CollisionShape *s = &chara->shapes[i];
             if(i ==2) fighter_color = PINK;
@@ -1418,8 +1829,21 @@ void c_render(Fighter* env) {
             Quat joint_rot = chara->joints[j].world_rot;
             Vec3 rotated_offset = quat_rotate_vec(joint_rot, s->sphere.local_offset);
             Vector3 J = (Vector3){J_base.x + rotated_offset.x, J_base.y + rotated_offset.y, J_base.z + rotated_offset.z};
+            if(IsKeyDown(KEY_LEFT_CONTROL)){
+                DrawWireSphere(J, s->radius, 5, 24, fighter_color);
+            }
+        }
 
-            DrawWireSphere(J, s->radius, 5, 24, fighter_color);
+        for(int i = 0; i < 12; i++){
+            CollisionShape* s = &chara->hurt_shapes[i];
+            int j= s->cylinder.joint;
+            Vec3 J_base = chara->joints[j].world_pos;
+            Quat joint_rot = chara->joints[j].world_rot;
+            Vec3 rotated_offset = quat_rotate_vec(joint_rot, s->cylinder.local_offset);
+            Vector3 J = (Vector3){J_base.x + rotated_offset.x, J_base.y + rotated_offset.y, J_base.z + rotated_offset.z};
+            if(IsKeyDown(KEY_LEFT_CONTROL)){
+                DrawWireCylinder(J, s->radius, s->cylinder.height, 24, BLUE);
+            }
         }
     }
     //draw_gizmo(client->gizmo, &env->characters[0], &client->camera);
