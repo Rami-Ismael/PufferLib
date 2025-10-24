@@ -999,7 +999,7 @@ void init(Fighter* env) {
         Character *c = &env->characters[i];
         c->health = 100;
         c->pos_x = (i == 0) ? -2.0f : 5.0f; // spawn left/right
-        c->pos_y = 1.0f;
+        c->pos_y = 0.0f;
         c->pos_z = 0.0f;
         c->facing = (i == 0) ? PI/2.0f : -PI/2.0f;
         c->state  = 0;
@@ -1036,7 +1036,7 @@ void c_reset(Fighter* env) {
         Character *c = &env->characters[i];
         c->health = 100;
         c->pos_x = (i == 0) ? -2.0f : 5.0f; // spawn left/right
-        c->pos_y = 1.0f;
+        c->pos_y = 0.0f;
         c->pos_z = 0.0f;
         c->facing = (i==0) ? PI/2.0f : -PI/2.0f;
         c->state  = 0;
@@ -1058,9 +1058,14 @@ void c_reset(Fighter* env) {
 
 }
 
+int bounds_check(float x, float z){
+    if(x < -10 || x > 10 || z < -10 || z > 10) return 0;
+    return 1;
+}
+
 void sidestep(Fighter* env, Character* character, float direction, int target_index) {
     float sidestep_radius = 4.0f;
-    float sidestep_speed = 0.25f;
+    float sidestep_speed = 0.05f;
     float cos_facing = cos(character->facing);
     float sin_facing = sin(character->facing);
     // calculate current position relative to circle center
@@ -1072,6 +1077,7 @@ void sidestep(Fighter* env, Character* character, float direction, int target_in
     float new_cos_facing = cos(character->facing);
     float new_sin_facing = sin(character->facing);
     // calculate new position on circle circumference
+    if(!bounds_check(center_x - sidestep_radius * new_cos_facing, center_z - sidestep_radius * new_sin_facing)) return;
     character->pos_x = (center_x) - (sidestep_radius * new_cos_facing);
     character->pos_z = (center_z) - (sidestep_radius * new_sin_facing);
     // new facing toward target
@@ -1082,11 +1088,16 @@ void move_character(Fighter* env, int character_index, int target_index, int act
     Character* character = &env->characters[character_index];
     if (action == ACTION_LEFT) {
         character->facing = atan2(env->characters[target_index].pos_z - character->pos_z, env->characters[target_index].pos_x - character->pos_x);
-        character->pos_x -= 0.05 * cos(character->facing);
-        character->pos_z -= 0.05 * sin(character->facing);
+        float dx = 0.03 * cos(character->facing);
+        float dz = 0.03 * sin(character->facing);
+        if(!bounds_check(character->pos_x - dx, character->pos_z - dz)) return;
+        character->pos_x -= dx; 
+        character->pos_z -= dz;
     } else if (action == ACTION_RIGHT) {
         character->facing = atan2(env->characters[target_index].pos_z - character->pos_z, env->characters[target_index].pos_x - character->pos_x);
-
+        float dx = 0.05 * cos(character->facing);
+        float dz = 0.05 * sin(character->facing);
+        if(!bounds_check(character->pos_x + dx, character->pos_z + dz)) return;
         character->pos_x += 0.05 * cos(character->facing);
         character->pos_z += 0.05 * sin(character->facing);
     } else if (action == ACTION_SIDESTEP_UP){
@@ -1202,8 +1213,8 @@ HitEvent check_hit_collision(Fighter* env, int attacker_idx, Move* move, int def
 void add_log(Fighter* env) {
     int score = env->characters[0].health - env->characters[1].health;
     env->log.episode_length = env->tick;
-    env->log.score += score;
-    env->log.perf += score / 100;
+    env->log.score += (float)score;
+    env->log.perf += (float)score / 100.0f;
     env->log.n += 1;
 }
 
@@ -1260,8 +1271,8 @@ void compute_observations(Fighter* env){
 
 void c_step(Fighter* env) {
     int agent_action = env->actions[0];
-    int bot_action = 0;
-    //int bot_action = rand() % 9;
+    //int bot_action = 0;
+    int bot_action = rand() % 9;
     for(int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
         int action;
@@ -1377,7 +1388,14 @@ void c_step(Fighter* env) {
     compute_observations(env);
 
     env->tick+=1;
-    if(env->tick == 512){
+    if(env->tick == 1200){
+        if(env->characters[0].health > env->characters[1].health){
+            env->rewards[0] = 1.0f;
+            env->log.episode_return += 1.0f;
+        } else if(env->characters[0].health < env->characters[1].health){
+            env->rewards[0] = -1.0f;
+            env->log.episode_return -= 1.0f;
+        }
         add_log(env);
         c_reset(env);
     }
@@ -1868,8 +1886,8 @@ void c_render(Fighter* env) {
     float elbow_y = env->characters[0].joints[8].local_rot.y;
     float elbow_z = env->characters[0].joints[8].local_rot.z;
     float elbow_w = env->characters[0].joints[8].local_rot.w;
-
-    DrawText(TextFormat("elbow quat w:%f x:%f y:%f z:%f\n", elbow_w, elbow_x, elbow_y, elbow_z), char1_x + 10, health_bar_y + 50, 20, WHITE);    
+    // Clock
+    DrawText(TextFormat("%d", (1200/60) - (int)env->tick / 60), (client->width - 45) / 2.0f, health_bar_y, 45, RED); 
     // character 2 health bar (top right)
     float char2_x = client->width - health_bar_width - health_bar_margin;
     float char2_health_ratio = env->characters[1].health / 100.0f;
