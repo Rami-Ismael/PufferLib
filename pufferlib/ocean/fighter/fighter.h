@@ -190,7 +190,7 @@ typedef struct {
     // ---- gameplay ----
     float health;
     int state;
-    HitEvent hit;
+    HitEvent hit_event;
 } Character;
 
 typedef struct {
@@ -1221,7 +1221,10 @@ void apply_hit(Fighter* env, HitEvent* hit){
     Character* attacker = &env->characters[hit->attacker];
     Character* defender = &env->characters[hit->defender];
     int dmg = env->moveset[attacker->active_animation_idx].dmg;
-    defender->health -= dmg; 
+    defender->health -= dmg;
+    if(defender->health < 0 ) {
+        defender->health = 0;
+    }
     int type = hit->attacker == 0 ? 1 : -1;
     env->rewards[0] += (float)(type*dmg) / 100.0f;
     env->log.episode_return += (float)(type*dmg) / 100.0f;
@@ -1237,9 +1240,9 @@ void compute_observations(Fighter* env){
     Character *self = &env->characters[0];
     Character *opp  = &env->characters[1];
 
-    env->observations[0] = self->joints[J_PELVIS].world_pos.x / 10.0f;
-    env->observations[1] = self->joints[J_PELVIS].world_pos.y / 10.0f;
-    env->observations[2] = self->joints[J_PELVIS].world_pos.z / 10.0f;
+    env->observations[0] = (self->joints[J_PELVIS].world_pos.x + 10) / 20.0f;
+    env->observations[1] = (self->joints[J_PELVIS].world_pos.y + 10) / 20.0f;
+    env->observations[2] = (self->joints[J_PELVIS].world_pos.z + 10) / 20.0f;
     env->observations[3] = (float)self->health / 100.0f;
     env->observations[4] = (float)self->active_animation_idx / 9.0f;
     float cy = cosf(self->facing);
@@ -1256,9 +1259,9 @@ void compute_observations(Fighter* env){
     
     float rel_x = delta_x*fwd.x + delta_z*fwd.z;
     float rel_z = delta_x*right.x + delta_z*right.z;
-    env->observations[7] = rel_x / 10.0f;
-    env->observations[8] = rel_z / 10.0f;
-    env->observations[9] = delta_y / 10.0f;
+    env->observations[7] = rel_x / 20.0f;
+    env->observations[8] = rel_z / 20.0f;
+    env->observations[9] = delta_y / 20.0f;
 
     float delta_facing = opp->facing - self->facing;
     env->observations[10] = (float)opp->health / 100.0f;
@@ -1364,9 +1367,8 @@ void c_step(Fighter* env) {
         } else if(e.hit && i == 1){
             e1 = e;
         }
-
     }
-
+    env->characters[0].hit_event = e0;
     // compare hits to decide priority
     if(e0.hit && (!e1.hit || e0.toi < e1.toi)){
         apply_hit(env, &e0);
@@ -1776,6 +1778,13 @@ void c_render(Fighter* env) {
            DrawLine3D(anchor_1, anchor_2, RED);
            DrawLine3D(anchor_2, anchor_3, RED);
         }*/
+
+
+        /* hit confirm animation */
+        if(chara->hit_event.hit){
+            Vector3 hit_location = {chara->hit_event.contact.x, chara->hit_event.contact.y, chara->hit_event.contact.z};
+            DrawSphere(hit_location, 0.20f, PINK);
+        }
         for (int i = 0; i < chara->num_shapes; i++) {
             CollisionShape *s = &chara->shapes[i];
             if(i ==2) fighter_color = PINK;
