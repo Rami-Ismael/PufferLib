@@ -160,10 +160,8 @@ typedef struct {
     Quat* local_rot;
     float scale;
     int hit_type;
-    int dmg; 
+    int dmg;
     int anchors[3];
-    Vec3 anchor_prev[3];
-    Vec3 anchor_cur[3];
     int active_frame;
 } Move;
 
@@ -186,6 +184,9 @@ typedef struct {
     int active_animation_idx;
     int anim_timestep;
     int anim_total_frames;
+    // hit collisions 
+    Vec3 anchor_prev[3];
+    Vec3 anchor_cur[3];
     // ---- gameplay ----
     float health;
     int state;
@@ -982,10 +983,6 @@ void set_frames(Fighter* env){
     env->moveset[4].anchors[0] = 14;
     env->moveset[4].anchors[1] = 15;
     env->moveset[4].anchors[2] = 16;
-    for(int i= 0; i < 5; i++){
-        memset(env->moveset[i].anchor_prev, 0, sizeof(env->moveset[i].anchor_prev));
-        memset(env->moveset[i].anchor_cur, 0, sizeof(env->moveset[i].anchor_cur));
-    }
 }
 
 void init(Fighter* env) {
@@ -1019,7 +1016,8 @@ void init(Fighter* env) {
         for(int j = 0; j < env->num_moves; j++){
             compute_local_rotations(&env->moveset[j], c);
         };
-        
+        memset(c->anchor_prev, 0, sizeof(c->anchor_prev));
+        memset(c->anchor_cur, 0, sizeof(c->anchor_cur));        
     }
     for(int i =0; i< env->num_characters; i++){
         int target = i == 0;
@@ -1046,7 +1044,8 @@ void c_reset(Fighter* env) {
         for (int i = 0; i < c->num_joints; i++) {
             c->joints[i].local_rot = (Quat){1.0f, 0.0f, 0.0f, 0.0f};
         }
-
+        memset(c->anchor_prev, 0, sizeof(c->anchor_prev));
+        memset(c->anchor_cur, 0, sizeof(c->anchor_cur));        
     }
     for(int i =0; i< env->num_characters; i++){
         int target = i == 0;
@@ -1171,7 +1170,7 @@ int sphere_collision(CollisionShape* c1, Character* char1, int c1_act, Collision
 }
 
 HitEvent check_hit_collision(Fighter* env, int attacker_idx, Move* move, int defender_idx){
-    //Character* A = &env->characters[attacker_idx];
+    Character* A = &env->characters[attacker_idx];
     Character* D = &env->characters[defender_idx];
     // radius of hitline anchor
     float anchorR = 0.06f;
@@ -1182,8 +1181,8 @@ HitEvent check_hit_collision(Fighter* env, int attacker_idx, Move* move, int def
     best.toi = 1.0f;
     for(int i = 0; i < 3; i++){
         int anchor = move->anchors[i];
-        Vec3 P0 = move->anchor_prev[i];
-        Vec3 P1 = move->anchor_cur[i];
+        Vec3 P0 = A->anchor_prev[i];
+        Vec3 P1 = A->anchor_cur[i];
         Vec3 v = vec3_sub(P1, P0); // velocity direction 
         for(int j = 0; j < num_hurt_shapes; j++){
             CollisionShape* S = &D->hurt_shapes[j];
@@ -1305,7 +1304,7 @@ void c_step(Fighter* env) {
                 c->anim_timestep = env->moveset[c->active_animation_idx].move_frame_start;
                 for(int j= 0; j < 3; j++){
                     int anchor = env->moveset[c->active_animation_idx].anchors[j];
-                    env->moveset[i].anchor_prev[j] = c->joints[anchor].world_pos;
+                    c->anchor_prev[j] = c->joints[anchor].world_pos;
                 }
             }
             Move* move = &env->moveset[c->active_animation_idx];
@@ -1352,11 +1351,11 @@ void c_step(Fighter* env) {
         Move* move = &env->moveset[c->active_animation_idx];
         for(int j=0; j<3; j++){
             int anchor = move->anchors[j];
-            move->anchor_cur[j] = c->joints[anchor].world_pos;
+            c->anchor_cur[j] = c->joints[anchor].world_pos;
         }
 
         if(c->anim_timestep != move->active_frame){
-            memcpy(move->anchor_prev, move->anchor_cur, sizeof(move->anchor_prev));
+            memcpy(c->anchor_prev, c->anchor_cur, sizeof(c->anchor_prev));
             continue;
         }
         HitEvent e =check_hit_collision(env, i, move, (i+1)%2);
@@ -1381,8 +1380,7 @@ void c_step(Fighter* env) {
     for (int i = 0; i < env->num_characters; i++){
         Character* c = &env->characters[i];
         if (c->active_animation_idx < 0) continue;
-        Move* move = &env->moveset[c->active_animation_idx];
-        memcpy(move->anchor_prev, move->anchor_cur, sizeof(move->anchor_prev));
+        memcpy(c->anchor_prev, c->anchor_cur, sizeof(c->anchor_prev));
     }
 
     compute_observations(env);
@@ -1590,12 +1588,12 @@ Client* make_client(Fighter* env){
     SetTargetFPS(60);
     
     client->default_camera_position = (Vector3){ 
-        -1.0f,           // same x as target
-        4.0f,   // 20 units above target
-        0.0f    // 20 units behind target
+        15.0f,           // same x as target
+        7.0f,   // 20 units above target
+        14.0f    // 20 units behind target
     };
 
-    client->default_camera_target = (Vector3){-5, 2, 0};
+    client->default_camera_target = (Vector3){0, 0, 0};
     client->camera.position = client->default_camera_position;
     client->camera.target = client->default_camera_target;
     client->camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };  // y is up
@@ -1623,11 +1621,11 @@ void UpdateCameraFighter(Fighter* env, Client* client){
     Vector3 side = Vector3Normalize(Vector3CrossProduct(up,dir));
     // dynamic zoom
     float distance = Vector3Distance(pos1,pos2);
-    float zoom = Lerp(4.0f, 15.0f, Clamp(distance / 15.0f, 0.0f, 1.0f));
+    float zoom = Lerp(10.0f, 25.0f, Clamp(distance / 25.0f, 0.0f, 1.0f));
     // camera position
     Vector3 offset = Vector3Scale(side,zoom);
-    offset.y = 5.0f;
-    Vector3 next_pos = Vector3Add(midpoint, offset);
+    offset.y = 3.0f;
+    Vector3 next_pos = Vector3Add((Vector3){0}, offset);
     // interpolate
     float smooth = 0.1f;
     client->camera.position = Vector3Lerp(client->camera.position, next_pos, smooth);
@@ -1721,7 +1719,7 @@ void c_render(Fighter* env) {
     if (IsKeyPressed(KEY_EIGHT)) client->gizmo->active_joint = J_THORAX;
 
     update_gizmo(client->gizmo, &env->characters[0], &client->camera);
-    UpdateCameraFighter(env, client);
+    //UpdateCameraFighter(env, client);
     BeginDrawing();
     ClearBackground(PUFF_BACKGROUND);
     BeginMode3D(client->camera);
