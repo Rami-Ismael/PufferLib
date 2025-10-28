@@ -210,6 +210,7 @@ typedef struct {
     Move* moveset;
     int num_moves;
     Client* client;
+    int selfplay;
 } Fighter;
 
 // Load moveset
@@ -1272,19 +1273,20 @@ void compute_observations(Fighter* env){
 
 
 void c_step(Fighter* env) {
-    int agent_action = env->actions[0];
+    env->rewards[0]= 0;
+    env->terminals[0] = 0;
     //int bot_action = 0;
     int bot_action = rand() % 9;
+    int actions[2] = {0};
+    if(env->selfplay){
+        memcpy(&actions, env->actions, 2*sizeof(int));
+    } else{
+        actions[0] = env->actions[0];
+        actions[1] = bot_action;
+    }
     for(int i = 0; i < env->num_characters; i++) {
         Character *c = &env->characters[i];
-        int action;
-        if(i < env->num_agents){
-            action = agent_action;
-            env->rewards[i] = 0;
-            env->terminals[i] = 0;
-        } else {
-            action = bot_action;
-        }
+        int action = actions[i];
         // movement
         if(action < 5){
             int target = i==0;
@@ -1294,12 +1296,7 @@ void c_step(Fighter* env) {
 
     for(int i = 0; i < env->num_characters; i++){
         Character* c = &env->characters[i];
-        int action;
-        if( i < env->num_agents){
-            action = agent_action; 
-        } else {
-            action = bot_action;
-        }
+        int action = actions[i];
         // fighting
         if(action >=5 || c->anim_timestep > 0){
             if(c->anim_timestep == 0){
@@ -1327,16 +1324,14 @@ void c_step(Fighter* env) {
     // push collision resolution
     Character* c1 = &env->characters[0];
     Character* c2 = &env->characters[1];
-    int c1_act = agent_action;
-    int c2_act = bot_action;
     int collided = 0;
     for (int i = 0; i < 8 && !collided; i++) {
         for (int j = 0; j < 8; j++) {
             /*if(c1->active_animation_idx > -1 || c2->active_animation_idx > -1){
                 break;
             }*/
-            collided = sphere_collision(&c1->push_shapes[i], c1, c1_act,
-                             &c2->push_shapes[j], c2, c2_act);
+            collided = sphere_collision(&c1->push_shapes[i], c1, actions[0],
+                             &c2->push_shapes[j], c2, actions[1]);
             if(collided){
                 break;
             }

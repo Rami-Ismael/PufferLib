@@ -9,7 +9,7 @@ class Fighter(pufferlib.PufferEnv):
     def __init__(self, num_envs=1, render_mode=None, report_interval=1,
             num_agents=1,
             human_agent_idx=0,
-            buf = None, seed=0):
+            buf = None, seed=0, selfplay = 0):
 
         # env
         self.num_agents = num_envs
@@ -20,13 +20,28 @@ class Fighter(pufferlib.PufferEnv):
         self.single_observation_space = gymnasium.spaces.Box(low=0, high=1,
             shape=(self.num_obs,), dtype=np.float32)
         self.single_action_space = gymnasium.spaces.Discrete(9)
-
+        self.selfplay = selfplay
+        factor = 2 if selfplay else 1
         super().__init__(buf=buf)
         c_envs = []
-        self.c_envs = binding.vec_init(self.observations, self.actions, self.rewards, 
+        for i in range(num_envs):
+            c_envs.append(binding.env_init(
+                self.observations[i:(i+1)],
+                self.actions[i*factor: (i+1)*factor],
+                self.rewards[i:(i+1)],
+                self.terminals[i:(i+1)],
+                self.truncations[i:(i+1)],
+                i,
+                num_agents = num_agents,
+                human_agent_idx = human_agent_idx,
+                selfplay = selfplay
+            ))
+
+        self.c_envs = binding.vectorize(*c_envs)
+        '''self.c_envs = binding.vec_init(self.observations, self.actions, self.rewards, 
             self.terminals, self.truncations,num_envs, seed, num_agents = num_agents, 
-            human_agent_idx = human_agent_idx
-        )
+            human_agent_idx = human_agent_idx, selfplay = selfplay
+        )'''
     def reset(self, seed=0):
         binding.vec_reset(self.c_envs, seed)
         self.tick = 0

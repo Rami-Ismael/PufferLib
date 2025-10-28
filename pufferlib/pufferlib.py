@@ -27,9 +27,9 @@ def set_buffers(env, buf=None):
         env.terminals = np.zeros(env.num_agents, dtype=bool)
         env.truncations = np.zeros(env.num_agents, dtype=bool)
         env.masks = np.ones(env.num_agents, dtype=bool)
-
         # TODO: Major kerfuffle on inferring action space dtype. This needs some asserts?
-        atn_space = pufferlib.spaces.joint_space(env.single_action_space, env.num_agents)
+        factor =  2 if env.selfplay else 1
+        atn_space = pufferlib.spaces.joint_space(env.single_action_space, env.num_agents*factor)
         if isinstance(env.single_action_space, pufferlib.spaces.Box):
             env.actions = np.zeros(atn_space.shape, dtype=atn_space.dtype)
         else:
@@ -65,8 +65,8 @@ class PufferEnv:
             raise APIUsageError('Native action_space must be a Discrete, MultiDiscrete, or Box')
 
         set_buffers(self, buf)
-
-        self.action_space = pufferlib.spaces.joint_space(self.single_action_space, self.num_agents)
+        factor = 2 if self.selfplay else 1
+        self.action_space = pufferlib.spaces.joint_space(self.single_action_space, self.num_agents*factor)
         self.observation_space = pufferlib.spaces.joint_space(self.single_observation_space, self.num_agents)
         self.agent_ids = np.arange(self.num_agents)
 

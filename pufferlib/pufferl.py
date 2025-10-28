@@ -219,7 +219,7 @@ class PuffeRL:
 
         config = self.config
         device = config['device']
-
+        selfplay = self.vecenv.selfplay
         if config['use_rnn']:
             for k in self.lstm_h:
                 self.lstm_h[k] = torch.zeros(self.lstm_h[k].shape, device=device)
@@ -258,7 +258,6 @@ class PuffeRL:
                 logits, value = self.policy.forward_eval(o_device, state)
                 action, logprob, _ = pufferlib.pytorch.sample_logits(logits)
                 r = torch.clamp(r, -1, 1)
-
             profile('eval_copy', epoch)
             with torch.no_grad():
                 if config['use_rnn']:
@@ -302,7 +301,13 @@ class PuffeRL:
                         self.stats[k].extend(v)
                     else:
                         self.stats[k].append(v)
-
+            profile('selfplay', epoch)
+            if selfplay:
+                opp = np.zeros_like(action)
+                interleaved = np.empty(action.size * 2, dtype = action.dtype)
+                interleaved[0::2] = action
+                interleaved[1::2] = opp
+                action = interleaved
             profile('env', epoch)
             self.vecenv.send(action)
 
@@ -586,6 +591,7 @@ class PuffeRL:
         p.add_row(*fmt_perf('  Env', c2, delta, profile.env, b2, c2))
         p.add_row(*fmt_perf('  Copy', c2, delta, profile.eval_copy, b2, c2))
         p.add_row(*fmt_perf('  Misc', c2, delta, profile.eval_misc, b2, c2))
+        p.add_row(*fmt_perf('  Selfplay', c2, delta, profile.selfplay, b2,c2))
         p.add_row(*fmt_perf('Train', b1, delta, profile.train, b2, c2))
         p.add_row(*fmt_perf('  Forward', c2, delta, profile.train_forward, b2, c2))
         p.add_row(*fmt_perf('  Learn', c2, delta, profile.learn, b2, c2))
@@ -950,6 +956,7 @@ def eval(env_name, args=None, vecenv=None, policy=None):
     policy = policy or load_policy(args, vecenv, env_name)
     ob, info = vecenv.reset()
     driver = vecenv.driver_env
+    selfplay = driver.selfplay
     num_agents = vecenv.observation_space.shape[0]
     device = args['train']['device']
 
@@ -982,11 +989,19 @@ def eval(env_name, args=None, vecenv=None, policy=None):
             ob = torch.as_tensor(ob).to(device)
             logits, value = policy.forward_eval(ob, state)
             action, logprob, _ = pufferlib.pytorch.sample_logits(logits)
-            action = action.cpu().numpy().reshape(vecenv.action_space.shape)
+            action = action.cpu().numpy()
+            if selfplay:
+                opp = np.zeros_like(action)
+                interleaved = np.empty(action.size * 2, dtype = action.dtype)
+                interleaved[0::2] = action
+                interleaved[1::2] = opp
+                action = interleaved
+
+            action = action.reshape(vecenv.action_space.shape)
 
         if isinstance(logits, torch.distributions.Normal):
             action = np.clip(action, vecenv.action_space.low, vecenv.action_space.high)
-
+        
         ob = vecenv.step(action)[0]
 
         if len(frames) > 0 and len(frames) == args['save_frames']:
