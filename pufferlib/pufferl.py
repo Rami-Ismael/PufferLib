@@ -104,6 +104,7 @@ class PuffeRL:
         self.ep_indices = torch.arange(total_agents, device=device, dtype=torch.int32)
         self.free_idx = total_agents
         # Selfplay
+        self.selfplay = vecenv.selfplay
         if vecenv.selfplay:
             self.opponent_pool = []
         # LSTM
@@ -212,6 +213,36 @@ class PuffeRL:
             return 0
 
         return (self.global_step - self.last_log_step) / (time.time() - self.last_log_time)
+    
+    def win_prob(elo1, elo2):
+        return 1 / (1 + 10 ** ((elo2 - elo1) / 400))
+    
+    def update_elos(elos: np.ndarray, scores: np.ndarray, k:float = 4.0):
+        num_players = len(elos)
+        assert num_players == len(scores)
+        elo_update = [[] for _ in range(num_players)]
+        for i in range(num_players):
+            for j in range(i+1, num_players):
+                delta = scores[i] - scores[j]
+
+                # Convert to elo scoring format
+                if delta > 0:
+                    score_i = 1
+                elif delta == 0:
+                    score_i = 0.5
+                else:
+                    score_i = 0
+
+                # Calculate elo update for pairs
+                expected_i = win_prob(elos[i], elos[j])
+                expected_j = 1 - expected_i
+                score_j = 1 - score_i
+
+                elo_update[i].append(k * (score_i - expected_i))
+                elo_update[j].append(k * (score_j - expected_j))
+
+        elo_update = [np.mean(e) for e in elo_update]
+        return [elo + update for elo, update in zip(elos, elo_update)]
 
     def evaluate(self):
         profile = self.profile
@@ -304,8 +335,8 @@ class PuffeRL:
                         self.stats[k].extend(v)
                     else:
                         self.stats[k].append(v)
-            profile('eval_selfplay', epoch)
             if selfplay:
+                profile('eval_selfplay', epoch)
                 rand_max = self.vecenv.action_space.nvec[0] 
                 #opp = np.zeros_like(action)
                 #opp = np.random.randint(0,rand_max, size=action.shape, dtype=action.dtype)
@@ -466,10 +497,10 @@ class PuffeRL:
         explained_var = torch.nan if var_y == 0 else 1 - (y_true - y_pred).var() / var_y
         losses['explained_variance'] = explained_var.item()
         # Save weights for selfplay
-        profile('train_selfplay', epoch)
-        breakpoint()
-        snapshot = {k: v.clone() for k, v in self.policy.state_dict().items()}
-        self.opponent_pool.append(snapshot)
+        if self.selfplay:
+            profile('train_selfplay', epoch)
+            snapshot = {k: v.clone() for k, v in self.policy.state_dict().items()}
+            self.opponent_pool.append(snapshot)
         profile.end()
         logs = None
         self.epoch += 1
@@ -621,13 +652,15 @@ class PuffeRL:
         p.add_row(*fmt_perf('  Env', c2, delta, profile.env, b2, c2))
         p.add_row(*fmt_perf('  Copy', c2, delta, profile.eval_copy, b2, c2))
         p.add_row(*fmt_perf('  Misc', c2, delta, profile.eval_misc, b2, c2))
-        p.add_row(*fmt_perf('  Selfplay', c2, delta, profile.eval_selfplay, b2,c2))
+        if self.selfplay:
+            p.add_row(*fmt_perf('  Selfplay', c2, delta, profile.eval_selfplay, b2,c2))
         p.add_row(*fmt_perf('Train', b1, delta, profile.train, b2, c2))
         p.add_row(*fmt_perf('  Forward', c2, delta, profile.train_forward, b2, c2))
         p.add_row(*fmt_perf('  Learn', c2, delta, profile.learn, b2, c2))
         p.add_row(*fmt_perf('  Copy', c2, delta, profile.train_copy, b2, c2))
         p.add_row(*fmt_perf('  Misc', c2, delta, profile.train_misc, b2, c2))
-        p.add_row(*fmt_perf('  Selfplay', c2, delta, profile.train_selfplay, b2,c2))
+        if self.selfplay:
+            p.add_row(*fmt_perf('  Selfplay', c2, delta, profile.train_selfplay, b2,c2))
 
         l = Table(box=None, expand=True, )
         l.add_column(f'{c1}Losses', justify="left", width=16)

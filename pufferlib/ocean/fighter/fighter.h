@@ -77,6 +77,7 @@ typedef struct Client Client;
 typedef struct {
     float score;
     float perf;
+    float win_loss;
     float damage;
     float episode_length;
     float episode_return;
@@ -1213,8 +1214,9 @@ HitEvent check_hit_collision(Fighter* env, int attacker_idx, Move* move, int def
 
 void add_log(Fighter* env) {
     int score = env->characters[0].health - env->characters[1].health;
-    int damage = 100 - env->characters[0].health;
+    int damage = 100 - env->characters[1].health;
     env->log.episode_length = env->tick;
+    env->log.win_loss += (float)(env->characters[0].health > env->characters[1].health);
     env->log.damage += (float)damage;
     env->log.score += (float)score;
     env->log.perf += (float)score / 100.0f;
