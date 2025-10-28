@@ -39,6 +39,8 @@ class Default(nn.Module):
             self.encoder = nn.Linear(input_size, self.hidden_size)
         else:
             num_obs = np.prod(env.single_observation_space.shape)
+            if env.selfplay:
+                num_obs = int(num_obs * 0.5)
             self.encoder = torch.nn.Sequential(
                 pufferlib.pytorch.layer_init(nn.Linear(num_obs, hidden_size)),
                 nn.GELU(),
@@ -104,7 +106,11 @@ class LSTMWrapper(nn.Module):
         Requires that your policy define encode_observations and decode_actions.
         See the Default policy for an example.'''
         super().__init__()
-        self.obs_shape = env.single_observation_space.shape
+        if env.selfplay:
+            self.selfplay = env.selfplay 
+            self.obs_shape = (env.single_observation_space.shape[0] // 2,)
+        else: 
+            self.obs_shape = env.single_observation_space.shape
 
         self.policy = policy
         self.input_size = input_size
@@ -157,7 +163,8 @@ class LSTMWrapper(nn.Module):
         x = observations
         lstm_h = state['lstm_h']
         lstm_c = state['lstm_c']
-
+        if self.selfplay:
+            x = x[...,:x.shape[-1]//2]
         x_shape, space_shape = x.shape, self.obs_shape
         x_n, space_n = len(x_shape), len(space_shape)
         if x_shape[-space_n:] != space_shape:

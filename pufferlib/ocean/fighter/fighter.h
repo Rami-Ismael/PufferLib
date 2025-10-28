@@ -77,6 +77,7 @@ typedef struct Client Client;
 typedef struct {
     float score;
     float perf;
+    float damage;
     float episode_length;
     float episode_return;
     float n; // required as the last field 
@@ -1212,7 +1213,9 @@ HitEvent check_hit_collision(Fighter* env, int attacker_idx, Move* move, int def
 
 void add_log(Fighter* env) {
     int score = env->characters[0].health - env->characters[1].health;
+    int damage = 100 - env->characters[0].health;
     env->log.episode_length = env->tick;
+    env->log.damage += (float)damage;
     env->log.score += (float)score;
     env->log.perf += (float)score / 100.0f;
     env->log.n += 1;
@@ -1240,35 +1243,42 @@ void apply_hit(Fighter* env, HitEvent* hit){
 void compute_observations(Fighter* env){
     Character *self = &env->characters[0];
     Character *opp  = &env->characters[1];
+    int obs_len = 14;
+    for(int i = 0; i < env->num_characters; i++){
+        if(!env->selfplay && i==1) return;
+        if(i == 1){
+            self = &env->characters[1];
+            opp = &env->characters[0];
+        }
+        int offset = i * obs_len;
+        env->observations[offset + 0] = (self->joints[J_PELVIS].world_pos.x + 10) / 20.0f;
+        env->observations[offset + 1] = (self->joints[J_PELVIS].world_pos.y + 10) / 20.0f;
+        env->observations[offset + 2] = (self->joints[J_PELVIS].world_pos.z + 10) / 20.0f;
+        env->observations[offset + 3] = (float)self->health / 100.0f;
+        env->observations[offset + 4] = (float)self->active_animation_idx / 9.0f;
+        float cy = cosf(self->facing);
+        float sy = sinf(self->facing);
+        Vec3 fwd = {cy, 0.0f, sy};
+        Vec3 right = {-sy, 0.0, cy};
+        env->observations[offset + 5] = cy;
+        env->observations[offset + 6] = sy;
+        // enemy
+        float delta_x = opp->joints[J_PELVIS].world_pos.x - self->joints[J_PELVIS].world_pos.x;
+        float delta_y = opp->joints[J_PELVIS].world_pos.y - self->joints[J_PELVIS].world_pos.y;
+        float delta_z = opp->joints[J_PELVIS].world_pos.z - self->joints[J_PELVIS].world_pos.z;
+        
+        float rel_x = delta_x*fwd.x + delta_z*fwd.z;
+        float rel_z = delta_x*right.x + delta_z*right.z;
+        env->observations[offset + 7] = rel_x / 20.0f;
+        env->observations[offset + 8] = rel_z / 20.0f;
+        env->observations[offset + 9] = delta_y / 20.0f;
 
-    env->observations[0] = (self->joints[J_PELVIS].world_pos.x + 10) / 20.0f;
-    env->observations[1] = (self->joints[J_PELVIS].world_pos.y + 10) / 20.0f;
-    env->observations[2] = (self->joints[J_PELVIS].world_pos.z + 10) / 20.0f;
-    env->observations[3] = (float)self->health / 100.0f;
-    env->observations[4] = (float)self->active_animation_idx / 9.0f;
-    float cy = cosf(self->facing);
-    float sy = sinf(self->facing);
-    Vec3 fwd = {cy, 0.0f, sy};
-    Vec3 right = {-sy, 0.0, cy};
-    env->observations[5] = cy;
-    env->observations[6] = sy;
-    // enemy
-    
-    float delta_x = opp->joints[J_PELVIS].world_pos.x - self->joints[J_PELVIS].world_pos.x;
-    float delta_y = opp->joints[J_PELVIS].world_pos.y - self->joints[J_PELVIS].world_pos.y;
-    float delta_z = opp->joints[J_PELVIS].world_pos.z - self->joints[J_PELVIS].world_pos.z;
-    
-    float rel_x = delta_x*fwd.x + delta_z*fwd.z;
-    float rel_z = delta_x*right.x + delta_z*right.z;
-    env->observations[7] = rel_x / 20.0f;
-    env->observations[8] = rel_z / 20.0f;
-    env->observations[9] = delta_y / 20.0f;
-
-    float delta_facing = opp->facing - self->facing;
-    env->observations[10] = (float)opp->health / 100.0f;
-    env->observations[11] = (float)opp->active_animation_idx / 9.0f;
-    env->observations[12] = cosf(delta_facing);
-    env->observations[13] = sinf(delta_facing);
+        float delta_facing = opp->facing - self->facing;
+        env->observations[offset + 10] = (float)opp->health / 100.0f;
+        env->observations[offset + 11] = (float)opp->active_animation_idx / 9.0f;
+        env->observations[offset + 12] = cosf(delta_facing);
+        env->observations[offset + 13] = sinf(delta_facing);
+    }
 }
 
 

@@ -646,7 +646,6 @@ def make(env_creator_or_creators, env_args=None, env_kwargs=None, backend=Puffer
             raise pufferlib.APIUsageError('Native vectorization is for PufferEnvs that handle all per-process vectorization internally. If you want to run multiple separate Python instances on a single process, use Serial or Multiprocessing instead')
 
         return vecenv
-
     if 'num_workers' in kwargs:
         if kwargs['num_workers'] == 'auto':
             kwargs['num_workers'] = num_envs
@@ -677,7 +676,6 @@ def make(env_creator_or_creators, env_args=None, env_kwargs=None, backend=Puffer
 
     if env_kwargs is None:
         env_kwargs = {}
-
     if not isinstance(env_creator_or_creators, (list, tuple)):
         env_creators = [env_creator_or_creators] * num_envs
         env_args = [env_args] * num_envs
@@ -713,7 +711,7 @@ def make(env_creator_or_creators, env_args=None, env_kwargs=None, backend=Puffer
             raise pufferlib.APIUsageError(f'Invalid argument: {k}')
 
     # TODO: First step action space check
-    
+     
     return backend(env_creators, env_args, env_kwargs, num_envs, **kwargs)
 
 def make_seeds(seed, num_envs):

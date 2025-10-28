@@ -103,7 +103,9 @@ class PuffeRL:
         self.ep_lengths = torch.zeros(total_agents, device=device, dtype=torch.int32)
         self.ep_indices = torch.arange(total_agents, device=device, dtype=torch.int32)
         self.free_idx = total_agents
-
+        # Selfplay
+        if vecenv.selfplay:
+            self.opponent_pool = []
         # LSTM
         if config['use_rnn']:
             n = vecenv.agents_per_batch
@@ -254,8 +256,10 @@ class PuffeRL:
                 if config['use_rnn']:
                     state['lstm_h'] = self.lstm_h[env_id.start]
                     state['lstm_c'] = self.lstm_c[env_id.start]
-
-                logits, value = self.policy.forward_eval(o_device, state)
+                if(selfplay):
+                    logits, value = self.policy.forward_eval(o_device[:,:int(o_device.shape[1]/2)], state)
+                else:
+                    logits, value = self.policy.forward_eval(o_device, state)
                 action, logprob, _ = pufferlib.pytorch.sample_logits(logits)
                 r = torch.clamp(r, -1, 1)
             profile('eval_copy', epoch)
@@ -267,7 +271,6 @@ class PuffeRL:
                 # Fast path for fully vectorized envs
                 l = self.ep_lengths[env_id.start].item()
                 batch_rows = slice(self.ep_indices[env_id.start].item(), 1+self.ep_indices[env_id.stop - 1].item())
-
                 if config['cpu_offload']:
                     self.observations[batch_rows, l] = o
                 else:
@@ -301,9 +304,32 @@ class PuffeRL:
                         self.stats[k].extend(v)
                     else:
                         self.stats[k].append(v)
-            profile('selfplay', epoch)
+            profile('eval_selfplay', epoch)
             if selfplay:
-                opp = np.zeros_like(action)
+                rand_max = self.vecenv.action_space.nvec[0] 
+                #opp = np.zeros_like(action)
+                #opp = np.random.randint(0,rand_max, size=action.shape, dtype=action.dtype)
+                if(len(self.opponent_pool) > 0 and np.random.rand() >= 0.8):
+                    current = {k: v.detach().clone() for k, v in self.policy.state_dict().items()}
+                    rand_idx = np.random.randint(0, len(self.opponent_pool))
+                    self.policy.load_state_dict(self.opponent_pool[rand_idx], strict=True)
+                with torch.no_grad(), self.amp_context:
+                    state_opp = dict(
+                        reward=r,
+                        done=d,
+                        env_id=env_id,
+                        mask=mask,
+                    )
+
+                    if config['use_rnn']:
+                        state_opp['lstm_h'] = self.lstm_h[env_id.start]
+                        state_opp['lstm_c'] = self.lstm_c[env_id.start]
+                    logits_opp, value = self.policy.forward_eval(o_device[:, int(o_device.shape[1]/2):], state_opp)
+                    opp, logprob, _ = pufferlib.pytorch.sample_logits(logits_opp)
+                    opp = opp.cpu().numpy()
+                    if isinstance(logits_opp, torch.distributions.Normal):
+                        opp = np.clip(opp, self.vecenv.action_space.low, self.vecenv.action_space.high)
+
                 interleaved = np.empty(action.size * 2, dtype = action.dtype)
                 interleaved[0::2] = action
                 interleaved[1::2] = opp
@@ -439,7 +465,11 @@ class PuffeRL:
         var_y = y_true.var()
         explained_var = torch.nan if var_y == 0 else 1 - (y_true - y_pred).var() / var_y
         losses['explained_variance'] = explained_var.item()
-
+        # Save weights for selfplay
+        profile('train_selfplay', epoch)
+        breakpoint()
+        snapshot = {k: v.clone() for k, v in self.policy.state_dict().items()}
+        self.opponent_pool.append(snapshot)
         profile.end()
         logs = None
         self.epoch += 1
@@ -591,12 +621,13 @@ class PuffeRL:
         p.add_row(*fmt_perf('  Env', c2, delta, profile.env, b2, c2))
         p.add_row(*fmt_perf('  Copy', c2, delta, profile.eval_copy, b2, c2))
         p.add_row(*fmt_perf('  Misc', c2, delta, profile.eval_misc, b2, c2))
-        p.add_row(*fmt_perf('  Selfplay', c2, delta, profile.selfplay, b2,c2))
+        p.add_row(*fmt_perf('  Selfplay', c2, delta, profile.eval_selfplay, b2,c2))
         p.add_row(*fmt_perf('Train', b1, delta, profile.train, b2, c2))
         p.add_row(*fmt_perf('  Forward', c2, delta, profile.train_forward, b2, c2))
         p.add_row(*fmt_perf('  Learn', c2, delta, profile.learn, b2, c2))
         p.add_row(*fmt_perf('  Copy', c2, delta, profile.train_copy, b2, c2))
         p.add_row(*fmt_perf('  Misc', c2, delta, profile.train_misc, b2, c2))
+        p.add_row(*fmt_perf('  Selfplay', c2, delta, profile.train_selfplay, b2,c2))
 
         l = Table(box=None, expand=True, )
         l.add_column(f'{c1}Losses', justify="left", width=16)
@@ -986,16 +1017,24 @@ def eval(env_name, args=None, vecenv=None, policy=None):
             #time.sleep(1/args['fps'])
 
         with torch.no_grad():
-            ob = torch.as_tensor(ob).to(device)
-            logits, value = policy.forward_eval(ob, state)
-            action, logprob, _ = pufferlib.pytorch.sample_logits(logits)
-            action = action.cpu().numpy()
             if selfplay:
-                opp = np.zeros_like(action)
+                ob = torch.as_tensor(ob).to(device)
+                logits, value = policy.forward_eval(ob[:, int(ob.shape[1]/2):], state)
+                action, logprob, _ = pufferlib.pytorch.sample_logits(logits)
+                action = action.cpu().numpy()
+  
+                #opp = np.zeros_like(action)
+                rand_max = vecenv.action_space.nvec[0]
+                opp = np.random.randint(0,rand_max, size=action.shape, dtype=action.dtype)
                 interleaved = np.empty(action.size * 2, dtype = action.dtype)
                 interleaved[0::2] = action
                 interleaved[1::2] = opp
                 action = interleaved
+            else: 
+                ob = torch.as_tensor(ob).to(device)
+                logits, value = policy.forward_eval(ob, state)
+                action, logprob, _ = pufferlib.pytorch.sample_logits(logits)
+                action = action.cpu().numpy()
 
             action = action.reshape(vecenv.action_space.shape)
 

@@ -3,7 +3,7 @@
 #include <unistd.h>
 int demo() {
     Fighter env = {.num_characters = 2, .num_agents = 1, .selfplay = 0};    
-    env.observations = (float*)calloc(env.num_agents * 14, sizeof(float));
+    env.observations = (float*)calloc(env.num_characters * 14, sizeof(float));
     env.actions = (int*)calloc(env.num_agents, sizeof(int));
     env.rewards = (float*)calloc(env.num_agents, sizeof(float));
     env.terminals = (unsigned char*)calloc(env.num_agents, sizeof(unsigned char));
