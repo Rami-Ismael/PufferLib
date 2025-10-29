@@ -1057,7 +1057,7 @@ void c_reset(Fighter* env) {
         Quat facing = quat_from_axis_angle((Vec3){0.0f, 1.0f, 0.0f}, c->facing);
         compute_fk(c->joints, J_PELVIS, facing, (Vec3){c->pos_x, c->pos_y, c->pos_z});
     }
-
+    compute_observations(env);
 }
 
 int bounds_check(float x, float z){
@@ -1237,6 +1237,7 @@ void apply_hit(Fighter* env, HitEvent* hit){
     if(defender->health <=0){
         env->rewards[0] = 1.0f;
         env->log.episode_return += 1.0f;
+        env->terminals[0] = 1;
         add_log(env);
         c_reset(env);
     };
@@ -1403,6 +1404,7 @@ void c_step(Fighter* env) {
             env->rewards[0] = -1.0f;
             env->log.episode_return -= 1.0f;
         }
+        env->terminals[0] = 1;
         add_log(env);
         c_reset(env);
     }

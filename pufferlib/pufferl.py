@@ -107,6 +107,7 @@ class PuffeRL:
         self.selfplay = vecenv.selfplay
         if vecenv.selfplay:
             self.opponent_pool = []
+            self.active_policies = torch.zeros(total_agents, device=device, dtype=torch.int32)
         # LSTM
         if config['use_rnn']:
             n = vecenv.agents_per_batch
@@ -338,33 +339,81 @@ class PuffeRL:
             if selfplay:
                 profile('eval_selfplay', epoch)
                 rand_max = self.vecenv.action_space.nvec[0] 
-                #opp = np.zeros_like(action)
-                #opp = np.random.randint(0,rand_max, size=action.shape, dtype=action.dtype)
-                if(len(self.opponent_pool) > 0 and np.random.rand() >= 0.8):
-                    current = {k: v.detach().clone() for k, v in self.policy.state_dict().items()}
-                    rand_idx = np.random.randint(0, len(self.opponent_pool))
-                    self.policy.load_state_dict(self.opponent_pool[rand_idx], strict=True)
-                with torch.no_grad(), self.amp_context:
-                    state_opp = dict(
-                        reward=r,
-                        done=d,
-                        env_id=env_id,
-                        mask=mask,
-                    )
+                games_ended = (d==1).sum().item()
+                ap = self.active_policies[batch_rows]
+                current = []
+                if(games_ended > 0):
+                    current.append({k: v.detach().clone() for k, v in self.policy.state_dict().items()})
+                
+                for t in range(games_ended):
+                    game_idx = torch.nonzero(d==1)[t].item()
+                    score = r[game_idx]
+                    # update elo
+                    # new policy
+                    if(len(self.opponent_pool) > 0 and np.random.rand() >= 0.8):
+                        rand_idx = np.random.randint(0, len(self.opponent_pool))
+                        ap[game_idx] = rand_idx + 1 
+                    else:
+                        ap[game_idx] = 0
+                # find indices where policies are the same
+                unique_ids, counts = torch.unique(ap, return_counts = True)
+                change = torch.ones_like(ap, dtype=torch.bool)
+                change[1:] = ap[1:] != ap[:-1]
+                starts = torch.nonzero(change, as_tuple=False).squeeze(1).to(device)
+                ends = torch.cat([starts[1:], torch.tensor([ap.numel()]).to(device)])
+                vals = ap[starts]
+                runs = {}
+                for s, e, v in zip(starts.tolist(), ends.tolist(), vals.tolist()):
+                    runs.setdefault(v, []).append([s, e])
+                obs_counts = torch.tensor([sum(e-s for s,e in segs) for segs in runs.values()])
+                opp_obs_shape = int(o_device.shape[1]/2)
+                opp_obs = [torch.zeros((int(n),opp_obs_shape), device=device, dtype=o_device.dtype) for n in obs_counts]
+                opp_acts = np.zeros(action.size, dtype=action.dtype)
+                opp_lstm_h = [torch.zeros((int(n),self.lstm_h[env_id.start].shape[1]), device=device) for n in obs_counts]
+                opp_lstm_c = [torch.zeros((int(n),self.lstm_c[env_id.start].shape[1]), device=device) for n in obs_counts] 
+                obs_idx = 0
+                # copy obs & lstm_state with same policy ids into opp_obs
+                keys = list(runs.keys())
+                for i in range(len(keys)):
+                    key = keys[i]
+                    value = runs[key]
+                    obs_idx = 0
+                    for j in range(len(value)):
+                        s_obs = value[j][0]
+                        e_obs = value[j][1]
+                        seg_len = e_obs-s_obs
+                        opp_obs[i][obs_idx:obs_idx+seg_len] = o_device[s_obs:e_obs,opp_obs_shape:]
+                        if config['use_rnn']:
+                            opp_lstm_h[i][obs_idx:obs_idx+seg_len] = self.lstm_h[env_id.start][s_obs:e_obs,:]
+                            opp_lstm_c[i][obs_idx:obs_idx+seg_len] = self.lstm_c[env_id.start][s_obs:e_obs,:]
+                        obs_idx+= seg_len
+                # batch forward pass each group with the same policy
+                idx_start = 0
+                for idx, policy_id in enumerate(runs):
+                    run_len = int(obs_counts[idx].item())
 
-                    if config['use_rnn']:
-                        state_opp['lstm_h'] = self.lstm_h[env_id.start]
-                        state_opp['lstm_c'] = self.lstm_c[env_id.start]
-                    logits_opp, value = self.policy.forward_eval(o_device[:, int(o_device.shape[1]/2):], state_opp)
-                    opp, logprob, _ = pufferlib.pytorch.sample_logits(logits_opp)
-                    opp = opp.cpu().numpy()
-                    if isinstance(logits_opp, torch.distributions.Normal):
-                        opp = np.clip(opp, self.vecenv.action_space.low, self.vecenv.action_space.high)
+                    if(len(self.opponent_pool) > 0 or policy_id > 0):
+                        self.policy.load_state_dict(self.opponent_pool[policy_id - 1], strict=True)
+                    with torch.no_grad(), self.amp_context:
+                        state_opp = dict()
+                        if config['use_rnn']:
+                            state_opp['lstm_h'] = opp_lstm_h[idx]
+                            state_opp['lstm_c'] = opp_lstm_c[idx]
 
+                        logits_opp, value = self.policy.forward_eval(opp_obs[idx], state_opp)
+                        #opp = np.zeros_like(action)
+                        #opp = np.random.randint(0,rand_max, size=action.shape, dtype=action.dtype)
+                        opp, logprob, _ = pufferlib.pytorch.sample_logits(logits_opp)
+                        opp = opp.cpu().numpy()
+                        if isinstance(logits_opp, torch.distributions.Normal):
+                            opp = np.clip(opp, self.vecenv.action_space.low, self.vecenv.action_space.high)
+                        idx_start += run_len
                 interleaved = np.empty(action.size * 2, dtype = action.dtype)
                 interleaved[0::2] = action
-                interleaved[1::2] = opp
+                interleaved[1::2] = opp_acts
                 action = interleaved
+                if games_ended > 0: 
+                    self.policy.load_state_dict(current[0], strict=True)
             profile('env', epoch)
             self.vecenv.send(action)
 
@@ -390,7 +439,6 @@ class PuffeRL:
         vf_clip = config['vf_clip_coef']
         anneal_beta = b0 + (1 - b0)*a*self.epoch/self.total_epochs
         self.ratio[:] = 1
-
         for mb in range(self.total_minibatches):
             profile('train_misc', epoch, nest=True)
             self.amp_context.__enter__()
@@ -497,7 +545,7 @@ class PuffeRL:
         explained_var = torch.nan if var_y == 0 else 1 - (y_true - y_pred).var() / var_y
         losses['explained_variance'] = explained_var.item()
         # Save weights for selfplay
-        if self.selfplay:
+        if self.selfplay and (epoch % 10 == 0):
             profile('train_selfplay', epoch)
             snapshot = {k: v.clone() for k, v in self.policy.state_dict().items()}
             self.opponent_pool.append(snapshot)
