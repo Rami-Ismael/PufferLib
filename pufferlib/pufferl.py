@@ -355,6 +355,7 @@ class PuffeRL:
                         ap[game_idx] = rand_idx + 1 
                     else:
                         ap[game_idx] = 0
+                profile('eval_selfplay_copy',epoch)
                 # find indices where policies are the same
                 unique_ids, counts = torch.unique(ap, return_counts = True)
                 change = torch.ones_like(ap, dtype=torch.bool)
@@ -387,6 +388,7 @@ class PuffeRL:
                             opp_lstm_h[i][obs_idx:obs_idx+seg_len] = self.lstm_h[env_id.start][s_obs:e_obs,:]
                             opp_lstm_c[i][obs_idx:obs_idx+seg_len] = self.lstm_c[env_id.start][s_obs:e_obs,:]
                         obs_idx+= seg_len
+                profile('eval_selfplay_forward',epoch)
                 # batch forward pass each group with the same policy
                 idx_start = 0
                 for idx, policy_id in enumerate(runs):
@@ -702,6 +704,8 @@ class PuffeRL:
         p.add_row(*fmt_perf('  Misc', c2, delta, profile.eval_misc, b2, c2))
         if self.selfplay:
             p.add_row(*fmt_perf('  Selfplay', c2, delta, profile.eval_selfplay, b2,c2))
+            p.add_row(*fmt_perf('  SP Copy', c2, delta, profile.eval_selfplay_copy, b2,c2))
+            p.add_row(*fmt_perf('  SP Forward', c2, delta, profile.eval_selfplay_forward,b2,c2))
         p.add_row(*fmt_perf('Train', b1, delta, profile.train, b2, c2))
         p.add_row(*fmt_perf('  Forward', c2, delta, profile.train_forward, b2, c2))
         p.add_row(*fmt_perf('  Learn', c2, delta, profile.learn, b2, c2))
