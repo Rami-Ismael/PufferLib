@@ -293,9 +293,9 @@ class PuffeRL:
                 for game_idx in done_indices:
                     if(len(self.opponent_pool) > 0 and np.random.rand() >= 0.8):
                         rand_idx = np.random.randint(0, len(self.opponent_pool))
-                        ap[game_idx] = 1 
+                        ap[game_idx] = rand_idx + 1 
                     else:
-                        ap[game_idx] = 1
+                        ap[game_idx] = 0
                 profile('sp_batch_ordering', epoch)
                 obs_shape = int(o.shape[1]/2)
                 order = np.argsort(ap)
