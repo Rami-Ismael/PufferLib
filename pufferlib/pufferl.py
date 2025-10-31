@@ -277,8 +277,7 @@ class PuffeRL:
                 batch_rows = slice(self.ep_indices[env_id.start].item(), 1+self.ep_indices[env_id.stop - 1].item())
                 ap = self.active_policies[batch_rows]
                 done_indices = np.where(d==1)[0]
-                games_ended = len(done_indices) > 0
-                # elo update
+                # elo update & select new opponent
                 for game_idx in done_indices:
                     opp_id = ap[game_idx]
                     if opp_id == 0:
@@ -296,6 +295,7 @@ class PuffeRL:
                         ap[game_idx] = rand_idx + 1 
                     else:
                         ap[game_idx] = 0
+                        
                 profile('sp_batch_ordering', epoch)
                 obs_shape = int(o.shape[1]/2)
                 order = np.argsort(ap)
@@ -385,8 +385,8 @@ class PuffeRL:
                 obs_idx = 0
                 # batch forward pass each group with the same policy
                 idx_start = 0
-                if games_ended:
-                    current = {k: v.detach().clone() for k, v in self.policy.state_dict().items()}
+                policy_change = 0
+                current = {k: v.detach().clone() for k, v in self.policy.state_dict().items()}
                 for idx, sp_batch in enumerate(sp_groups):
                     s = boundaries[idx]
                     e = boundaries[idx+1]
@@ -394,6 +394,7 @@ class PuffeRL:
                     profile('sp_copy',epoch)
                     o_sp = torch.as_tensor(sp_batch).to(device)
                     if(len(self.opponent_pool) > 0 or policy_id > 0):
+                        policy_change = 1
                         self.policy.load_state_dict(self.opponent_pool[policy_id - 1], strict=True)
                     profile('sp_forward',epoch)
                     with torch.no_grad(), self.amp_context:
@@ -404,7 +405,8 @@ class PuffeRL:
 
                         logits_opp, value = self.policy.forward_eval(o_sp, state_opp)
                         #opp = np.zeros_like(action[s:e])
-                        #opp = np.random.randint(0,rand_max, size=action.shape, dtype=action.dtype)
+                        rand_max = self.vecenv.action_space.nvec[0]
+                        #opp = np.random.randint(0,rand_max, size=action[s:e].shape, dtype=action.dtype)
                         opp, logprob, _ = pufferlib.pytorch.sample_logits(logits_opp)
                         opp = opp.cpu().numpy()
                         if isinstance(logits_opp, torch.distributions.Normal):
@@ -416,7 +418,7 @@ class PuffeRL:
                 inv_order[order]  = np.arange(B)
                 interleaved[1::2] = opp_acts[inv_order]
                 action = interleaved
-                if games_ended: 
+                if policy_change:
                     self.policy.load_state_dict(current, strict=True)
             profile('env', epoch)
             self.vecenv.send(action)
@@ -443,6 +445,12 @@ class PuffeRL:
         vf_clip = config['vf_clip_coef']
         anneal_beta = b0 + (1 - b0)*a*self.epoch/self.total_epochs
         self.ratio[:] = 1
+        # Save weights for selfplay
+        if self.selfplay and (epoch % 10 == 0):
+            profile('train_selfplay', epoch)
+            snapshot = {k: v.clone() for k, v in self.policy.state_dict().items()}
+            self.opponent_pool.append(snapshot)
+ 
         for mb in range(self.total_minibatches):
             profile('train_misc', epoch, nest=True)
             self.amp_context.__enter__()
@@ -548,11 +556,6 @@ class PuffeRL:
         var_y = y_true.var()
         explained_var = torch.nan if var_y == 0 else 1 - (y_true - y_pred).var() / var_y
         losses['explained_variance'] = explained_var.item()
-        # Save weights for selfplay
-        if self.selfplay and (epoch % 10 == 0):
-            profile('train_selfplay', epoch)
-            snapshot = {k: v.clone() for k, v in self.policy.state_dict().items()}
-            self.opponent_pool.append(snapshot)
         profile.end()
         logs = None
         self.epoch += 1
