@@ -291,8 +291,8 @@ class PuffeRL:
                 # select new opponent
                 for game_idx in done_indices:
                     if(len(self.opponent_pool) > 0 and np.random.rand() >= 0.8):
-                        rand_idx = np.random.randint(0, len(self.opponent_pool))
-                        ap[game_idx] = rand_idx + 1 
+                        rand_idx = np.random.randint(np.max([len(self.opponent_pool) - 4, 0]), len(self.opponent_pool))
+                        ap[game_idx] = rand_idx 
                     else:
                         ap[game_idx] = 0
                         
