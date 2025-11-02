@@ -289,13 +289,24 @@ class PuffeRL:
                     self.elos[opp_id] = updated[1]
 
                 # select new opponent
-                for game_idx in done_indices:
-                    if(len(self.opponent_pool) > 0 and np.random.rand() >= 0.8):
-                        rand_idx = np.random.randint(np.max([len(self.opponent_pool) - 4, 0]), len(self.opponent_pool))
-                        ap[game_idx] = rand_idx 
-                    else:
-                        ap[game_idx] = 0
-                        
+                if len(done_indices) > 0 and len(self.opponent_pool) > 0:
+                    K = 3
+                    pool_ids = np.arange(1, len(self.opponent_pool)+1, dtype=np.int32)
+                    m = min(pool_ids.size, K-1)
+                    window = pool_ids[-m:] if m > 0 else np.array([],dtype=np.int32)
+                    uniq_active = np.unique(self.active_policies[self.active_policies>0])
+                    merged = np.unique(np.concatenate([uniq_active, window]))
+                    if merged.size > (K-1):
+                        merged = merged[-(K-1):]
+
+                    choose = np.random.rand(len(done_indices)) >= 0.8
+                    if merged.size > 0 and choose.any():
+                        ap[done_indices[choose]] = np.random.choice(merged, size=sum(choose))
+                        #ap[done_indices[choose]] = 1
+                    ap[done_indices[~choose]] = 0
+                else:
+                    ap[done_indices] = 0
+                # batch obs & lstm states of shared policies
                 profile('sp_batch_ordering', epoch)
                 obs_shape = int(o.shape[1]/2)
                 order = np.argsort(ap)
@@ -572,7 +583,6 @@ class PuffeRL:
         if self.epoch % config['checkpoint_interval'] == 0 or done_training:
             self.save_checkpoint()
             self.msg = f'Checkpoint saved at update {self.epoch}'
-        
         return logs
 
     def mean_and_log(self):
@@ -588,6 +598,8 @@ class PuffeRL:
 
         device = config['device']
         agent_steps = int(dist_sum(self.global_step, device))
+        if self.selfplay and self.stats.items():
+            self.stats['elo'] = self.elos[0]
         logs = {
             'SPS': dist_sum(self.sps, device),
             'agent_steps': agent_steps,
@@ -746,7 +758,6 @@ class PuffeRL:
         
         if self.selfplay and self.stats['perf']:
             self.stats['elo'] = self.elos[0]
-            self.stats['elo_enemy'] = self.elos[1]
         for metric, value in (self.stats or self.last_stats).items():
             try: # Discard non-numeric values
                 int(value)
