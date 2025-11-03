@@ -326,6 +326,9 @@ class Go(nn.Module):
         )
 
         obs_size = env.single_observation_space.shape[0]
+        if env.selfplay:
+            obs_size = int(obs_size * 0.5)
+
         self.grid_size = int(np.sqrt((obs_size-2)/2))
         output_size = self.grid_size - 4
         cnn_flat_size = cnn_channels * output_size * output_size

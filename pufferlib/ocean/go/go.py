@@ -20,12 +20,14 @@ class Go(pufferlib.PufferEnv):
             moves_made=0,
             komi=7.5,
             score = 0.0,
+            num_agents = 1,
             last_capture_position=-1,
             reward_move_pass = -0.25,
             reward_move_invalid = -0.1,
             reward_move_valid = 0.1,
             reward_player_capture = 0.25,
             reward_opponent_capture = -0.25,
+            selfplay = 0,
             buf = None, seed=0):
 
         # env
@@ -33,21 +35,45 @@ class Go(pufferlib.PufferEnv):
         self.render_mode = render_mode
         self.log_interval = log_interval
         self.tick = 0
-        self.num_obs = (grid_size) * (grid_size)*2 + 2
+        self.num_obs = ((grid_size) * (grid_size)*2 + 2)*2
         self.num_act = (grid_size) * (grid_size) + 1
         self.single_observation_space = gymnasium.spaces.Box(low=0, high=1,
             shape=(self.num_obs,), dtype=np.float32)
         self.single_action_space = gymnasium.spaces.Discrete(self.num_act)
-
+        self.selfplay = selfplay
+        factor = 2 if selfplay else 1
         super().__init__(buf=buf)
         height = 64*(grid_size+1)
-        self.c_envs = binding.vec_init(self.observations, self.actions, self.rewards,
-            self.terminals, self.truncations, num_envs, seed, width=width, height=height, grid_size=grid_size,
-            board_width=board_width, board_height=board_height, grid_square_size=grid_square_size,
-            moves_made=moves_made, komi=komi, score=score, last_capture_position=last_capture_position,
-            reward_move_pass=reward_move_pass, reward_move_invalid=reward_move_invalid,
-            reward_move_valid=reward_move_valid, reward_player_capture=reward_player_capture,
-            reward_opponent_capture=reward_opponent_capture)
+        c_envs = []
+        for i in range(num_envs):
+            c_envs.append(binding.env_init(
+                self.observations[i:(i+1)],
+                self.actions[i*factor: (i+1)*factor],
+                self.rewards[i:(i+1)],
+                self.terminals[i:(i+1)],
+                self.truncations[i:(i+1)],
+                i,
+                num_agents = num_agents,
+                num_envs = num_envs,
+                seed = seed,
+                width = width,
+                height = height,
+                grid_size = grid_size,
+                board_width = board_width, 
+                board_height = board_height,
+                grid_square_size = grid_square_size,
+                moves_made = moves_made,
+                komi = komi,
+                score = score,
+                last_capture_position = last_capture_position,
+                reward_move_pass = reward_move_pass,
+                reward_move_invalid = reward_move_invalid,
+                reward_move_valid = reward_move_valid,
+                reward_player_capture = reward_player_capture,
+                reward_opponent_capture = reward_opponent_capture,
+                selfplay = selfplay
+            ))
+        self.c_envs = binding.vectorize(*c_envs)
 
     def reset(self, seed=None):
         binding.vec_reset(self.c_envs, seed)

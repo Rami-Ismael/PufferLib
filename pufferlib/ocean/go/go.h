@@ -21,6 +21,7 @@ struct Log {
     float episode_return;
     float episode_length;
     float n;
+    float illegal_move_count;
 };
 
 typedef struct Group Group;
@@ -93,6 +94,8 @@ struct CGo {
     float reward_player_capture;
     float reward_opponent_capture;
     float tick;
+    int selfplay;
+    int illegal_move_count;
 };
 
 void add_log(CGo* env) {
@@ -109,6 +112,7 @@ void add_log(CGo* env) {
     else {
         win_value = 0.0; // Tie
     }
+    env->log.illegal_move_count += env->illegal_move_count;
 
     env->log.perf = (env->log.perf * env->log.n + win_value) / (env->log.n + 1.0);
     
@@ -180,27 +184,38 @@ void free_allocated(CGo* env) {
 }
 
 void compute_observations(CGo* env) {
-    int observation_indx=0;
-    for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
-	if(env->board_states[i] ==1 ){
-		env->observations[observation_indx] = 1.0;
-	}	
-	else {
-		env->observations[observation_indx] = 0.0;
-	}
-        observation_indx++;
-    }
-    for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
-        if(env->board_states[i] ==2 ){
-            env->observations[observation_indx] = 1.0;
-        }	
-        else {
-            env->observations[observation_indx] = 0.0;
+    int obs_len = env->grid_size * env->grid_size * 2 + 2;
+    for(int i = 0; i < 2; i++){
+        int observation_indx=0;
+        if(!env->selfplay && i==1) return;
+        int offset = i * obs_len;
+        int self = 1;
+        int opp = 2;
+        if(i == 1){
+            self = 2;
+            opp = 1;
         }
-        observation_indx++;
+        for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
+            if(env->board_states[i] == self ){
+                env->observations[offset + observation_indx] = 1.0;
+            }	
+            else {
+                env->observations[offset + observation_indx] = 0.0;
+            }
+            observation_indx++;
+        }
+        for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
+            if(env->board_states[i] == opp ){
+                env->observations[offset + observation_indx] = 1.0;
+            }	
+            else {
+                env->observations[offset + observation_indx] = 0.0;
+            }
+            observation_indx++;
+        }
+        env->observations[offset + observation_indx] = env->capture_count[self-1];
+        env->observations[offset + observation_indx+1] = env->capture_count[opp-1];
     }
-    env->observations[observation_indx] = env->capture_count[0];
-    env->observations[observation_indx+1] = env->capture_count[1];
 
 }
 
@@ -421,6 +436,9 @@ int make_move(CGo* env, int pos, int player){
     int y = pos / (env->grid_size);
     // cannot place stone on occupied tile
     if (env->board_states[pos] != 0) {
+        if(player == 1){
+            env->illegal_move_count+=1;
+        }
         return 0 ;
     }
     // temp structures
@@ -479,12 +497,18 @@ int make_move(CGo* env, int pos, int player){
         }
         // Check for ko rule violation
         if(is_ko(env)) {
+            if(player == 1){
+                env->illegal_move_count+=1;
+            }
             return 0;
         }
     }
     // self capture
     int root = find(env->temp_groups, pos);
     if (env->temp_groups[root].liberties == 0) {
+        if(player == 1){
+            env->illegal_move_count+=1;
+        }
         return 0;
     }
     memcpy(env->board_states, env->temp_board_states, sizeof(int) * (env->grid_size) * (env->grid_size));
@@ -622,8 +646,8 @@ void enemy_greedy_easy(CGo* env){
 
 void c_reset(CGo* env) {
     env->tick = 0;
+    env->illegal_move_count = 0;
     // We don't reset the log struct - leave it accumulating like in Pong
-    env->terminals[0] = 0;
     env->score = 0;
     for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
         env->board_states[i] = 0;
@@ -653,6 +677,7 @@ void end_game(CGo* env){
     else {
         env->rewards[0] = 0.0;
     }
+    env->terminals[0] = 1;
     add_log(env);
     c_reset(env);
 }
@@ -660,7 +685,13 @@ void end_game(CGo* env){
 void c_step(CGo* env) {
     env->tick += 1;
     env->rewards[0] = 0.0;
-    int action = (int)env->actions[0];
+    env->terminals[0] = 0;
+    int actions[2] = {0};
+    if(env->selfplay){
+        memcpy(&actions, env->actions, 2*sizeof(int));
+    } else {
+        actions[0] = (int)env->actions[0];
+    }
     // useful for training , can prob be a hyper param. Recommend to increase with larger board size
     float max_moves = 3 * env->grid_size * env->grid_size;
     if (env->tick > max_moves) {
@@ -669,10 +700,14 @@ void c_step(CGo* env) {
          compute_observations(env);
          return;
     }
-    if(action == NOOP){
+    if(actions[0] == NOOP){
         env->rewards[0] = env->reward_move_pass;
         env->log.episode_return += env->reward_move_pass;
-        enemy_greedy_hard(env);
+        if(env->selfplay && actions[1] != NOOP){
+            make_move(env, actions[1] - 1, 2);
+        } else{
+            enemy_greedy_hard(env);
+        }
         if (env->terminals[0] == 1) {
             end_game(env);
             return;
@@ -680,13 +715,18 @@ void c_step(CGo* env) {
         compute_observations(env);
         return;
     }
-    if (action >= MOVE_MIN && action <= (env->grid_size)*(env->grid_size)) {
+    if (actions[0] >= MOVE_MIN && actions[0] <= (env->grid_size)*(env->grid_size)) {
         memcpy(env->previous_board_state, env->board_states, sizeof(int) * (env->grid_size) * (env->grid_size));
-        if(make_move(env, action-1, 1)) {
+        if(make_move(env, actions[0] - 1, 1)) {
             env->moves_made++;
             env->rewards[0] = env->reward_move_valid;
             env->log.episode_return += env->reward_move_valid;
-            enemy_greedy_hard(env);
+            if(env->selfplay && actions[1] != NOOP){
+                make_move(env, actions[1] - 1, 2);
+            } else{
+                enemy_greedy_hard(env);
+            }
+
 
         } else {
             env->rewards[0] = env->reward_move_invalid;
@@ -727,7 +767,7 @@ Client* make_client(int width, int height) {
     client->width = width;
     client->height = height;
     InitWindow(width, height, "PufferLib Ray Go");
-    SetTargetFPS(60);
+    SetTargetFPS(10);
     return client;
 }
 

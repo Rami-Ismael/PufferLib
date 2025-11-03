@@ -1161,13 +1161,16 @@ def eval(env_name, args=None, vecenv=None, policy=None):
         with torch.no_grad():
             if selfplay:
                 ob = torch.as_tensor(ob).to(device)
-                logits, value = policy.forward_eval(ob[:, int(ob.shape[1]/2):], state)
+                logits, value = policy.forward_eval(ob[:, :int(ob.shape[1]/2)], state)
                 action, logprob, _ = pufferlib.pytorch.sample_logits(logits)
                 action = action.cpu().numpy()
   
                 #opp = np.zeros_like(action)
-                rand_max = vecenv.action_space.nvec[0]
-                opp = np.random.randint(0,rand_max, size=action.shape, dtype=action.dtype)
+                #rand_max = vecenv.action_space.nvec[0]
+                #opp = np.random.randint(0,rand_max, size=action.shape, dtype=action.dtype)
+                opp_logits, opp_val = policy.forward_eval(ob[:, int(ob.shape[1]/2):], state)
+                opp, opp_logprob, _ = pufferlib.pytorch.sample_logits(opp_logits)
+                opp = opp.cpu().numpy()
                 interleaved = np.empty(action.size * 2, dtype = action.dtype)
                 interleaved[0::2] = action
                 interleaved[1::2] = opp
