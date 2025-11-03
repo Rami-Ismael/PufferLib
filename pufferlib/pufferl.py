@@ -429,7 +429,7 @@ class PuffeRL:
 
                         logits_opp, value = self.policy.forward_eval(o_sp, state_opp)
                         #opp = np.zeros_like(action[s:e])
-                        rand_max = self.vecenv.action_space.nvec[0]
+                        #rand_max = self.vecenv.action_space.nvec[0]
                         #opp = np.random.randint(0,rand_max, size=action[s:e].shape, dtype=action.dtype)
                         opp, logprob, _ = pufferlib.pytorch.sample_logits(logits_opp)
                         opp = opp.cpu().numpy()
@@ -471,11 +471,10 @@ class PuffeRL:
         anneal_beta = b0 + (1 - b0)*a*self.epoch/self.total_epochs
         self.ratio[:] = 1
         # Save weights for selfplay
-        if self.selfplay and (epoch % 10 == 0):
+        if self.selfplay and (epoch % 2 == 0):
             profile('train_selfplay', epoch)
             snapshot = {k: v.clone() for k, v in self.policy.state_dict().items()}
             self.opponent_pool.append(snapshot)
- 
         for mb in range(self.total_minibatches):
             profile('train_misc', epoch)
             self.amp_context.__enter__()
