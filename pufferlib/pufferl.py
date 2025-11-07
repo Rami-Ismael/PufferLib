@@ -143,7 +143,7 @@ class PuffeRL:
         if vecenv.selfplay:
             self.opponent_pool = []
             self.active_policies = np.zeros(total_agents, dtype=np.int32)
-            self.elos = np.full(total_agents, 1200.0, dtype = np.float32)
+            self.elos = np.full(total_agents, 0.0, dtype = np.float32)
         # LSTM
         if config['use_rnn']:
             n = vecenv.agents_per_batch
