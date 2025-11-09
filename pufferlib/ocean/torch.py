@@ -19,6 +19,107 @@ from pufferlib.pytorch import layer_init, _nativize_dtype, nativize_tensor
 import numpy as np
 
 
+class ChessCNN(nn.Module):
+    def __init__(self, env, cnn_channels=32, hidden_size=256, **kwargs):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.is_continuous = False
+        
+        self.network = nn.Sequential(
+            layer_init(nn.Conv2d(20, cnn_channels, 5, stride=3)),
+            nn.ReLU(),
+            layer_init(nn.Conv2d(cnn_channels, cnn_channels, 2, stride=1)),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+        self.proj = nn.Sequential(
+            layer_init(nn.Linear(cnn_channels, hidden_size)),
+            nn.ReLU(),
+        )
+        
+        self.actor = layer_init(nn.Linear(hidden_size, 64), std=0.01)
+        self.value_head = layer_init(nn.Linear(hidden_size, 1), std=1)
+        
+        self.last_observations = None
+    
+    def load_state_dict(self, state_dict, strict=True):
+        super().load_state_dict(state_dict, strict=strict)
+        self.last_observations = None
+    
+    def forward(self, observations, state=None):
+        hidden = self.encode_observations(observations, state)
+        logits, value = self.decode_actions(hidden, state)
+        return logits, value
+    
+    def forward_eval(self, observations, state=None):
+        """Forward pass for evaluation/rollout"""
+        hidden = self.encode_observations(observations, state)
+        logits, value = self.decode_actions(hidden, state)
+        return logits, value
+    
+    def encode_observations(self, observations, state=None):
+        B = observations.shape[0]
+        obs = observations.float()
+        board = obs[:, :768].view(B, 12, 8, 8)
+
+        side_onehot = obs[:, 768:770]
+        side_plane = side_onehot[:, 1:2].view(B, 1, 1, 1).expand(-1, -1, 8, 8)
+
+        castle_onehot = obs[:, 770:786]
+        castle_idx = castle_onehot.argmax(dim=1)
+
+        castle_planes = []
+        for i in range(4):
+            has_right = ((castle_idx & (1 << i)) > 0).float()
+            plane = has_right.view(B, 1, 1, 1).expand(-1, -1, 8, 8)
+            castle_planes.append(plane)
+        castle_planes = torch.cat(castle_planes, dim=1)
+        
+        ep_onehot = obs[:, 786:851]
+        ep_idx = ep_onehot.argmax(dim=1)
+        ep_plane = (ep_idx < 64).float().view(B, 1, 1, 1).expand(-1, -1, 8, 8)
+        
+        # Phase plane (1 channel)
+        phase_onehot = obs[:, 851:853]
+        phase_plane = phase_onehot[:, 1:2].view(B, 1, 1, 1).expand(-1, -1, 8, 8)
+        
+        selected_piece = obs[:, 853:917].view(B, 1, 8, 8)
+        
+        board_input = torch.cat([board, side_plane, castle_planes, ep_plane, phase_plane, selected_piece], dim=1)
+        
+        self.last_observations = observations.detach()
+        
+        hidden = self.network(board_input)
+        return self.proj(hidden)
+    
+    def decode_actions(self, hidden, state=None):
+        logits = self.actor(hidden)
+        
+        if self.last_observations is None:
+            pass
+        
+        if self.last_observations is not None:
+            obs = self.last_observations.float()
+            phase_onehot = obs[:, 851:853]
+            pick_phase = phase_onehot[:, 1]
+            valid_pieces = obs[:, 917:981]
+            valid_dests = obs[:, 981:1045]
+            
+            valid_pieces_binary = (valid_pieces > 0.5).float()
+            valid_dests_binary = (valid_dests > 0.5).float()
+            
+            mask = torch.where(pick_phase.unsqueeze(1) > 0.5, valid_dests_binary, valid_pieces_binary)
+            
+            all_masked = (mask == 0).all(dim=1)
+            if all_masked.any():
+                for idx in torch.where(all_masked)[0]:
+                    mask[idx] = 1
+            
+            logits = logits.masked_fill(mask == 0, -1e10)
+        
+        value = self.value_head(hidden)
+        return logits, value
+
 class Boids(nn.Module):
     def __init__(self, env, cnn_channels=32, hidden_size=128, **kwargs):
         super().__init__()
