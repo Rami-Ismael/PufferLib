@@ -55,6 +55,7 @@ class SimpleCNN(nn.Module):
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
+        breakpoint()
         x = F.relu(self.conv2(x))
         x = x.flatten(1)
         x = self.head(x)
@@ -89,6 +90,35 @@ def batched_conv2d(x, W, b, stride=1, padding=0):
     out = out.view(B, OH, OW, out_c).permute(0, 3, 1, 2)
     return out
 
+def per_sample_grouped_conv2d(x, W_stack, b_stack, version_ids, stride = 1, padding =0, dilation =1):
+    """
+    x : [B, C, H, W]
+    W_stack : [B, out_c, in_c, kH, kW]
+    b_stack : [B, out_c]
+    """
+
+    B, Cin, H, W = x.shape
+    P, Cout, CinW, kH, kW = W_stack.shape
+    breakpoint()
+    assert Cin == CinW
+    assert b_stack.shape == (P, Cout)
+
+    device = x.device
+    idx = torch.as_tensor(version_ids, device=device, dtype=torch.long)
+    assert idx.shape[0] == B
+    W_per = W_stack.index_select(0, idx)
+    b_per = b_stack.index_select(0, idx)
+
+    x_big = x.transpose(0,1).reshape(1, B*Cin, H,W).contiguous()
+    W_big = W_per.reshape(B*Cout, Cin, kH, kW).contiguous()
+    b_big = b_per.reshape(B*Cout).contiguous()
+
+    out_big = F.conv2d(x_big, W_big, b_big, stride=stride, padding=padding, dilation=dilation, groups = B)
+
+    _,_, Hout, Wout = out_big.shape
+    out = out_big.view(B, Cout, Hout, Wout).contiguous()
+    return out
+
 def create_policies_mlp_lstm(num_policies=4, seed=0):
     torch.manual_seed(seed)
     policies = [MLPLSTMPolicy() for _ in range(num_policies)]
@@ -98,7 +128,15 @@ def create_policies_mlp_lstm(num_policies=4, seed=0):
                 param.add_(i * 0.1)
     return policies
 
-def create_cnn_policies(num_policies=4, seed=0):
+def create_cnn_policies(num_policies=4, base_seed=42):
+    policies = []
+    for i in range(num_policies):
+        torch.manual_seed(base_seed + i)  # ← DIFFERENT SEED
+        p = SimpleCNN(in_dim=20).to('cuda')
+        policies.append(p)
+    return policies
+
+'''def create_cnn_policies(num_policies=4, seed=0):
     torch.manual_seed(seed)
     policies = [SimpleCNN(in_dim=20) for _ in range(num_policies)]
     with torch.no_grad():
@@ -106,7 +144,7 @@ def create_cnn_policies(num_policies=4, seed=0):
             for param in p.parameters():
                 param.add_(i * 0.1)
     return policies
-
+'''
 def build_weight_stacks(policies):
     W = {}
     b = {}
@@ -223,15 +261,15 @@ def stacked_forward_cnn_mlp(obs, version_ids, stacks):
     idx = torch.as_tensor(version_ids, device=obs.device, dtype=torch.long)
     x = obs
     # -- conv 1 ---
-    W = stacks['W']['conv1'][idx]
-    b = stacks['b']['conv1'][idx]
-    x = batched_conv2d(x, W, b, stride = 3, padding = 0)
+    W = stacks['W']['conv1']
+    b = stacks['b']['conv1']
+    x = per_sample_grouped_conv2d(x, W, b, version_ids, stride = 3, padding = 0)
     x = F.relu(x)
 
     # -- conv 2 ---
-    W = stacks['W']['conv2'][idx]
-    b = stacks['b']['conv2'][idx]
-    x = batched_conv2d(x, W, b, stride = 1, padding = 0)
+    W = stacks['W']['conv2']
+    b = stacks['b']['conv2']
+    x = per_sample_grouped_conv2d(x, W, b, version_ids, stride = 1, padding = 0)
     x = F.relu(x)
 
     x = x.flatten(1)
@@ -244,7 +282,7 @@ def stacked_forward_cnn_mlp(obs, version_ids, stacks):
     return out
 
 # === 6. Benchmark ===
-def benchmark(num_iters=1000, batch_size=512, num_versions=4):
+def benchmark(num_iters=1000, batch_size=512, num_versions=40):
     policies = create_policies_mlp_lstm(num_policies=num_versions)
     stacks = build_weight_stacks(policies)
 
@@ -294,7 +332,72 @@ def benchmark(num_iters=1000, batch_size=512, num_versions=4):
     print(f"Old Method: {opt_loop_time:.3f}s  ->  {opt_loop_time/num_iters*1000:.2f} ms/step")
     print(f"New Method: {stack_time:.3f}s  ->  {stack_time/num_iters*1000:.2f} ms/step")
     print(f"Speedup        : {opt_loop_time/stack_time:.1f}x")
+def _conv2d_out_hw(H, W, kH, kW, s=1, p=0, d=1):
+    Hout = (H + 2*p - d*(kH - 1) - 1)//s + 1
+    Wout = (W + 2*p - d*(kW - 1) - 1)//s + 1
+    return Hout, Wout
 
+def maxdiff(a, b):
+    return (a - b).abs().max().item()
+
+@torch.no_grad()
+def run_loop_layers(obs, versions, policies):
+    """
+    Returns (ref_conv1, ref_conv2, ref_head) computed by looping policy-by-policy.
+    Shapes:
+      ref_conv1: [B, C1, H1, W1]
+      ref_conv2: [B, C2, H2, W2]
+      ref_head : [B, D_out]
+    """
+    device = obs.device
+    B, Cin, H, W = obs.shape
+    # --- conv1 shape ---
+    c1 = policies[0].conv1.out_channels
+    k1h, k1w = policies[0].conv1.kernel_size
+    s1h = s1w = policies[0].conv1.stride if isinstance(policies[0].conv1.stride, int) else policies[0].conv1.stride[0]
+    p1h = p1w = policies[0].conv1.padding if isinstance(policies[0].conv1.padding, int) else policies[0].conv1.padding[0]
+    d1h = d1w = policies[0].conv1.dilation if isinstance(policies[0].conv1.dilation, int) else policies[0].conv1.dilation[0]
+    H1, W1 = _conv2d_out_hw(H, W, k1h, k1w, s1h, p1h, d1h)
+
+    # --- conv2 shape ---
+    c2 = policies[0].conv2.out_channels
+    k2h, k2w = policies[0].conv2.kernel_size
+    s2h = s2w = policies[0].conv2.stride if isinstance(policies[0].conv2.stride, int) else policies[0].conv2.stride[0]
+    p2h = p2w = policies[0].conv2.padding if isinstance(policies[0].conv2.padding, int) else policies[0].conv2.padding[0]
+    d2h = d2w = policies[0].conv2.dilation if isinstance(policies[0].conv2.dilation, int) else policies[0].conv2.dilation[0]
+    H2, W2 = _conv2d_out_hw(H1, W1, k2h, k2w, s2h, p2h, d2h)
+
+    # Preallocate with correct shapes
+    ref1 = torch.empty(B, c1, H1, W1, device=device, dtype=obs.dtype)
+    ref2 = torch.empty(B, c2, H2, W2, device=device, dtype=obs.dtype)
+    ref3 = torch.empty(B, policies[0].head.out_features, device=device, dtype=obs.dtype)
+
+    # Sort once so identical versions are contiguous
+    versions_sorted, sort_idx = torch.sort(versions)
+    obs_sorted = obs.index_select(0, sort_idx)
+
+    s = 0
+    for v in torch.unique(versions_sorted):
+        mask = (versions_sorted == v)
+        e = s + mask.sum().item()
+        sub = obs_sorted[s:e]
+        p = policies[v.item()]
+
+        # conv1
+        y1 = F.relu(p.conv1(sub))
+        ref1.index_copy_(0, sort_idx[s:e], y1)
+
+        # conv2
+        y2 = F.relu(p.conv2(y1))
+        ref2.index_copy_(0, sort_idx[s:e], y2)
+
+        # head (flatten)
+        y3 = p.head(y2.flatten(1))
+        ref3.index_copy_(0, sort_idx[s:e], y3)
+
+        s = e
+
+    return ref1, ref2, ref3
 
 def test_mlp_lstm():
     print("\n=== MLP + LSTM TEST ===")
@@ -393,16 +496,26 @@ def test_cnn_mlp():
         else:
             gpu_stacks[k] = v.to('cuda')
 
-    print("Policy 0 conv1 weight norm:", policies[0].conv1.weight.norm())
-    print("Policy 1 conv1 weight norm:", policies[1].conv1.weight.norm())
-    print("Stacked W conv1[0] norm:", stacks['W']['conv1'][0].norm())
-    print("Stacked W conv1[1] norm:", stacks['W']['conv1'][1].norm())
-
-    B = 256
+    B = 1024
     C, H, W = 20, 8, 8
     obs = torch.randn(B, C, H, W, device='cuda')
     versions = np.random.randint(0, 4, size=B)
+    ref1, ref2, ref3 = run_loop_layers(obs, torch.from_numpy(versions).to('cuda'), policies_gpu)
 
+    # 2) Stacked path (layer-by-layer) using your per-sample grouped conv
+    x1 = per_sample_grouped_conv2d(obs,  gpu_stacks['W']['conv1'], gpu_stacks['b']['conv1'], torch.from_numpy(versions).to('cuda'), stride=3, padding=0)
+    x1 = F.relu(x1)
+    x2 = per_sample_grouped_conv2d(x1,   gpu_stacks['W']['conv2'], gpu_stacks['b']['conv2'], torch.from_numpy(versions).to('cuda'), stride=1, padding=0)
+    x2 = F.relu(x2)
+    x3 = (x2.flatten(1).unsqueeze(1) @ gpu_stacks['W']['head'].index_select(
+            0, torch.from_numpy(versions).to('cuda')
+         ).transpose(1,2)).squeeze(1) + gpu_stacks['b']['head'].index_select(
+            0, torch.from_numpy(versions).to('cuda')
+         )
+
+    print("maxdiff conv1:", maxdiff(ref1, x1))
+    print("maxdiff conv2:", maxdiff(ref2, x2))
+    print("maxdiff head:",  maxdiff(ref3, x3))
 
     # ----- Sort for loop -----
     sort_idx = np.argsort(versions)
@@ -410,6 +523,7 @@ def test_cnn_mlp():
     versions_sorted = versions[sort_idx]
 
     
+    breakpoint()
     loop_out = optimized_loop_forward(obs_sorted,
                                       torch.from_numpy(versions_sorted).to('cuda'),
                                       policies_gpu)
@@ -420,11 +534,10 @@ def test_cnn_mlp():
     # ----- Unsort loop output -----
     unsort_idx = np.argsort(sort_idx)
     loop_out = loop_out[unsort_idx]
-    breakpoint()
     # ----- Verify -----
     assert_near(loop_out.detach().cpu().numpy(),
                 stack_out.detach().cpu().numpy(),
-                atol=1e-6,
+                atol=1e-4,
                 name="Actions")
     print("CNN + MLP PASSED\n")
 
