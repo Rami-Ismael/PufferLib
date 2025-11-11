@@ -53,7 +53,33 @@ from torch.utils.cpp_extension import (
 # Assume advantage kernel has been built if torch has been compiled with CUDA or HIP support
 # and can find CUDA or HIP in the system
 ADVANTAGE_CUDA = bool(CUDA_HOME or ROCM_HOME)
+class PolicyPool(torch.nn.Module):
+    def __init__(self, make_policy, device, n_slots = 3):
+        super().__init__()
+        self.device = device
+        self.opponents_pool = torch.nn.ModuleList([make_policy().to(device) for _ in range(n_slots)])
+        for m in self.opponents_pool:
+            m.eval()
+            for p in m.parameters():
+                p.requires_grad = False
+        self._rot_idx = 0
+    @torch.inference_mode()
+    def forward_eval(self, x, state, policy_id: int):
+        assert(1 <= policy_id <= len(self.opponents_pool))
+        return self.opponents_pool[policy_id - 1].forward_eval(x,state)
 
+    @torch.no_grad()
+    def rotate_new_policy(self, policy):
+        slot = self._rot_idx
+        tgt = self.opponents_pool[slot]
+
+        sd = policy.state_dict()
+        tgt.load_state_dict(sd, strict=True, assign=True)
+        tgt.eval()
+        for p in tgt.parameters():
+            p.requires_grad = False
+        self._rot_idx = (slot + 1) % len(self.opponents_pool)
+        return slot
 def win_prob(elo1, elo2):
         return 1 / (1 + 10 ** ((elo2 - elo1) / 400))
     
@@ -278,7 +304,7 @@ class PuffeRL:
         while self.full_rows < self.segments:
             profile('env', epoch)
             o, r, d, t, info, env_id, mask = self.vecenv.recv()
-
+            o_og = o
             profile('eval_misc', epoch)
             env_id = slice(env_id[0], env_id[-1] + 1)
 
@@ -338,7 +364,10 @@ class PuffeRL:
                 lstm_c_sorted = c.index_select(0, order_t)
             
             profile('eval_copy', epoch)
-            o = torch.as_tensor(o)
+            if(selfplay):
+                o = torch.as_tensor(o[order])
+            else:
+                o = torch.as_tensor(o)
             o_device = o.to(device)#, non_blocking=True)
             r = torch.as_tensor(r).to(device)#, non_blocking=True)
             d = torch.as_tensor(d).to(device)#, non_blocking=True)
@@ -359,7 +388,10 @@ class PuffeRL:
                     logits, value = self.policy.forward_eval(o_device[:, :obs_shape], state)
                 else:
                     logits, value = self.policy.forward_eval(o_device, state)
+
+
                 action, logprob, _ = pufferlib.pytorch.sample_logits(logits)
+
                 r = torch.clamp(r, -1, 1)
             profile('eval_copy', epoch)
             with torch.no_grad():
@@ -373,7 +405,11 @@ class PuffeRL:
                 if config['cpu_offload']:
                     self.observations[batch_rows, l] = o
                 else:
-                    self.observations[batch_rows, l] = o_device
+                    if self.selfplay:
+                        inv = torch.argsort(order_t)
+                        self.observations[batch_rows, l] = o_device[inv]
+                    else:
+                        self.observations[batch_rows, l] = o_device
 
                 self.actions[batch_rows, l] = action
                 self.logprobs[batch_rows, l] = logprob
@@ -415,33 +451,36 @@ class PuffeRL:
                     s = boundaries[idx]
                     e = boundaries[idx+1]
                     policy_id = ids_sorted[idx]
-                    profile('sp_copy',epoch)
-                    o_sp = torch.as_tensor(sp_batch).to(device)
+                    o_sp = o_device[s:e, obs_shape:]
+                    profile('sp_load_model', epoch)
                     if(len(self.opponent_pool) > 0 or policy_id > 0):
                         policy_change = 1
                         self.policy.load_state_dict(self.opponent_pool[policy_id - 1], strict=True)
-                    profile('sp_forward',epoch)
                     with torch.no_grad(), self.amp_context:
                         state_opp = dict()
                         if config['use_rnn']:
                             state_opp['lstm_h'] = lstm_h_sorted[s:e]
                             state_opp['lstm_c'] = lstm_c_sorted[s:e]
-
-                        logits_opp, value = self.policy.forward_eval(o_sp, state_opp)
-                        #opp = np.zeros_like(action[s:e])
+                        
+                        profile('sp_forward',epoch)
+                        #logits_opp, value = self.policy.forward_eval(o_sp, state_opp)
+                        opp = np.zeros_like(action[s:e])
                         #rand_max = self.vecenv.action_space.nvec[0]
                         #opp = np.random.randint(0,rand_max, size=action[s:e].shape, dtype=action.dtype)
-                        opp, logprob, _ = pufferlib.pytorch.sample_logits(logits_opp)
-                        opp = opp.cpu().numpy()
-                        if isinstance(logits_opp, torch.distributions.Normal):
-                            opp = np.clip(opp, self.vecenv.action_space.low, self.vecenv.action_space.high)
+                        #opp, logprob, _ = pufferlib.pytorch.sample_logits(logits_opp)
+                        profile('sp_copy',epoch)
+                        #opp = opp.cpu().numpy()
+                        #if isinstance(logits_opp, torch.distributions.Normal):
+                        #    opp = np.clip(opp, self.vecenv.action_space.low, self.vecenv.action_space.high)
                         opp_acts[s:e] = opp
+                profile('sp_misc', epoch)
                 interleaved = np.empty(action.size * 2, dtype = action.dtype)
                 interleaved[0::2] = action
                 inv_order = np.empty_like(order)
                 inv_order[order]  = np.arange(B)
                 interleaved[1::2] = opp_acts[inv_order]
                 action = interleaved
+                profile('sp_load_model', epoch)
                 if policy_change:
                     self.policy.load_state_dict(current, strict=True)
             profile('env', epoch)
@@ -742,6 +781,8 @@ class PuffeRL:
             p.add_row(*fmt_perf('  SP Batching', c2, delta, profile.sp_batch_ordering, b2,c2))
             p.add_row(*fmt_perf('  SP Copy', c2, delta, profile.sp_copy, b2,c2))
             p.add_row(*fmt_perf('  SP Forward', c2, delta, profile.sp_forward,b2,c2))
+            p.add_row(*fmt_perf('  SP Misc', c2, delta, profile.sp_misc,b2,c2))
+            p.add_row(*fmt_perf('  SP Load Model', c2, delta, profile.sp_load_model, b2,c2))
         p.add_row(*fmt_perf('Train', b1, delta, profile.train, b2, c2))
         p.add_row(*fmt_perf('  Forward', c2, delta, profile.train_forward, b2, c2))
         p.add_row(*fmt_perf('  Learn', c2, delta, profile.learn, b2, c2))
@@ -1042,7 +1083,6 @@ class WandbLogger:
         data_dir = artifact.download()
         model_file = max(os.listdir(data_dir))
         return f'{data_dir}/{model_file}'
-
 def train(env_name, args=None, vecenv=None, policy=None, logger=None, should_stop_early=None):
     args = args or load_config(env_name)
 
@@ -1059,7 +1099,6 @@ def train(env_name, args=None, vecenv=None, policy=None, logger=None, should_sto
 
     vecenv = vecenv or load_env(env_name, args)
     policy = policy or load_policy(args, vecenv, env_name)
-
     if 'LOCAL_RANK' in os.environ:
         args['train']['device'] = torch.cuda.current_device()
         torch.distributed.init_process_group(backend='nccl', world_size=world_size)
@@ -1080,6 +1119,9 @@ def train(env_name, args=None, vecenv=None, policy=None, logger=None, should_sto
         logger = WandbLogger(args)
 
     train_config = { **args['train'], 'env': env_name }
+    if vecenv.selfplay:
+        breakpoint()
+        pool = PolicyPool(lambda: load_policy(args, vecenv, env_name), train_config['device'],3) 
     pufferl = PuffeRL(train_config, vecenv, policy, logger)
 
     all_logs = []
