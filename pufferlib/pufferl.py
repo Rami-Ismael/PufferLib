@@ -57,6 +57,7 @@ class PolicyPool(torch.nn.Module):
     def __init__(self, make_policy, device, n_slots = 3):
         super().__init__()
         self.device = device
+        self.n_slots = n_slots
         self.opponents_pool = torch.nn.ModuleList([make_policy().to(device) for _ in range(n_slots)])
         for m in self.opponents_pool:
             m.eval()
@@ -82,36 +83,49 @@ class PolicyPool(torch.nn.Module):
         return slot
 def win_prob(elo1, elo2):
         return 1 / (1 + 10 ** ((elo2 - elo1) / 400))
-    
-def update_elos(elos: np.ndarray, scores: np.ndarray, k:float = 4.0):
-    num_players = len(elos)
-    assert num_players == len(scores)
-    elo_update = [[] for _ in range(num_players)]
-    for i in range(num_players):
-        for j in range(i+1, num_players):
-            delta = scores[i] - scores[j]
+LN10_BY_400 = np.log(10.0) / 400.0 
+def elo_batch_update(elos: np.ndarray, ap: np.ndarray, r: np.ndarray, d: np.ndarray, cut: int, k:float = 4.0):
+    # Done games in the 20% tail
+    done_idx = np.flatnonzero(d == 1)
+    if done_idx.size == 0:
+        return
 
-            # Convert to elo scoring format
-            if delta > 0:
-                score_i = 1
-            elif delta == 0:
-                score_i = 0.5
-            else:
-                score_i = 0
+    tail_mask = done_idx >= cut
+    if not np.any(tail_mask):
+        return
 
-            # Calculate elo update for pairs
-            expected_i = win_prob(elos[i], elos[j])
-            expected_j = 1 - expected_i
-            score_j = 1 - score_i
+    idx = done_idx[tail_mask]
+    opp_ids = ap[idx]
+    valid = (opp_ids != 0)
+    if not np.any(valid):
+        return
 
-            elo_update[i].append(k * (score_i - expected_i))
-            elo_update[j].append(k * (score_j - expected_j))
+    idx = idx[valid]
+    opp_ids = opp_ids[valid]
+    # Map reward to Elo score ∈ {1, 0.5, 0}
+    rv = r[idx]
+    scores = np.where(rv > 0, 1.0, np.where(rv < 0, 0.0, 0.5))
 
-    elo_update = [np.mean(e) for e in elo_update]
-    return [elo + update for elo, update in zip(elos, elo_update)]
+    # Gather ratings
+    r1 = elos[0]                         # scalar, player 0
+    r2 = elos[opp_ids]                   # vector
 
+    # Expected score for player 0 vs each opponent
+    expected = 1.0 / (1.0 + np.exp((r2 - r1) * LN10_BY_400))
+
+    # Deltas
+    d1 = k * (scores - expected)         # updates for player 0 (vector)
+    d2 = -d1                             # equal and opposite for opponents
+
+    # Apply updates in place (aggregate opponents efficiently)
+    elos[0] += d1.sum()
+
+    # Aggregate by opponent id to avoid repeated writes
+    uniq, inv = np.unique(opp_ids, return_inverse=True)
+    agg = np.bincount(inv, weights=d2, minlength=uniq.size)  # sums per unique opponent
+    elos[uniq] += agg
 class PuffeRL:
-    def __init__(self, config, vecenv, policy, logger=None):
+    def __init__(self, config, vecenv, policy, logger=None, pool=None):
         # Backend perf optimization
         torch.set_float32_matmul_precision('high')
         torch.backends.cudnn.deterministic = config['torch_deterministic']
@@ -170,6 +184,18 @@ class PuffeRL:
             self.opponent_pool = []
             self.active_policies = np.zeros(total_agents, dtype=np.int32)
             self.elos = np.full(total_agents, 0.0, dtype = np.float32)
+            if pool is not None:
+                self.pool = pool
+                floor_idx = int(np.floor(0.8*vecenv.agents_per_batch))
+                r = vecenv.agents_per_batch - floor_idx
+                base, rem = divmod(r, self.pool.n_slots)
+                tails = [base+1]*rem + [base]*(self.pool.n_slots-rem)
+                bounds = [floor_idx]
+                cur = floor_idx
+                for sz in tails:
+                    cur+=sz
+                    bounds.append(cur)
+                self.pool_indices = bounds
         # LSTM
         if config['use_rnn']:
             n = vecenv.agents_per_batch
@@ -312,21 +338,13 @@ class PuffeRL:
             self.global_step += int(mask.sum())
             
             if(selfplay):
-                profile('sp_sampling', epoch)
+                profile('sp_elo_update', epoch)
                 batch_rows = slice(self.ep_indices[env_id.start].item(), 1+self.ep_indices[env_id.stop - 1].item())
                 ap = self.active_policies[batch_rows]
-                done_indices = np.where(d==1)[0]
-                # elo update & select new opponent
-                for game_idx in done_indices:
-                    opp_id = ap[game_idx]
-                    if opp_id == 0:
-                        continue
-                    pair_elos = np.array([self.elos[0], self.elos[opp_id]])
-                    pair_scores = np.array([r[game_idx], -r[game_idx]])
-                    updated = update_elos(pair_elos, pair_scores)
-                    self.elos[0] = updated[0]
-                    self.elos[opp_id] = updated[1]
-
+                elo_batch_update(self.elos, ap, r, d, cut = self.pool_indices[0], k=4.0) 
+                done_indices = np.flatnonzero(d == 1)
+                done_indices = done_indices[done_indices >= self.pool_indices[0]]
+                profile('sp_sampling', epoch)
                 # select new opponent
                 if len(done_indices) > 0 and len(self.opponent_pool) > 0:
                     K = 3
@@ -338,34 +356,15 @@ class PuffeRL:
                     if merged.size > (K-1):
                         merged = merged[-(K-1):]
 
-                    choose = np.random.rand(len(done_indices)) >= 0.8
-                    if merged.size > 0 and choose.any():
-                        ap[done_indices[choose]] = np.random.choice(merged, size=sum(choose))
-                        #ap[done_indices[choose]] = 1
-                    ap[done_indices[~choose]] = 0
+                    if merged.size > 0:
+                        ap[done_indices] = np.random.choice(merged, size=len(done_indices))
+                        #ap[done_indices] = 1
                 else:
                     ap[done_indices] = 0
-                # batch obs & lstm states of shared policies
-                profile('sp_batch_ordering', epoch)
-                obs_shape = int(o.shape[1]/2)
-                order = np.argsort(ap)
-                ids_sorted = ap[order]
-                selfplay_o = o[:,obs_shape:]
-                obs_sorted = selfplay_o[order]
-                split_idx = np.flatnonzero(np.diff(ids_sorted)) + 1
-                B = len(ids_sorted)
-                boundaries = np.concatenate(([0], split_idx, [B]))
-                sp_groups = np.split(obs_sorted, split_idx)
-                sp_counts = np.diff([0, *split_idx, len(obs_sorted)])
-                h = self.lstm_h[env_id.start]
-                c = self.lstm_c[env_id.start]
-                order_t = torch.as_tensor(order, device=device, dtype=torch.long)
-                lstm_h_sorted = h.index_select(0, order_t)
-                lstm_c_sorted = c.index_select(0, order_t)
             
             profile('eval_copy', epoch)
             if(selfplay):
-                o = torch.as_tensor(o[order])
+                o = torch.as_tensor(o)
             else:
                 o = torch.as_tensor(o)
             o_device = o.to(device)#, non_blocking=True)
@@ -385,10 +384,10 @@ class PuffeRL:
                     state['lstm_h'] = self.lstm_h[env_id.start]
                     state['lstm_c'] = self.lstm_c[env_id.start]
                 if selfplay:
+                    obs_shape = int(o_device.shape[1]/2)
                     logits, value = self.policy.forward_eval(o_device[:, :obs_shape], state)
                 else:
                     logits, value = self.policy.forward_eval(o_device, state)
-
 
                 action, logprob, _ = pufferlib.pytorch.sample_logits(logits)
 
@@ -406,8 +405,7 @@ class PuffeRL:
                     self.observations[batch_rows, l] = o
                 else:
                     if self.selfplay:
-                        inv = torch.argsort(order_t)
-                        self.observations[batch_rows, l] = o_device[inv]
+                        self.observations[batch_rows, l] = o_device
                     else:
                         self.observations[batch_rows, l] = o_device
 
@@ -425,10 +423,10 @@ class PuffeRL:
                     self.ep_lengths[env_id] = 0
                     self.free_idx += num_full
                     self.full_rows += num_full
-
-                action = action.cpu().numpy()
-                if isinstance(logits, torch.distributions.Normal):
-                    action = np.clip(action, self.vecenv.action_space.low, self.vecenv.action_space.high)
+                if not selfplay:
+                    action = action.cpu().numpy()
+                    if isinstance(logits, torch.distributions.Normal):
+                        action = np.clip(action, self.vecenv.action_space.low, self.vecenv.action_space.high)
 
             profile('eval_misc', epoch)
             for i in info:
@@ -440,49 +438,55 @@ class PuffeRL:
                     else:
                         self.stats[k].append(v)
             if selfplay:
-                obs_shape = int(o_device.shape[1]/2)
-                opp_acts = np.zeros(action.size, dtype=action.dtype)
+                cut = self.pool_indices[0]
                 obs_idx = 0
-                # batch forward pass each group with the same policy
-                idx_start = 0
-                policy_change = 0
-                current = {k: v.detach().clone() for k, v in self.policy.state_dict().items()}
-                for idx, sp_batch in enumerate(sp_groups):
-                    s = boundaries[idx]
-                    e = boundaries[idx+1]
-                    policy_id = ids_sorted[idx]
-                    o_sp = o_device[s:e, obs_shape:]
-                    profile('sp_load_model', epoch)
-                    if(len(self.opponent_pool) > 0 or policy_id > 0):
-                        policy_change = 1
-                        self.policy.load_state_dict(self.opponent_pool[policy_id - 1], strict=True)
-                    with torch.no_grad(), self.amp_context:
-                        state_opp = dict()
-                        if config['use_rnn']:
-                            state_opp['lstm_h'] = lstm_h_sorted[s:e]
-                            state_opp['lstm_c'] = lstm_c_sorted[s:e]
-                        
-                        profile('sp_forward',epoch)
-                        #logits_opp, value = self.policy.forward_eval(o_sp, state_opp)
-                        opp = np.zeros_like(action[s:e])
-                        #rand_max = self.vecenv.action_space.nvec[0]
-                        #opp = np.random.randint(0,rand_max, size=action[s:e].shape, dtype=action.dtype)
-                        #opp, logprob, _ = pufferlib.pytorch.sample_logits(logits_opp)
-                        profile('sp_copy',epoch)
-                        #opp = opp.cpu().numpy()
-                        #if isinstance(logits_opp, torch.distributions.Normal):
-                        #    opp = np.clip(opp, self.vecenv.action_space.low, self.vecenv.action_space.high)
-                        opp_acts[s:e] = opp
+                # forward the first 80% 
+                state_opp_eighty = dict()
+                if config['use_rnn']:
+                    state_opp_eighty['lstm_h'] = self.lstm_h[env_id.start][:cut]
+                    state_opp_eighty['lstm_c'] = self.lstm_c[env_id.start][:cut]
+                o80 = o_device[:cut, obs_shape:]
+                profile('sp_forward',epoch)
+                logits_eighty, _ = self.policy.forward_eval(o80, state_opp_eighty)
+                opp_eighty, _, _ = pufferlib.pytorch.sample_logits(logits_eighty)
                 profile('sp_misc', epoch)
-                interleaved = np.empty(action.size * 2, dtype = action.dtype)
-                interleaved[0::2] = action
-                inv_order = np.empty_like(order)
-                inv_order[order]  = np.arange(B)
-                interleaved[1::2] = opp_acts[inv_order]
+                o20 = o_device[cut:, obs_shape:]
+                h20 = self.lstm_h[env_id.start][cut:]
+                c20 = self.lstm_c[env_id.start][cut:]
+                ap20 = torch.as_tensor(self.active_policies[batch_rows][cut:], device=device, dtype=torch.long)
+                opp20 = torch.empty_like(action[cut:], device=device)
+                state_sp = {}
+                pids = torch.unique(ap20)
+                for pid in pids:
+                    idx = (ap20 ==pid).nonzero(as_tuple=True)[0]
+                    if idx.numel() == 0:
+                        continue
+                    o_sp = o20.index_select(0, idx)
+                    if config['use_rnn']:
+                        state_sp['lstm_h'] = h20.index_select(0, idx)
+                        state_sp['lstm_c'] = c20.index_select(0, idx)
+                    with torch.no_grad(), self.amp_context:
+                        profile('sp_forward',epoch)
+                        if pid.item() != 0:
+                            num = torch.randint(1,4, (1,), device=device).item()
+                            logits_sp, _ = self.pool.forward_eval(o_sp, state_sp, num)
+                        else: 
+                            logits_sp, _ = self.policy.forward_eval(o_sp, state_sp)
+                        opp_sp, _, _ = pufferlib.pytorch.sample_logits(logits_sp)
+                    profile('sp_misc', epoch)
+                    opp20.index_copy_(0, idx, opp_sp)
+
+                opp = torch.empty_like(action, device=device)
+                opp[:cut] = opp_eighty
+                opp[cut:] = opp20
+                interleaved = torch.empty(action.numel()*2, dtype = action.dtype, device=device)
+                interleaved[0::2] = action.view(-1)
+                interleaved[1::2] = opp.view(-1)
                 action = interleaved
-                profile('sp_load_model', epoch)
-                if policy_change:
-                    self.policy.load_state_dict(current, strict=True)
+                profile('eval_copy', epoch)
+                action = action.detach().cpu().contiguous().numpy()
+                if isinstance(logits, torch.distributions.Normal):
+                    action = np.clip(action, self.vecenv.action_space.low, self.vecenv.action_space.high)
             profile('env', epoch)
             self.vecenv.send(action)
 
@@ -782,7 +786,7 @@ class PuffeRL:
             p.add_row(*fmt_perf('  SP Copy', c2, delta, profile.sp_copy, b2,c2))
             p.add_row(*fmt_perf('  SP Forward', c2, delta, profile.sp_forward,b2,c2))
             p.add_row(*fmt_perf('  SP Misc', c2, delta, profile.sp_misc,b2,c2))
-            p.add_row(*fmt_perf('  SP Load Model', c2, delta, profile.sp_load_model, b2,c2))
+            p.add_row(*fmt_perf('  SP elo update', c2, delta, profile.sp_elo_update, b2,c2))
         p.add_row(*fmt_perf('Train', b1, delta, profile.train, b2, c2))
         p.add_row(*fmt_perf('  Forward', c2, delta, profile.train_forward, b2, c2))
         p.add_row(*fmt_perf('  Learn', c2, delta, profile.learn, b2, c2))
@@ -1120,9 +1124,10 @@ def train(env_name, args=None, vecenv=None, policy=None, logger=None, should_sto
 
     train_config = { **args['train'], 'env': env_name }
     if vecenv.selfplay:
-        breakpoint()
         pool = PolicyPool(lambda: load_policy(args, vecenv, env_name), train_config['device'],3) 
-    pufferl = PuffeRL(train_config, vecenv, policy, logger)
+        pufferl = PuffeRL(train_config, vecenv, policy, logger, pool)
+    else:
+        pufferl = PuffeRL(train_config, vecenv, policy, logger)
 
     all_logs = []
     while pufferl.global_step < train_config['total_timesteps']:
