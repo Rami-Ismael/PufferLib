@@ -208,6 +208,10 @@ class PuffeRL:
                     cur+=sz
                     bounds.append(cur)
                 self.pool_indices = bounds
+
+            self.logits_full = torch.empty((vecenv.agents_per_batch*2, vecenv.single_action_space.n), device=device, dtype=torch.float32)
+            self.interleaved = np.empty(vecenv.agents_per_batch * 2, dtype = vecenv.single_action_space.dtype)
+
         # LSTM
         if config['use_rnn']:
             n = vecenv.agents_per_batch
@@ -348,32 +352,12 @@ class PuffeRL:
 
             done_mask = d + t # TODO: Handle truncations separately
             self.global_step += int(mask.sum())
-            batch_rows = slice(self.ep_indices[env_id.start].item(), 1+self.ep_indices[env_id.stop - 1].item())
-            ap = self.active_policies[batch_rows]
-
-            elo_batch_update(self.elos, ap, r, d, cut = self.pool_indices[0], k=4.0) 
-            done_indices = np.flatnonzero(d == 1)
-            done_indices = done_indices[done_indices >= self.pool_indices[0]]
-            if len(done_indices) > 0 and len(self.opponent_pool) > 0:
-                K = 3
-                pool_ids = np.arange(1, len(self.opponent_pool)+1, dtype=np.int32)
-                m = min(pool_ids.size, K-1)
-                window = pool_ids[-m:] if m > 0 else np.array([],dtype=np.int32)
-                uniq_active = np.unique(self.active_policies[self.active_policies>0])
-                merged = np.unique(np.concatenate([uniq_active, window]))
-                if merged.size > (K-1):
-                    merged = merged[-(K-1):]
-
-                if merged.size > 0:
-                    ap[done_indices] = np.random.choice(merged, size=len(done_indices))
-                    #ap[done_indices] = 1
-            else:
-                ap[done_indices] = 0
- 
+             
             if(selfplay):
                 profile('sp_elo_update', epoch)
                 batch_rows = slice(self.ep_indices[env_id.start].item(), 1+self.ep_indices[env_id.stop - 1].item())
                 ap = self.active_policies[batch_rows]
+                elo_batch_update(self.elos, ap, r, d, cut = self.pool_indices[0], k=4.0) 
                 done_indices = np.flatnonzero(d == 1)
                 done_indices = done_indices[done_indices >= self.pool_indices[0]]
                 profile('sp_sampling', epoch)
@@ -395,10 +379,7 @@ class PuffeRL:
                     ap[done_indices] = 0
             
             profile('eval_copy', epoch)
-            if(selfplay):
-                o = torch.as_tensor(o)
-            else:
-                o = torch.as_tensor(o)
+            o = torch.as_tensor(o)
             o_device = o.to(device)#, non_blocking=True)
             r = torch.as_tensor(r).to(device)#, non_blocking=True)
             d = torch.as_tensor(d).to(device)#, non_blocking=True)
@@ -431,15 +412,12 @@ class PuffeRL:
                         state_opp_eighty['lstm_h'] = self.lstm_h[env_id.start][:cut]
                         state_opp_eighty['lstm_c'] = self.lstm_c[env_id.start][:cut]
                     o80 = o_device[:cut, obs_shape:]
-                    logits_full = None
                     profile('sp_forward',epoch)
                     logits_eighty, _ = self.policy.forward_eval(o80, state_opp_eighty)
                     profile('sp_misc',epoch)
                     batch_sz = o_device.size(0)
-                    if logits_full is None:
-                        logits_full = torch.empty((batch_sz*2, *logits_eighty.shape[1:]), device=device, dtype=logits_eighty.dtype)
-                    logits_full[:batch_sz] = logits
-                    logits_full[batch_sz:batch_sz+cut].copy_(logits_eighty)
+                    self.logits_full[:batch_sz] = logits
+                    self.logits_full[batch_sz:batch_sz+cut] = logits_eighty
                     profile('sp_misc', epoch)
                     o20 = o_device[cut:, obs_shape:]
                     h20 = self.lstm_h[env_id.start][cut:]
@@ -462,19 +440,23 @@ class PuffeRL:
                         else: 
                             logits_sp, _ = self.policy.forward_eval(o_sp, state_sp)
                         profile('sp_misc',epoch)
-                        logits_full.index_copy(0, batch_sz+cut+idx, logits_sp)
+                        self.logits_full.index_copy(0, batch_sz+cut+idx, logits_sp)
+                    
+                    #state_sp['lstm_h'] = h20
+                    #state_sp['lstm_c'] = c20
+                    #logits_sp, _ = self.policy.forward_eval(o20, state_sp)
+                    #self.logits_full[batch_sz+cut:] = logits_sp
                     profile('sp_forward',epoch)
-                    opp, logprob, _ = pufferlib.pytorch.sample_logits(logits_full)
+                    opp, logprob, _ = pufferlib.pytorch.sample_logits(self.logits_full)
                     profile('sp_misc',epoch)
                     action = opp[:batch_sz]
                     logprob = logprob[:batch_sz]
                     profile('eval_copy', epoch)
                     opp = opp.detach().cpu().numpy()
                     profile('sp_misc', epoch)
-                    interleaved = np.empty(batch_sz * 2, dtype = self.vecenv.single_action_space.dtype)
-                    interleaved[0::2] = opp[:batch_sz]
-                    interleaved[1::2] = opp[batch_sz:]
-                    action_sp = interleaved 
+                    self.interleaved[0::2] = opp[:batch_sz]
+                    self.interleaved[1::2] = opp[batch_sz:]
+                    action_sp = self.interleaved 
                 
                 r = torch.clamp(r, -1, 1)
             profile('eval_copy', epoch)
@@ -821,8 +803,6 @@ class PuffeRL:
         p.add_row(*fmt_perf('  Misc', c2, delta, profile.eval_misc, b2, c2))
         if self.selfplay:
             p.add_row(*fmt_perf('  SP Sampling', c2, delta, profile.sp_sampling, b2,c2))
-            p.add_row(*fmt_perf('  SP Batching', c2, delta, profile.sp_batch_ordering, b2,c2))
-            p.add_row(*fmt_perf('  SP Copy', c2, delta, profile.sp_copy, b2,c2))
             p.add_row(*fmt_perf('  SP Forward', c2, delta, profile.sp_forward,b2,c2))
             p.add_row(*fmt_perf('  SP Misc', c2, delta, profile.sp_misc,b2,c2))
             p.add_row(*fmt_perf('  SP elo update', c2, delta, profile.sp_elo_update, b2,c2))
