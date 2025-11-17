@@ -194,6 +194,7 @@ class PuffeRL:
 
         if vecenv.selfplay:
             self.opponent_pool = []
+            self.active_set = np.zeros(0, dtype=np.int32)
             self.active_policies = np.zeros(total_agents, dtype=np.int32)
             self.elos = np.full(total_agents, 0.0, dtype = np.float32)
             if pool is not None:
@@ -363,17 +364,27 @@ class PuffeRL:
                 profile('sp_sampling', epoch)
                 # select new opponent
                 if len(done_indices) > 0 and len(self.opponent_pool) > 0:
-                    K = 3
-                    pool_ids = np.arange(1, len(self.opponent_pool)+1, dtype=np.int32)
-                    m = min(pool_ids.size, K-1)
-                    window = pool_ids[-m:] if m > 0 else np.array([],dtype=np.int32)
-                    uniq_active = np.unique(self.active_policies[self.active_policies>0])
-                    merged = np.unique(np.concatenate([uniq_active, window]))
-                    if merged.size > (K-1):
-                        merged = merged[-(K-1):]
-
-                    if merged.size > 0:
-                        ap[done_indices] = np.random.choice(merged, size=len(done_indices))
+                    MAX_OPP = 3
+                    TAIL = 5
+                    used = np.unique(self.active_policies[self.active_policies>0])
+                    pool_ids = np.arange(1, len(self.opponent_pool) + 1, dtype=np.int32)
+                    tail = pool_ids[-min(TAIL,pool_ids.size):] if pool_ids.size > 0 else np.array([],dtype=np.int32)
+                    if used.size ==0:
+                        new_id = np.random.choice(tail)
+                        sample_ids = np.array([new_id], dtype=np.int32)
+                    elif (used.size ==1 or used.size ==2):
+                        cand = tail[~np.isin(tail,used)]
+                        if cand.size > 0:
+                            new_id = np.random.choice(cand)
+                            sample_ids = np.concatenate([used, np.array([new_id], dtype=np.int32)])
+                        else:
+                            sample_ids = used
+                    else:
+                        sample_ids = used[-2:]
+                    if sample_ids.size>0:
+                        ap[done_indices] = np.random.choice(sample_ids, size=len(done_indices))
+                    else:
+                        ap[done_indices] = 0
                     #ap[done_indices] = 1
                 else:
                     ap[done_indices] = 0
