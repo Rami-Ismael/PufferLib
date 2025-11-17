@@ -397,6 +397,7 @@ typedef struct {
     float* bot_actions; // Optional, for bot control
     int tick;
     Texture2D puffers;
+    int selfplay;
 } SlimeVolley;
 
 
@@ -439,7 +440,7 @@ void c_reset(SlimeVolley* env) {
             observations = env->observations;
         }
         else {
-            if (env->num_agents == 1) {
+            if (env->selfplay == 0 || env->selfplay == 2) {
                 observations = env->bot_observations;
             }
             else {
@@ -509,8 +510,9 @@ void c_step(SlimeVolley* env) {
     Ball* ball = env->ball;
 
     env->tick++;
+    printf("action player 0: %d %d %d\n", env->actions[0], env->actions[1], env->actions[2]);
     agent_set_action(left, &env->actions[0]);
-    if (env->num_agents == 1){
+    if (env->selfplay == 0 || env->selfplay == 2){
         abranti_simple_bot(right->observations, env->bot_actions);
         agent_set_action(right, env->bot_actions);
     }

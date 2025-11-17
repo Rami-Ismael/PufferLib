@@ -8,13 +8,14 @@ import pufferlib
 
 class SlimeVolley(pufferlib.PufferEnv):
     def __init__(self, num_envs=1, render_mode=None, log_interval=128, buf=None, seed=0,
-                 num_agents=1):
+                 num_agents=1, selfplay =0):
         assert num_agents in {1, 2}, "num_agents must be 1 or 2"
         num_obs = 12
+        factor = 2 if selfplay else 1
+        self.selfplay = selfplay
         self.single_observation_space = gymnasium.spaces.Box(low=0, high=1,
-            shape=(num_obs,), dtype=np.float32)
+            shape=(num_obs*factor,), dtype=np.float32)
         self.single_action_space = gymnasium.spaces.MultiDiscrete([2, 2, 2])
-
         self.render_mode = render_mode
         self.num_agents = num_envs * num_agents
         self.log_interval = log_interval
@@ -23,11 +24,11 @@ class SlimeVolley(pufferlib.PufferEnv):
         c_envs = []
         for i in range(num_envs):
             c_env = binding.env_init(
-                self.observations[i*num_agents:(i+1)*num_agents],
-                self.actions[i*num_agents:(i+1)*num_agents],
-                self.rewards[i*num_agents:(i+1)*num_agents],
-                self.terminals[i*num_agents:(i+1)*num_agents],
-                self.truncations[i*num_agents:(i+1)*num_agents],
+                self.observations[i:(i+1)],
+                self.actions[i*factor:(i+1)*factor],
+                self.rewards[i:(i+1)],
+                self.terminals[i:(i+1)],
+                self.truncations[i:(i+1)],
                 seed,
                 num_agents=num_agents
                 )
@@ -41,6 +42,7 @@ class SlimeVolley(pufferlib.PufferEnv):
         return self.observations, []
 
     def step(self, actions):
+        breakpoint()
         self.tick += 1
         self.actions[:] = actions
         binding.vec_step(self.c_envs)
