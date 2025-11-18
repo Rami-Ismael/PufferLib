@@ -403,7 +403,7 @@ class PuffeRL:
                         ap[done_indices] = 0
                     #ap[done_indices] = 1
                     # swapping policy weights 
-                    '''cur = np.unique(self.active_policies[self.active_policies>0])
+                    cur = np.unique(self.active_policies[self.active_policies>0])
 
                     for pol_id in cur:
                         if pol_id in self.pool.policy_ids:
@@ -411,7 +411,7 @@ class PuffeRL:
                         i = self.opponent_pool_ids.index(pol_id)
                         policy = self.opponent_pool[i]
                         self.pool.rotate_new_policy(policy, pol_id)
-                    '''
+                    
                 else:
                     ap[done_indices] = 0
             
@@ -482,7 +482,7 @@ class PuffeRL:
                         if pid.item() != 0:
                             pid_int = int(pid.item())
                             num = self.pool.policy_ids.index(pid_int)
-                            logits_sp, _ = self.pool.forward_eval(o_sp, state_sp)
+                            logits_sp, _ = self.pool.forward_eval(o_sp, state_sp, num)
                         else: 
                             logits_sp, _ = self.policy.forward_eval(o_sp, state_sp)
                         profile('sp_misc',epoch)
