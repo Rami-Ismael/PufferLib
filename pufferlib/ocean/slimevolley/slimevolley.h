@@ -1,6 +1,7 @@
 #include "raylib.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <math.h>
 #include <assert.h>
 
@@ -510,7 +511,6 @@ void c_step(SlimeVolley* env) {
     Ball* ball = env->ball;
 
     env->tick++;
-    printf("action player 0: %d %d %d\n", env->actions[0], env->actions[1], env->actions[2]);
     agent_set_action(left, &env->actions[0]);
     if (env->selfplay == 0 || env->selfplay == 2){
         abranti_simple_bot(right->observations, env->bot_actions);

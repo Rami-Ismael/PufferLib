@@ -28,7 +28,7 @@ void random_policy(float* obs, float* action) {
 int main() {
     int num_obs = 12;
     int num_actions = 3;
-    SlimeVolley env = {.num_agents = 1, selfplay = 0};
+    SlimeVolley env = {.num_agents = 1, .selfplay = 0};
     init(&env);
     env.observations = (float*)calloc(env.num_agents*num_obs, sizeof(float));
     env.actions = (float*)calloc(num_actions*env.num_agents, sizeof(float));

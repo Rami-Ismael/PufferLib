@@ -30,7 +30,8 @@ class SlimeVolley(pufferlib.PufferEnv):
                 self.terminals[i:(i+1)],
                 self.truncations[i:(i+1)],
                 seed,
-                num_agents=num_agents
+                num_agents=num_agents,
+                selfplay = selfplay
                 )
             c_envs.append(c_env)
 
@@ -42,7 +43,6 @@ class SlimeVolley(pufferlib.PufferEnv):
         return self.observations, []
 
     def step(self, actions):
-        breakpoint()
         self.tick += 1
         self.actions[:] = actions
         binding.vec_step(self.c_envs)

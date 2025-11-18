@@ -58,6 +58,7 @@ class PolicyPool(torch.nn.Module):
         super().__init__()
         self.device = device
         self.n_slots = n_slots
+        self.policy_ids = [0 for _ in range(n_slots)]
         self.opponents_pool = torch.nn.ModuleList([make_policy().to(device) for _ in range(n_slots)])
         for m in self.opponents_pool:
             m.eval()
@@ -66,16 +67,16 @@ class PolicyPool(torch.nn.Module):
         self._rot_idx = 0
 
     @torch.no_grad()
-    def forward_eval(self, x, state, policy_id: int):
-        return self.opponents_pool[policy_id - 1].forward_eval(x,state)
+    def forward_eval(self, x, state, slot: int):
+        return self.opponents_pool[slot].forward_eval(x,state)
 
     @torch.no_grad()
-    def rotate_new_policy(self, policy):
+    def rotate_new_policy(self, policy, policy_id):
         slot = self._rot_idx
         tgt = self.opponents_pool[slot]
 
-        sd = policy.state_dict()
-        tgt.load_state_dict(sd, strict=True, assign=True)
+        self.policy_ids[slot] = policy_id
+        tgt.load_state_dict(policy, strict=True, assign=True)
         tgt.eval()
         for p in tgt.parameters():
             p.requires_grad = False
@@ -194,9 +195,12 @@ class PuffeRL:
 
         if vecenv.selfplay:
             self.opponent_pool = []
+            self.opponent_pool_ids = []
+            self.saved_policy_count = 0
             self.active_set = np.zeros(0, dtype=np.int32)
             self.active_policies = np.zeros(total_agents, dtype=np.int32)
             self.elos = np.full(total_agents, 0.0, dtype = np.float32)
+            self.policy_map = np.zeros(total_agents, dtype=np.int32)
             if pool is not None:
                 self.pool = pool
                 floor_idx = int(np.floor(0.8*vecenv.agents_per_batch))
@@ -209,9 +213,14 @@ class PuffeRL:
                     cur+=sz
                     bounds.append(cur)
                 self.pool_indices = bounds
-
-            self.logits_full = torch.empty((vecenv.agents_per_batch*2, vecenv.single_action_space.n), device=device, dtype=torch.float32)
-            self.interleaved = np.empty(vecenv.agents_per_batch * 2, dtype = vecenv.single_action_space.dtype)
+            if(isinstance(vecenv.single_action_space, pufferlib.spaces.MultiDiscrete)):
+                self.multidiscrete = 1
+                self.logits_full = [torch.empty(vecenv.agents_per_batch*2, int(n), device=device, dtype=torch.float32) for n in vecenv.single_action_space.nvec]
+                self.interleaved = np.empty((vecenv.agents_per_batch*2, len(vecenv.single_action_space.nvec)), dtype = vecenv.single_action_space.dtype)
+            else:
+                self.multidiscrete = 0
+                self.logits_full = torch.empty((vecenv.agents_per_batch*2, vecenv.single_action_space.n), device=device, dtype=torch.float32)
+                self.interleaved = np.empty(vecenv.agents_per_batch * 2, dtype = vecenv.single_action_space.dtype)
 
         # LSTM
         if config['use_rnn']:
@@ -219,7 +228,9 @@ class PuffeRL:
             h = policy.hidden_size
             self.lstm_h = {i*n: torch.zeros(n, h, device=device) for i in range(total_agents//n)}
             self.lstm_c = {i*n: torch.zeros(n, h, device=device) for i in range(total_agents//n)}
-
+            if vecenv.selfplay:
+                self.lstm_h_opp = {i*n: torch.zeros(n, h, device=device) for i in range(total_agents//n)}
+                self.lstm_c_opp = {i*n: torch.zeros(n, h, device=device) for i in range(total_agents//n)}
         # Minibatching & gradient accumulation
         minibatch_size = config['minibatch_size']
         max_minibatch_size = config['max_minibatch_size']
@@ -342,6 +353,10 @@ class PuffeRL:
             for k in self.lstm_h:
                 self.lstm_h[k].zero_()
                 self.lstm_c[k].zero_()
+                if selfplay:
+                    self.lstm_h_opp[k].zero_()
+                    self.lstm_c_opp[k].zero_()
+
 
         self.full_rows = 0
         while self.full_rows < self.segments:
@@ -358,6 +373,7 @@ class PuffeRL:
                 profile('sp_elo_update', epoch)
                 batch_rows = slice(self.ep_indices[env_id.start].item(), 1+self.ep_indices[env_id.stop - 1].item())
                 ap = self.active_policies[batch_rows]
+                pm = self.policy_map[batch_rows]
                 elo_batch_update(self.elos, ap, r, d, cut = self.pool_indices[0], k=4.0) 
                 done_indices = np.flatnonzero(d == 1)
                 done_indices = done_indices[done_indices >= self.pool_indices[0]]
@@ -386,6 +402,16 @@ class PuffeRL:
                     else:
                         ap[done_indices] = 0
                     #ap[done_indices] = 1
+                    # swapping policy weights 
+                    '''cur = np.unique(self.active_policies[self.active_policies>0])
+
+                    for pol_id in cur:
+                        if pol_id in self.pool.policy_ids:
+                            continue
+                        i = self.opponent_pool_ids.index(pol_id)
+                        policy = self.opponent_pool[i]
+                        self.pool.rotate_new_policy(policy, pol_id)
+                    '''
                 else:
                     ap[done_indices] = 0
             
@@ -420,19 +446,27 @@ class PuffeRL:
                     # forward the first 80% 
                     state_opp_eighty = dict()
                     if config['use_rnn']:
-                        state_opp_eighty['lstm_h'] = self.lstm_h[env_id.start][:cut]
-                        state_opp_eighty['lstm_c'] = self.lstm_c[env_id.start][:cut]
+                        state_opp_eighty['lstm_h'] = self.lstm_h_opp[env_id.start][:cut]
+                        state_opp_eighty['lstm_c'] = self.lstm_c_opp[env_id.start][:cut]
                     o80 = o_device[:cut, obs_shape:]
                     profile('sp_forward',epoch)
                     logits_eighty, _ = self.policy.forward_eval(o80, state_opp_eighty)
                     profile('sp_misc',epoch)
                     batch_sz = o_device.size(0)
-                    self.logits_full[:batch_sz] = logits
-                    self.logits_full[batch_sz:batch_sz+cut] = logits_eighty
+                    if self.multidiscrete:
+                        idx_slice = slice(0,batch_sz)
+                        for buf,head in zip(self.logits_full, logits):
+                            buf[idx_slice] = head
+                        eighty_slice = slice(batch_sz,batch_sz+cut)
+                        for buf,head in zip(self.logits_full, logits_eighty):
+                            buf[eighty_slice] = head
+                    else: 
+                        self.logits_full[:batch_sz] = logits
+                        self.logits_full[batch_sz:batch_sz+cut] = logits_eighty
                     profile('sp_misc', epoch)
                     o20 = o_device[cut:, obs_shape:]
-                    h20 = self.lstm_h[env_id.start][cut:]
-                    c20 = self.lstm_c[env_id.start][cut:]
+                    h20 = self.lstm_h_opp[env_id.start][cut:]
+                    c20 = self.lstm_c_opp[env_id.start][cut:]
                     ap20 = torch.as_tensor(self.active_policies[batch_rows][cut:], device=device, dtype=torch.int)
                     state_sp = {}
                     pids = torch.unique(ap20)
@@ -446,17 +480,18 @@ class PuffeRL:
                             state_sp['lstm_c'] = c20.index_select(0, idx)
                         profile('sp_forward',epoch)
                         if pid.item() != 0:
-                            num = torch.randint(1,4, (1,), device=device).item()
-                            logits_sp, _ = self.pool.forward_eval(o_sp, state_sp, num)
+                            pid_int = int(pid.item())
+                            num = self.pool.policy_ids.index(pid_int)
+                            logits_sp, _ = self.pool.forward_eval(o_sp, state_sp)
                         else: 
                             logits_sp, _ = self.policy.forward_eval(o_sp, state_sp)
                         profile('sp_misc',epoch)
-                        self.logits_full.index_copy(0, batch_sz+cut+idx, logits_sp)
+                        if self.multidiscrete:
+                            for buf,head in zip(self.logits_full, logits_sp):
+                                buf.index_copy(0, batch_sz+cut+idx, head)
+                        else:
+                            self.logits_full.index_copy(0, batch_sz+cut+idx, logits_sp)
                     
-                    #state_sp['lstm_h'] = h20
-                    #state_sp['lstm_c'] = c20
-                    #logits_sp, _ = self.policy.forward_eval(o20, state_sp)
-                    #self.logits_full[batch_sz+cut:] = logits_sp
                     profile('sp_forward',epoch)
                     opp, logprob, _ = pufferlib.pytorch.sample_logits(self.logits_full)
                     profile('sp_misc',epoch)
@@ -547,9 +582,10 @@ class PuffeRL:
         # Save weights for selfplay
         if (self.selfplay and epoch % 2 == 0):
             profile('train_selfplay', epoch)
-            print(np.unique(self.active_policies))
             snapshot = {k: v.clone() for k, v in self.policy.state_dict().items()}
+            self.saved_policy_count+=1
             self.opponent_pool.append(snapshot)
+            self.opponent_pool_ids.append(self.saved_policy_count)
         for mb in range(self.total_minibatches):
             profile('train_misc', epoch)
             self.amp_context.__enter__()
@@ -1154,11 +1190,11 @@ def train(env_name, args=None, vecenv=None, policy=None, logger=None, should_sto
 
     train_config = { **args['train'], 'env': env_name }
     if vecenv.selfplay:
-        pool = PolicyPool(lambda: load_policy(args, vecenv, env_name), train_config['device'],3) 
+        pool = PolicyPool(lambda: load_policy(args, vecenv, env_name), train_config['device'],6) 
         pufferl = PuffeRL(train_config, vecenv, policy, logger, pool)
     else:
 
-        pool = PolicyPool(lambda: load_policy(args, vecenv, env_name), train_config['device'],3) 
+        pool = PolicyPool(lambda: load_policy(args, vecenv, env_name), train_config['device'],6) 
         pufferl = PuffeRL(train_config, vecenv, policy, logger, pool)
 
     all_logs = []
@@ -1250,7 +1286,10 @@ def eval(env_name, args=None, vecenv=None, policy=None):
                 opp_logits, opp_val = policy.forward_eval(ob[:, int(ob.shape[1]/2):], state)
                 opp, opp_logprob, _ = pufferlib.pytorch.sample_logits(opp_logits)
                 opp = opp.cpu().numpy()
-                interleaved = np.empty(action.size * 2, dtype = action.dtype)
+                if(isinstance(driver.single_action_space, pufferlib.spaces.MultiDiscrete)):
+                    interleaved = np.empty((num_agents*2, len(driver.single_action_space.nvec)), dtype = vecenv.single_action_space.dtype)
+                else:
+                    interleaved = np.empty(action.size * 2, dtype = action.dtype)
                 interleaved[0::2] = action
                 interleaved[1::2] = opp
                 action = interleaved
