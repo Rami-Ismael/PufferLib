@@ -76,7 +76,7 @@ class PolicyPool(torch.nn.Module):
         tgt = self.opponents_pool[slot]
 
         self.policy_ids[slot] = policy_id
-        tgt.load_state_dict(policy, strict=True, assign=True)
+        tgt.load_state_dict(policy, strict=True)
         tgt.eval()
         for p in tgt.parameters():
             p.requires_grad = False
@@ -177,7 +177,7 @@ class PuffeRL:
         self.free_idx = total_agents
         # Selfplay
         self.selfplay = vecenv.selfplay
-        self.opponent_pool = []
+        self.opponent_pool = {}
         self.active_policies = np.zeros(total_agents, dtype=np.int32)
         self.elos = np.full(total_agents, 0.0, dtype = np.float32)
         if pool is not None:
@@ -194,7 +194,8 @@ class PuffeRL:
             self.pool_indices = bounds
 
         if vecenv.selfplay:
-            self.opponent_pool = []
+            self.opponent_pool = {}
+            self.max_opponent_history = 100
             self.opponent_pool_ids = []
             self.saved_policy_count = 0
             self.active_set = np.zeros(0, dtype=np.int32)
@@ -383,7 +384,7 @@ class PuffeRL:
                     MAX_OPP = 3
                     TAIL = 5
                     used = np.unique(self.active_policies[self.active_policies>0])
-                    pool_ids = np.arange(1, len(self.opponent_pool) + 1, dtype=np.int32)
+                    pool_ids = np.array(self.opponent_pool_ids, dtype = np.int32)
                     tail = pool_ids[-min(TAIL,pool_ids.size):] if pool_ids.size > 0 else np.array([],dtype=np.int32)
                     if used.size ==0:
                         new_id = np.random.choice(tail)
@@ -408,9 +409,12 @@ class PuffeRL:
                     for pol_id in cur:
                         if pol_id in self.pool.policy_ids:
                             continue
-                        i = self.opponent_pool_ids.index(pol_id)
-                        policy = self.opponent_pool[i]
-                        self.pool.rotate_new_policy(policy, pol_id)
+                        if pol_id not in self.opponent_pool:
+                            ap[self.active_policies == pol_id] = 0
+                            continue
+                        
+                        policy_weights = self.opponent_pool[pol_id]
+                        self.pool.rotate_new_policy(policy_weights, pol_id)
                     
                 else:
                     ap[done_indices] = 0
@@ -588,10 +592,14 @@ class PuffeRL:
         # Save weights for selfplay
         if (self.selfplay and epoch % 2 == 0):
             profile('train_selfplay', epoch)
-            snapshot = {k: v.clone() for k, v in self.policy.state_dict().items()}
+            snapshot = {k: v.clone().cpu() for k, v in self.policy.state_dict().items()}
             self.saved_policy_count+=1
-            self.opponent_pool.append(snapshot)
+            self.opponent_pool[self.saved_policy_count] = snapshot
             self.opponent_pool_ids.append(self.saved_policy_count)
+            if (len(self.opponent_pool_ids) > self.max_opponent_history):
+                oldest_id  = self.opponent_pool_ids.pop(0)
+                if oldest_id in self.opponent_pool:
+                    del self.opponent_pool[oldest_id]
         for mb in range(self.total_minibatches):
             profile('train_misc', epoch)
             self.amp_context.__enter__()
@@ -1251,6 +1259,8 @@ def eval(env_name, args=None, vecenv=None, policy=None):
     ob, info = vecenv.reset()
     driver = vecenv.driver_env
     selfplay = driver.selfplay
+    if selfplay:
+        enemy_policy = load_policy(args, vecenv, env_name, 1)
     num_agents = vecenv.observation_space.shape[0]
     device = args['train']['device']
 
@@ -1295,7 +1305,7 @@ def eval(env_name, args=None, vecenv=None, policy=None):
                 #opp = np.zeros_like(action)
                 #rand_max = vecenv.action_space.nvec[0]
                 #opp = np.random.randint(0,rand_max, size=action.shape, dtype=action.dtype)
-                opp_logits, opp_val = policy.forward_eval(ob[:, int(ob.shape[1]/2):], state_opp)
+                opp_logits, opp_val = enemy_policy.forward_eval(ob[:, int(ob.shape[1]/2):], state_opp)
                 opp, opp_logprob, _ = pufferlib.pytorch.sample_logits(opp_logits)
                 opp = opp.cpu().numpy()
                 if(isinstance(driver.single_action_space, pufferlib.spaces.MultiDiscrete)):
@@ -1423,7 +1433,7 @@ def load_env(env_name, args):
     make_env = env_module.env_creator(env_name)
     return pufferlib.vector.make(make_env, env_kwargs=args['env'], **args['vec'])
 
-def load_policy(args, vecenv, env_name=''):
+def load_policy(args, vecenv, env_name='',enemy_policy=0):
     package = args['package']
     module_name = 'pufferlib.ocean' if package == 'ocean' else f'pufferlib.environments.{package}'
     env_module = importlib.import_module(module_name)
@@ -1451,8 +1461,10 @@ def load_policy(args, vecenv, env_name=''):
         state_dict = torch.load(path, map_location=device)
         state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
         policy.load_state_dict(state_dict)
-
-    load_path = args['load_model_path']
+    if enemy_policy and args['load_enemy_model_path']:
+        load_path = args['load_enemy_model_path']
+    else:
+        load_path = args['load_model_path']
     if load_path == 'latest':
         load_path = max(glob.glob(f"experiments/{env_name}*.pt"), key=os.path.getctime)
 
@@ -1463,6 +1475,7 @@ def load_policy(args, vecenv, env_name=''):
         #state_path = os.path.join(*load_path.split('/')[:-1], 'state.pt')
         #optim_state = torch.load(state_path)['optimizer_state_dict']
         #pufferl.optimizer.load_state_dict(optim_state)
+
 
     return policy
 
@@ -1504,6 +1517,8 @@ def make_parser():
     parser = argparse.ArgumentParser(formatter_class=RichHelpFormatter, add_help=False)
     parser.add_argument('--load-model-path', type=str, default=None,
         help='Path to a pretrained checkpoint')
+    parser.add_argument('--load-enemy-model-path', type=str, default=None,
+                        help='Path to a pretrained checkpoint')
     parser.add_argument('--load-id', type=str,
         default=None, help='Kickstart/eval from from a finished Wandb/Neptune run')
     parser.add_argument('--render-mode', type=str, default='auto',

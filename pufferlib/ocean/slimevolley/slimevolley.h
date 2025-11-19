@@ -377,6 +377,7 @@ typedef struct {
     float score; // Recommended unnormalized single real number perf metric
     float episode_return; // Recommended metric: sum of agent rewards over episode
     float episode_length; // Recommended metric: number of steps of agent episode
+    float winrate;
     // Any extra fields you add here may be exported to Python in binding.c
     float n; // Required as the last field 
 } Log;
@@ -569,6 +570,15 @@ void c_step(SlimeVolley* env) {
         env->terminals[0] = 1;
         if (env->num_agents == 2){
             env->terminals[1] = 1;
+        }
+        if (left->lives > right->lives){
+            env->log.winrate = 1.0;
+        }
+        else if(left->lives == right->lives){
+            env->log.winrate = 0.5;
+        }
+        else {
+            env->log.winrate = 0;
         }
         env->log.perf = (left->lives - right->lives + 5.0f)  / 10.0f; // normalize to 0-1
         env->log.score = (float)(left->lives - right->lives);
