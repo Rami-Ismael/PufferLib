@@ -452,6 +452,9 @@ class PuffeRL:
                     profile('sp_forward',epoch)
                     logits_eighty, _ = self.policy.forward_eval(o80, state_opp_eighty)
                     profile('sp_misc',epoch)
+                    if config['use_rnn']:
+                        self.lstm_h_opp[env_id.start][:cut] = state_opp_eighty['lstm_h']
+                        self.lstm_c_opp[env_id.start][:cut] = state_opp_eighty['lstm_c']
                     batch_sz = o_device.size(0)
                     if self.multidiscrete:
                         idx_slice = slice(0,batch_sz)
@@ -485,6 +488,9 @@ class PuffeRL:
                             logits_sp, _ = self.pool.forward_eval(o_sp, state_sp, num)
                         else: 
                             logits_sp, _ = self.policy.forward_eval(o_sp, state_sp)
+                        if config['use_rnn']:
+                            h20.index_copy_(0, idx, state_sp['lstm_h'])
+                            c20.index_copy_(0, idx, state_sp['lstm_c'])
                         profile('sp_misc',epoch)
                         if self.multidiscrete:
                             for buf,head in zip(self.logits_full, logits_sp):
@@ -1254,6 +1260,12 @@ def eval(env_name, args=None, vecenv=None, policy=None):
             lstm_h=torch.zeros(num_agents, policy.hidden_size, device=device),
             lstm_c=torch.zeros(num_agents, policy.hidden_size, device=device),
         )
+        if selfplay:
+            state_opp = dict(
+                lstm_h=torch.zeros(num_agents, policy.hidden_size, device=device),
+                lstm_c=torch.zeros(num_agents, policy.hidden_size, device=device),
+            )
+    
 
     frames = []
     while True:
@@ -1283,7 +1295,7 @@ def eval(env_name, args=None, vecenv=None, policy=None):
                 #opp = np.zeros_like(action)
                 #rand_max = vecenv.action_space.nvec[0]
                 #opp = np.random.randint(0,rand_max, size=action.shape, dtype=action.dtype)
-                opp_logits, opp_val = policy.forward_eval(ob[:, int(ob.shape[1]/2):], state)
+                opp_logits, opp_val = policy.forward_eval(ob[:, int(ob.shape[1]/2):], state_opp)
                 opp, opp_logprob, _ = pufferlib.pytorch.sample_logits(opp_logits)
                 opp = opp.cpu().numpy()
                 if(isinstance(driver.single_action_space, pufferlib.spaces.MultiDiscrete)):
