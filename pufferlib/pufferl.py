@@ -345,7 +345,6 @@ class PuffeRL:
             idx = np.where(pool_ids == opponent_id)[0][0]
             pi = probs[idx]
         except IndexError:
-            breakpoint()
             return
 
         N = len(pool_ids)
