@@ -177,43 +177,24 @@ class PuffeRL:
         self.free_idx = total_agents
         # Selfplay
         self.selfplay = vecenv.selfplay
-        self.opponent_pool = {}
-        self.active_policies = np.zeros(total_agents, dtype=np.int32)
-        self.elos = np.full(total_agents, 0.0, dtype = np.float32)
-        if pool is not None:
-            self.pool = pool
-            floor_idx = int(np.floor(0.8*vecenv.agents_per_batch))
-            r = vecenv.agents_per_batch - floor_idx
-            base, rem = divmod(r, self.pool.n_slots)
-            tails = [base+1]*rem + [base]*(self.pool.n_slots-rem)
-            bounds = [floor_idx]
-            cur = floor_idx
-            for sz in tails:
-                cur+=sz
-                bounds.append(cur)
-            self.pool_indices = bounds
 
         if vecenv.selfplay:
             self.opponent_pool = {}
             self.max_opponent_history = 100
             self.opponent_pool_ids = []
             self.saved_policy_count = 0
-            self.active_set = np.zeros(0, dtype=np.int32)
             self.active_policies = np.zeros(total_agents, dtype=np.int32)
             self.elos = np.full(total_agents, 0.0, dtype = np.float32)
-            self.policy_map = np.zeros(total_agents, dtype=np.int32)
             if pool is not None:
                 self.pool = pool
-                floor_idx = int(np.floor(0.8*vecenv.agents_per_batch))
-                r = vecenv.agents_per_batch - floor_idx
-                base, rem = divmod(r, self.pool.n_slots)
-                tails = [base+1]*rem + [base]*(self.pool.n_slots-rem)
-                bounds = [floor_idx]
-                cur = floor_idx
-                for sz in tails:
-                    cur+=sz
-                    bounds.append(cur)
-                self.pool_indices = bounds
+                self.cut = int(np.floor(0.8*vecenv.agents_per_batch))
+                self.cur_opp_id = 0
+                self.cur_opp_slot = 0
+                self.new_opp_id = 0
+                self.swap_armed = False
+                self.boundary_mask = np.zeros(total_agents, dtype=bool)
+                self.done_since_swap = 0
+                self.swap_quota = total_agents * 0.2
             if(isinstance(vecenv.single_action_space, pufferlib.spaces.MultiDiscrete)):
                 self.multidiscrete = 1
                 self.logits_full = [torch.empty(vecenv.agents_per_batch*2, int(n), device=device, dtype=torch.float32) for n in vecenv.single_action_space.nvec]
@@ -374,50 +355,40 @@ class PuffeRL:
                 profile('sp_elo_update', epoch)
                 batch_rows = slice(self.ep_indices[env_id.start].item(), 1+self.ep_indices[env_id.stop - 1].item())
                 ap = self.active_policies[batch_rows]
-                pm = self.policy_map[batch_rows]
-                elo_batch_update(self.elos, ap, r, d, cut = self.pool_indices[0], k=4.0) 
+                boundaries = self.boundary_mask[batch_rows]
+                elo_batch_update(self.elos, ap, r, d, cut = self.cut, k=4.0) 
                 done_indices = np.flatnonzero(d == 1)
-                done_indices = done_indices[done_indices >= self.pool_indices[0]]
+                done_indices = done_indices[done_indices >= self.cut]
+                tail_first = slice(self.cut, self.vecenv.agents_per_batch)
+                tail_end = slice(self.vecenv.agents_per_batch + self.cut, 2*self.vecenv.agents_per_batch)
                 profile('sp_sampling', epoch)
                 # select new opponent
-                if len(done_indices) > 0 and len(self.opponent_pool) > 0:
-                    MAX_OPP = 3
-                    TAIL = 5
-                    used = np.unique(self.active_policies[self.active_policies>0])
-                    pool_ids = np.array(self.opponent_pool_ids, dtype = np.int32)
-                    tail = pool_ids[-min(TAIL,pool_ids.size):] if pool_ids.size > 0 else np.array([],dtype=np.int32)
-                    if used.size ==0:
-                        new_id = np.random.choice(tail)
-                        sample_ids = np.array([new_id], dtype=np.int32)
-                    elif (used.size ==1 or used.size ==2):
-                        cand = tail[~np.isin(tail,used)]
-                        if cand.size > 0:
-                            new_id = np.random.choice(cand)
-                            sample_ids = np.concatenate([used, np.array([new_id], dtype=np.int32)])
-                        else:
-                            sample_ids = used
-                    else:
-                        sample_ids = used[-2:]
-                    if sample_ids.size>0:
-                        ap[done_indices] = np.random.choice(sample_ids, size=len(done_indices))
-                    else:
+                if(len(done_indices) > 0 and len(self.opponent_pool) > 0):
+                    self.done_since_swap += done_indices.size
+                    if self.swap_armed:
+                        boundaries[done_indices] = True
                         ap[done_indices] = 0
-                    #ap[done_indices] = 1
-                    # swapping policy weights 
-                    cur = np.unique(self.active_policies[self.active_policies>0])
-
-                    for pol_id in cur:
-                        if pol_id in self.pool.policy_ids:
-                            continue
-                        if pol_id not in self.opponent_pool:
-                            ap[self.active_policies == pol_id] = 0
-                            continue
+                    else:
+                        ap[done_indices] = self.cur_opp_id
+                    if (not self.swap_armed
+                        and self.done_since_swap >= self.swap_quota
+                        and len(self.opponent_pool_ids) > 0):
                         
-                        policy_weights = self.opponent_pool[pol_id]
-                        self.pool.rotate_new_policy(policy_weights, pol_id)
-                    
-                else:
-                    ap[done_indices] = 0
+                        self.swap_armed = True
+                        self.done_since_swap = 0
+                        self.boundary_mask[:] = False
+                        pool_ids = np.array(self.opponent_pool_ids, dtype=np.int32)
+                        self.new_opp_id = int(np.random.choice(pool_ids))
+                    if self.swap_armed and self.boundary_mask[tail_first].all() and self.boundary_mask[tail_end].all():
+                        self.swap_armed = False
+                        self.cur_opp_id = self.new_opp_id
+                        self.new_opp_id = 0
+                        if self.cur_opp_id in self.opponent_pool:
+                            weights = self.opponent_pool[self.cur_opp_id]
+                            self.cur_opp_slot = self.pool.rotate_new_policy(weights, self.cur_opp_id)
+                            ap[done_indices] = self.cur_opp_id
+                        else:
+                            self.cur_opp_id = 0
             
             profile('eval_copy', epoch)
             o = torch.as_tensor(o)
@@ -445,7 +416,7 @@ class PuffeRL:
                     action, logprob, _ = pufferlib.pytorch.sample_logits(logits)
 
                 if selfplay:
-                    cut = self.pool_indices[0]
+                    cut = self.cut
                     obs_idx = 0
                     # forward the first 80% 
                     state_opp_eighty = dict()
