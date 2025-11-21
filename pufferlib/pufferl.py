@@ -85,6 +85,11 @@ class PolicyPool(torch.nn.Module):
 def win_prob(elo1, elo2):
         return 1 / (1 + 10 ** ((elo2 - elo1) / 400))
 LN10_BY_400 = np.log(10.0) / 400.0 
+
+def softmax(x):
+        e_x = np.exp(x-np.max(x))
+        return e_x / e_x.sum()
+
 def elo_batch_update(elos: np.ndarray, ap: np.ndarray, r: np.ndarray, d: np.ndarray, cut: int, k:float = 4.0):
     # Done games in the 20% tail
     done_idx = np.flatnonzero(d == 1)
@@ -180,7 +185,7 @@ class PuffeRL:
 
         if vecenv.selfplay:
             self.opponent_pool = {}
-            self.max_opponent_history = 100
+            self.max_opponent_history = 300
             self.opponent_pool_ids = []
             self.saved_policy_count = 0
             self.active_policies = np.zeros(total_agents, dtype=np.int32)
@@ -195,6 +200,8 @@ class PuffeRL:
                 self.boundary_mask = np.zeros(total_agents, dtype=bool)
                 self.done_since_swap = 0
                 self.swap_quota = total_agents * 0.2
+                self.opponent_qualities = {}
+                self.quality_lr = 0.01
             if(isinstance(vecenv.single_action_space, pufferlib.spaces.MultiDiscrete)):
                 self.multidiscrete = 1
                 self.logits_full = [torch.empty(vecenv.agents_per_batch*2, int(n), device=device, dtype=torch.float32) for n in vecenv.single_action_space.nvec]
@@ -320,7 +327,41 @@ class PuffeRL:
             return 0
 
         return (self.global_step - self.last_log_step) / (time.time() - self.last_log_time)
-    
+
+        
+    def _update_quality_score(self, r, d, opponent_id):
+        if opponent_id == 0 or len(self.opponent_pool_ids) == 0:
+            return
+        win_mask = (d ==1) & (r > 0)
+        wins = win_mask.sum().item()
+
+        if wins == 0:
+            return
+        pool_ids = np.array(self.opponent_pool_ids)
+        qs = np.array([self.opponent_qualities.get(pid,0.0) for pid in pool_ids])
+        probs = softmax(qs)
+
+        try:
+            idx = np.where(pool_ids == opponent_id)[0][0]
+            pi = probs[idx]
+        except IndexError:
+            breakpoint()
+            return
+
+        N = len(pool_ids)
+        decrement = self.quality_lr / (N*max(pi, 1e-6))
+
+        total_drop = decrement*wins
+        self.opponent_qualities[opponent_id] -= total_drop
+
+    def _sample_new_opponent(self):
+        if len(self.opponent_pool_ids) == 0:
+            return
+        pool_ids = np.array(self.opponent_pool_ids, dtype=np.int32)
+        qs = np.array([self.opponent_qualities.get(pid,0.0) for pid in pool_ids])
+        probs = softmax(qs)
+        new_id = np.random.choice(pool_ids, p=probs)
+        return int(new_id)
     
     def evaluate(self):
         profile = self.profile
@@ -357,6 +398,7 @@ class PuffeRL:
                 ap = self.active_policies[batch_rows]
                 boundaries = self.boundary_mask[batch_rows]
                 elo_batch_update(self.elos, ap, r, d, cut = self.cut, k=4.0) 
+                self._update_quality_score(r[self.cut:], d[self.cut:], self.cur_opp_id)
                 done_indices = np.flatnonzero(d == 1)
                 done_indices = done_indices[done_indices >= self.cut]
                 tail_first = slice(self.cut, self.vecenv.agents_per_batch)
@@ -378,7 +420,7 @@ class PuffeRL:
                         self.done_since_swap = 0
                         self.boundary_mask[:] = False
                         pool_ids = np.array(self.opponent_pool_ids, dtype=np.int32)
-                        self.new_opp_id = int(np.random.choice(pool_ids))
+                        self.new_opp_id = self._sample_new_opponent()
                     if self.swap_armed and self.boundary_mask[tail_first].all() and self.boundary_mask[tail_end].all():
                         self.swap_armed = False
                         self.cur_opp_id = self.new_opp_id
@@ -566,6 +608,11 @@ class PuffeRL:
             snapshot = {k: v.clone().cpu() for k, v in self.policy.state_dict().items()}
             self.saved_policy_count+=1
             self.opponent_pool[self.saved_policy_count] = snapshot
+            if self.opponent_qualities:
+                start_q = max(self.opponent_qualities.values())
+            else:
+                start_q = 0.0
+            self.opponent_qualities[self.saved_policy_count] = start_q
             self.opponent_pool_ids.append(self.saved_policy_count)
             if (len(self.opponent_pool_ids) > self.max_opponent_history):
                 oldest_id  = self.opponent_pool_ids.pop(0)
