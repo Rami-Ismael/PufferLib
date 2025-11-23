@@ -90,43 +90,6 @@ def softmax(x):
         e_x = np.exp(x-np.max(x))
         return e_x / e_x.sum()
 
-def elo_batch_update(elos: np.ndarray, ap: np.ndarray, r: np.ndarray, d: np.ndarray, cut: int, k:float = 4.0):
-    # Done games in the 20% tail
-    done_idx = np.flatnonzero(d == 1)
-    if done_idx.size == 0:
-        return
-
-    tail_mask = done_idx >= cut
-    if not np.any(tail_mask):
-        return
-
-    idx = done_idx[tail_mask]
-    opp_ids = ap[idx]
-    valid = (opp_ids != 0)
-    if not np.any(valid):
-        return
-
-    idx = idx[valid]
-    opp_ids = opp_ids[valid]
-    # Map reward to Elo score ∈ {1, 0.5, 0}
-    rv = r[idx]
-    scores = np.where(rv > 0, 1.0, np.where(rv < 0, 0.0, 0.5))
-
-    r1 = elos[0]                        
-    r2 = elos[opp_ids]                   
-
-    expected = 1.0 / (1.0 + np.exp((r2 - r1) * LN10_BY_400))
-
-    d1 = k * (scores - expected)         # updates for player 0 (vector)
-    d2 = -d1                             # equal and opposite for opponents
-
-    elos[0] += d1.sum()
-
-    # Aggregate by opponent id to avoid repeated writes
-    uniq, inv = np.unique(opp_ids, return_inverse=True)
-    agg = np.bincount(inv, weights=d2, minlength=uniq.size)  # sums per unique opponent
-    elos[uniq] += agg
-    self.elos[:] = elos
 class PuffeRL:
     def __init__(self, config, vecenv, policy, logger=None, pool=None):
         # Backend perf optimization
@@ -190,7 +153,7 @@ class PuffeRL:
             self.opponent_pool_ids = []
             self.saved_policy_count = 0
             self.active_policies = np.zeros(total_agents, dtype=np.int32)
-            self.elos = []
+            self.elos = [0]
             if pool is not None:
                 self.pool = pool
                 self.cut = int(np.floor(0.8*vecenv.agents_per_batch))
@@ -362,7 +325,44 @@ class PuffeRL:
         probs = softmax(qs)
         new_id = np.random.choice(pool_ids, p=probs)
         return int(new_id)
-    
+    def elo_batch_update(self, elos: np.ndarray, ap: np.ndarray, r: np.ndarray, d: np.ndarray, cut: int, k:float = 4.0):
+        # Done games in the 20% tail
+        done_idx = np.flatnonzero(d == 1)
+        if done_idx.size == 0:
+            return
+
+        tail_mask = done_idx >= cut
+        if not np.any(tail_mask):
+            return
+
+        idx = done_idx[tail_mask]
+        opp_ids = ap[idx]
+        valid = (opp_ids != 0)
+        if not np.any(valid):
+            return
+
+        idx = idx[valid]
+        opp_ids = opp_ids[valid]
+        # Map reward to Elo score ∈ {1, 0.5, 0}
+        rv = r[idx]
+        scores = np.where(rv > 0, 1.0, np.where(rv < 0, 0.0, 0.5))
+
+        r1 = elos[0]                        
+        r2 = elos[opp_ids]                   
+
+        expected = 1.0 / (1.0 + np.exp((r2 - r1) * LN10_BY_400))
+
+        d1 = k * (scores - expected)         # updates for player 0 (vector)
+        d2 = -d1                             # equal and opposite for opponents
+
+        elos[0] += d1.sum()
+
+        # Aggregate by opponent id to avoid repeated writes
+        uniq, inv = np.unique(opp_ids, return_inverse=True)
+        agg = np.bincount(inv, weights=d2, minlength=uniq.size)  # sums per unique opponent
+        elos[uniq] += agg
+        self.elos[:] = elos
+ 
     def evaluate(self):
         profile = self.profile
         epoch = self.epoch
@@ -397,8 +397,8 @@ class PuffeRL:
                 batch_rows = slice(self.ep_indices[env_id.start].item(), 1+self.ep_indices[env_id.stop - 1].item())
                 ap = self.active_policies[batch_rows]
                 boundaries = self.boundary_mask[batch_rows]
-                elos = np.asarray(self.elos)
-                elo_batch_update(elos, ap, r, d, cut = self.cut, k=4.0) 
+                elos = np.asarray(self.elos, dtype=np.float32)
+                self.elo_batch_update(elos, ap, r, d, cut = self.cut, k=4.0) 
                 self._update_quality_score(r[self.cut:], d[self.cut:], self.cur_opp_id)
                 done_indices = np.flatnonzero(d == 1)
                 done_indices = done_indices[done_indices >= self.cut]
@@ -604,7 +604,7 @@ class PuffeRL:
         anneal_beta = b0 + (1 - b0)*a*self.epoch/self.total_epochs
         self.ratio[:] = 1
         # Save weights for selfplay
-        if (self.selfplay and epoch % 2 == 0):
+        if (self.selfplay and epoch % 10 == 0):
             profile('train_selfplay', epoch)
             snapshot = {k: v.clone().cpu() for k, v in self.policy.state_dict().items()}
             self.saved_policy_count+=1
@@ -615,6 +615,7 @@ class PuffeRL:
                 start_q = 0.0
             self.opponent_qualities[self.saved_policy_count] = start_q
             self.opponent_pool_ids.append(self.saved_policy_count)
+            self.elos.append(self.elos[0])
             if (len(self.opponent_pool_ids) > self.max_opponent_history):
                 oldest_id  = self.opponent_pool_ids.pop(0)
                 if oldest_id in self.opponent_pool:
@@ -760,7 +761,7 @@ class PuffeRL:
 
         device = config['device']
         agent_steps = int(dist_sum(self.global_step, device))
-        if self.selfplay and self.stats.items():
+        if self.selfplay and self.stats.items() and len(self.elos) > 0:
             self.stats['elo'] = self.elos[0]
         logs = {
             'SPS': dist_sum(self.sps, device),
@@ -919,7 +920,8 @@ class PuffeRL:
             self.last_stats = self.stats
         
         if self.selfplay and self.stats['perf']:
-            self.stats['elo'] = self.elos[0]
+            if(len(self.elos) > 0):
+                self.stats['elo'] = self.elos[0]
         for metric, value in (self.stats or self.last_stats).items():
             try: # Discard non-numeric values
                 int(value)
