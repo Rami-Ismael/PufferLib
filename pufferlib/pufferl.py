@@ -126,6 +126,7 @@ def elo_batch_update(elos: np.ndarray, ap: np.ndarray, r: np.ndarray, d: np.ndar
     uniq, inv = np.unique(opp_ids, return_inverse=True)
     agg = np.bincount(inv, weights=d2, minlength=uniq.size)  # sums per unique opponent
     elos[uniq] += agg
+    self.elos[:] = elos
 class PuffeRL:
     def __init__(self, config, vecenv, policy, logger=None, pool=None):
         # Backend perf optimization
@@ -189,7 +190,7 @@ class PuffeRL:
             self.opponent_pool_ids = []
             self.saved_policy_count = 0
             self.active_policies = np.zeros(total_agents, dtype=np.int32)
-            self.elos = np.full(total_agents, 0.0, dtype = np.float32)
+            self.elos = []
             if pool is not None:
                 self.pool = pool
                 self.cut = int(np.floor(0.8*vecenv.agents_per_batch))
@@ -345,7 +346,6 @@ class PuffeRL:
             idx = np.where(pool_ids == opponent_id)[0][0]
             pi = probs[idx]
         except IndexError:
-            breakpoint()
             return
 
         N = len(pool_ids)
@@ -397,7 +397,8 @@ class PuffeRL:
                 batch_rows = slice(self.ep_indices[env_id.start].item(), 1+self.ep_indices[env_id.stop - 1].item())
                 ap = self.active_policies[batch_rows]
                 boundaries = self.boundary_mask[batch_rows]
-                elo_batch_update(self.elos, ap, r, d, cut = self.cut, k=4.0) 
+                elos = np.asarray(self.elos)
+                elo_batch_update(elos, ap, r, d, cut = self.cut, k=4.0) 
                 self._update_quality_score(r[self.cut:], d[self.cut:], self.cur_opp_id)
                 done_indices = np.flatnonzero(d == 1)
                 done_indices = done_indices[done_indices >= self.cut]
@@ -511,9 +512,9 @@ class PuffeRL:
                         profile('sp_misc',epoch)
                         if self.multidiscrete:
                             for buf,head in zip(self.logits_full, logits_sp):
-                                buf.index_copy(0, batch_sz+cut+idx, head)
+                                buf.index_copy_(0, batch_sz+cut+idx, head)
                         else:
-                            self.logits_full.index_copy(0, batch_sz+cut+idx, logits_sp)
+                            self.logits_full.index_copy_(0, batch_sz+cut+idx, logits_sp)
                     
                     profile('sp_forward',epoch)
                     opp, logprob, _ = pufferlib.pytorch.sample_logits(self.logits_full)
