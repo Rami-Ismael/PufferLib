@@ -23,6 +23,7 @@ struct Log {
     float n;
     float illegal_move_count;
     float legal_move_count;
+    float pass_move_count;
 };
 
 typedef struct Group Group;
@@ -100,6 +101,7 @@ struct CGo {
     int side;
     int legal_move_count;
     int illegal_move_count;
+    int pass_move_count;
     int previous_move;
 };
 
@@ -119,7 +121,7 @@ void add_log(CGo* env) {
     }
     env->log.illegal_move_count += env->illegal_move_count;
     env->log.legal_move_count += env->legal_move_count;
-
+    env->log.pass_move_count += env->pass_move_count;
     env->log.perf = (env->log.perf * env->log.n + win_value) / (env->log.n + 1.0);
     
     env->log.score += env->score;
@@ -659,6 +661,7 @@ void c_reset(CGo* env) {
     env->tick = 0;
     env->illegal_move_count = 0;
     env->legal_move_count = 0;
+    env->pass_move_count = 0;
     env->turn = 0;
     env->previous_move = -1;
     // We don't reset the log struct - leave it accumulating like in Pong
@@ -742,6 +745,7 @@ void c_step(CGo* env) {
             env->legal_move_count +=1;
             env->rewards[0] = env->reward_move_pass;
             env->log.episode_return += env->reward_move_pass;
+            env->pass_move_count += 1;
         }
         if (env->terminals[0] == 1 || env->previous_move == NOOP) {
             end_game(env);
