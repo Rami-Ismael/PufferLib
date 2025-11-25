@@ -22,6 +22,7 @@ struct Log {
     float episode_length;
     float n;
     float illegal_move_count;
+    float legal_move_count;
 };
 
 typedef struct Group Group;
@@ -95,7 +96,10 @@ struct CGo {
     float reward_opponent_capture;
     float tick;
     int selfplay;
+    int turn;
+    int legal_move_count;
     int illegal_move_count;
+    int previous_move;
 };
 
 void add_log(CGo* env) {
@@ -110,9 +114,10 @@ void add_log(CGo* env) {
         win_value = 0.0; // Loss
     }
     else {
-        win_value = 0.0; // Tie
+        win_value = 0.5; // Tie
     }
     env->log.illegal_move_count += env->illegal_move_count;
+    env->log.legal_move_count += env->legal_move_count;
 
     env->log.perf = (env->log.perf * env->log.n + win_value) / (env->log.n + 1.0);
     
@@ -539,6 +544,7 @@ void enemy_random_move(CGo* env){
     // Try to make a move in a random empty position
     for(int i = 0; i < count; i++){
         if(make_move(env, positions[i], 2)){
+            env->previous_move = positions[i];
             return;
         }
     }
@@ -604,6 +610,7 @@ void enemy_greedy_hard(CGo* env){
     for (int priority = 0; priority < 4; priority++) {
         for (int i = 0; i < liberty_counts[priority]; i++) {
             if (make_move(env, liberties[priority][i], 2)) {
+                env->previous_move = liberties[priority][i];
                 return;
             }
         }
@@ -647,6 +654,9 @@ void enemy_greedy_easy(CGo* env){
 void c_reset(CGo* env) {
     env->tick = 0;
     env->illegal_move_count = 0;
+    env->legal_move_count = 0;
+    env->turn = 0;
+    env->previous_move = -1;
     // We don't reset the log struct - leave it accumulating like in Pong
     env->score = 0;
     for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
@@ -682,15 +692,25 @@ void end_game(CGo* env){
     c_reset(env);
 }
 
+void clip_rewards(CGo* env){
+    if(env->rewards[0] > 1){
+	    env->rewards[0] = 1;
+    } 
+    if(env->rewards[0] < -1){
+	    env->rewards[0] = -1;
+    }
+}
+
 void c_step(CGo* env) {
     env->tick += 1;
     env->rewards[0] = 0.0;
     env->terminals[0] = 0;
-    int actions[2] = {0};
+    int action;
+    int is_legal = 0;
     if(env->selfplay){
-        memcpy(&actions, env->actions, 2*sizeof(int));
+        action = env->turn == 0 ? (int)env->actions[0] : (int)env->actions[1];
     } else {
-        actions[0] = (int)env->actions[0];
+        action = (int)env->actions[0];
     }
     // useful for training , can prob be a hyper param. Recommend to increase with larger board size
     float max_moves = 3 * env->grid_size * env->grid_size;
@@ -700,53 +720,60 @@ void c_step(CGo* env) {
          compute_observations(env);
          return;
     }
-    if(actions[0] == NOOP){
-        env->rewards[0] = env->reward_move_pass;
-        env->log.episode_return += env->reward_move_pass;
-        if(env->selfplay && actions[1] != NOOP){
-            make_move(env, actions[1] - 1, 2);
-        } else{
-            enemy_greedy_hard(env);
-        }
+    // play against bots 
+    if(!env->selfplay && env->turn == 1){
+        enemy_greedy_hard(env);
         if (env->terminals[0] == 1) {
+            end_game(env);
+        }
+        compute_observations(env);
+        clip_rewards(env);
+        env->turn = (env->turn + 1) % 2;
+        return;
+    }
+    // process action
+    if(action == NOOP){
+        if(env->turn == 0){
+            env->legal_move_count +=1;
+            env->rewards[0] = env->reward_move_pass;
+            env->log.episode_return += env->reward_move_pass;
+        }
+        if (env->terminals[0] == 1 || env->previous_move == NOOP) {
             end_game(env);
             return;
         }
+
         compute_observations(env);
         return;
     }
-    if (actions[0] >= MOVE_MIN && actions[0] <= (env->grid_size)*(env->grid_size)) {
+    if (action >= MOVE_MIN && action <= (env->grid_size)*(env->grid_size)) {
         memcpy(env->previous_board_state, env->board_states, sizeof(int) * (env->grid_size) * (env->grid_size));
-        if(make_move(env, actions[0] - 1, 1)) {
+        is_legal = make_move(env, action - 1, env->turn + 1); 
+        if(is_legal) {
             env->moves_made++;
-            env->rewards[0] = env->reward_move_valid;
-            env->log.episode_return += env->reward_move_valid;
-            if(env->selfplay && actions[1] != NOOP){
-                make_move(env, actions[1] - 1, 2);
-            } else{
-                enemy_greedy_hard(env);
+            if(env->turn == 0){
+                env->legal_move_count +=1;
+                env->rewards[0] = env->reward_move_valid;
+                env->log.episode_return += env->reward_move_valid;
             }
-
-
         } else {
-            env->rewards[0] = env->reward_move_invalid;
-            env->log.episode_return += env->reward_move_invalid;
+            if(env->turn ==0){
+                env->rewards[0] = env->reward_move_invalid;
+                env->log.episode_return += env->reward_move_invalid;
+            }
         }
-        compute_observations(env);
     }
+    env->previous_move = action;
 
-    if(env->rewards[0] > 1){
-	    env->rewards[0] = 1;
-    } 
-    if(env->rewards[0] < -1){
-	    env->rewards[0] = -1;
-    }
+    clip_rewards(env); 
 
     if (env->terminals[0] == 1) {
         end_game(env);
         return;
     }
-    
+    if(is_legal){
+        env->turn = (env->turn + 1) % 2;
+    }
     compute_observations(env);
 }
 
@@ -832,7 +859,10 @@ void c_render(CGo* env) {
     int top = env->grid_square_size;
     DrawRectangle(left, top + 90, 100, 50, GRAY);
     DrawText("Pass", left + 25, top + 105, 20, PUFF_WHITE);
-
+    DrawText(
+        TextFormat("Tick: %d", (int)env->tick),
+        left, top + 150, 20, PUFF_WHITE
+    );
     // show capture count for both players
     DrawText(
         TextFormat("Player 1 Capture Count: %d", env->capture_count[0]),

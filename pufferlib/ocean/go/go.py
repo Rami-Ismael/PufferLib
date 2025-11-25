@@ -35,13 +35,13 @@ class Go(pufferlib.PufferEnv):
         self.render_mode = render_mode
         self.log_interval = log_interval
         self.tick = 0
-        self.num_obs = ((grid_size) * (grid_size)*2 + 2)*2
-        self.num_act = (grid_size) * (grid_size) + 1
-        self.single_observation_space = gymnasium.spaces.Box(low=0, high=1,
-            shape=(self.num_obs,), dtype=np.float32)
-        self.single_action_space = gymnasium.spaces.Discrete(self.num_act)
         self.selfplay = selfplay
         factor = 2 if selfplay else 1
+        self.num_obs = (grid_size) * (grid_size)*2 + 2
+        self.num_act = (grid_size) * (grid_size) + 1
+        self.single_observation_space = gymnasium.spaces.Box(low=0, high=1,
+            shape=(self.num_obs*factor,), dtype=np.float32)
+        self.single_action_space = gymnasium.spaces.Discrete(self.num_act)
         super().__init__(buf=buf)
         height = 64*(grid_size+1)
         c_envs = []

@@ -361,6 +361,7 @@ class PuffeRL:
         uniq, inv = np.unique(opp_ids, return_inverse=True)
         agg = np.bincount(inv, weights=d2, minlength=uniq.size)  # sums per unique opponent
         elos[uniq] += agg
+        np.maximum(elos, 0.0, out=elos)
         self.elos[:] = elos
  
     def evaluate(self):
