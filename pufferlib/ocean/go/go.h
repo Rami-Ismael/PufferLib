@@ -870,13 +870,13 @@ void c_render(CGo* env) {
     );
     if(env->side == 1){
         DrawText(
-            TextFormat("Agent: black %d", (int)env->tick),
+            TextFormat("Agent: black"),
             left, top + 170, 20, PUFF_WHITE
         );
     }
     else {
         DrawText(
-            TextFormat("Agent: white %d", (int)env->tick),
+            TextFormat("Agent: white"),
             left, top + 170, 20, PUFF_WHITE
         );
     }
