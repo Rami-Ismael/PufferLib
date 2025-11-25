@@ -11,6 +11,7 @@ static int my_init(Env* env, PyObject* args, PyObject* kwargs) {
     env->grid_square_size = unpack(kwargs, "grid_square_size");
     env->moves_made = unpack(kwargs, "moves_made");
     env->komi = unpack(kwargs, "komi");
+    env->side = unpack(kwargs, "side");
     env->score = unpack(kwargs, "score");
     env->last_capture_position = unpack(kwargs, "last_capture_position");
     env->reward_move_pass = unpack(kwargs, "reward_move_pass");

@@ -97,6 +97,7 @@ struct CGo {
     float tick;
     int selfplay;
     int turn;
+    int side;
     int legal_move_count;
     int illegal_move_count;
     int previous_move;
@@ -189,16 +190,16 @@ void free_allocated(CGo* env) {
 }
 
 void compute_observations(CGo* env) {
-    int obs_len = env->grid_size * env->grid_size * 2 + 2;
+    int obs_len = env->grid_size * env->grid_size * 2 + 1;
     for(int i = 0; i < 2; i++){
         int observation_indx=0;
         if(!env->selfplay && i==1) return;
         int offset = i * obs_len;
-        int self = 1;
-        int opp = 2;
+        int self = env->side;
+        int opp = 3 - self;
         if(i == 1){
-            self = 2;
-            opp = 1;
+            self = 3 - env->side;
+            opp = env->side;
         }
         for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
             if(env->board_states[i] == self ){
@@ -218,8 +219,8 @@ void compute_observations(CGo* env) {
             }
             observation_indx++;
         }
-        env->observations[offset + observation_indx] = env->capture_count[self-1];
-        env->observations[offset + observation_indx+1] = env->capture_count[opp-1];
+        float color = self - 1;
+        env->observations[offset + observation_indx] = color;
     }
 
 }
@@ -252,6 +253,8 @@ void flood_fill(CGo* env, int x, int y, int* territory, int player) {
 void compute_score_tromp_taylor(CGo* env) {
     int player_score = 0;
     int opponent_score = 0;
+    int player = env->side;
+    int opponent = 3 - player;
     reset_visited(env);
     
     // Queue for BFS
@@ -260,9 +263,9 @@ void compute_score_tromp_taylor(CGo* env) {
     
     // First count stones
     for (int i = 0; i < queue_size; i++) {
-        if (env->board_states[i] == 1) {
+        if (env->board_states[i] == player) {
             player_score++;
-        } else if (env->board_states[i] == 2) {
+        } else if (env->board_states[i] == opponent) {
             opponent_score++;
         }
     }
@@ -313,15 +316,15 @@ void compute_score_tromp_taylor(CGo* env) {
         }
         
         // Assign territory points
-        if (bordering_player == 1) {
+        if (bordering_player == player) {
             player_score += territory_size;
-        } else if (bordering_player == 2) {
+        } else if (bordering_player == opponent) {
             opponent_score += territory_size;
         }
         // Mixed territories (bordering_player == 3) are neutral and not counted
     }
-    
-    env->score = (float)player_score - (float)opponent_score - env->komi;
+    float komi = (env->side == 2) ? -env->komi : env->komi;
+    env->score = (float)player_score - (float)opponent_score - komi;
 }
 
 int find_in_group(int* group, int group_size, int value) {
@@ -353,7 +356,7 @@ void capture_group(CGo* env, int* board, int root, int* affected_groups, int* af
         int pos = queue[front++];
         board[pos] = 0;  // Remove stone
         env->capture_count[capturing_player - 1]++;  // Update capturing player's count
-	if(capturing_player-1 == 0){
+	if(capturing_player == env->side){
 		env->rewards[0] += env->reward_player_capture;
 		env->log.episode_return += env->reward_player_capture;
 	} else{
@@ -441,7 +444,7 @@ int make_move(CGo* env, int pos, int player){
     int y = pos / (env->grid_size);
     // cannot place stone on occupied tile
     if (env->board_states[pos] != 0) {
-        if(player == 1){
+        if(player == env->side){
             env->illegal_move_count+=1;
         }
         return 0 ;
@@ -502,7 +505,7 @@ int make_move(CGo* env, int pos, int player){
         }
         // Check for ko rule violation
         if(is_ko(env)) {
-            if(player == 1){
+            if(player == env->side){
                 env->illegal_move_count+=1;
             }
             return 0;
@@ -511,7 +514,7 @@ int make_move(CGo* env, int pos, int player){
     // self capture
     int root = find(env->temp_groups, pos);
     if (env->temp_groups[root].liberties == 0) {
-        if(player == 1){
+        if(player == env->side){
             env->illegal_move_count+=1;
         }
         return 0;
@@ -523,7 +526,7 @@ int make_move(CGo* env, int pos, int player){
 }
 
 
-void enemy_random_move(CGo* env){
+void enemy_random_move(CGo* env, int side){
     int num_positions = (env->grid_size)*(env->grid_size);
     int positions[num_positions];
     int count = 0;
@@ -543,7 +546,7 @@ void enemy_random_move(CGo* env){
     }
     // Try to make a move in a random empty position
     for(int i = 0; i < count; i++){
-        if(make_move(env, positions[i], 2)){
+        if(make_move(env, positions[i], side)){
             env->previous_move = positions[i];
             return;
         }
@@ -582,7 +585,7 @@ int find_group_liberty(CGo* env, int root){
     return -1; // Should not happen if liberties > 0
 }
 
-void enemy_greedy_hard(CGo* env){
+void enemy_greedy_hard(CGo* env, int side){
 	// Attempt to capture opponent stones in atari
     int liberties[4][(env->grid_size) * (env->grid_size)];
     int liberty_counts[4] = {0};
@@ -590,14 +593,15 @@ void enemy_greedy_hard(CGo* env){
         if(env->board_states[i]==0){
                 continue;
         }
-        if (env->board_states[i]==1){
+        int opp = 3 - side;
+        if (env->board_states[i]==opp){
             int root = find(env->groups, i);
             int group_liberties = env->groups[root].liberties;
             if (group_liberties >= 1 && group_liberties <= 4) {
                 int liberty = find_group_liberty(env, root);
                 liberties[group_liberties - 1][liberty_counts[group_liberties - 1]++] = liberty;
             }
-        } else if (env->board_states[i]==2){
+        } else if (env->board_states[i]==side){
             int root = find(env->groups, i);
             int group_liberties = env->groups[root].liberties;
             if (group_liberties==1) {
@@ -609,17 +613,17 @@ void enemy_greedy_hard(CGo* env){
     // make move to attack or defend
     for (int priority = 0; priority < 4; priority++) {
         for (int i = 0; i < liberty_counts[priority]; i++) {
-            if (make_move(env, liberties[priority][i], 2)) {
+            if (make_move(env, liberties[priority][i], side)) {
                 env->previous_move = liberties[priority][i];
                 return;
             }
         }
     }
     // random move
-    enemy_random_move(env);
+    enemy_random_move(env, side);
 }
 
-void enemy_greedy_easy(CGo* env){
+void enemy_greedy_easy(CGo* env, int side){
     // Attempt to capture opponent stones in atari
     for(int i = 0; i < (env->grid_size)*(env->grid_size); i++){
         if(env->board_states[i] != 1){
@@ -648,7 +652,7 @@ void enemy_greedy_easy(CGo* env){
         }
     }
     // Play a random legal move
-    enemy_random_move(env);
+    enemy_random_move(env, side);
 }
 
 void c_reset(CGo* env) {
@@ -706,9 +710,10 @@ void c_step(CGo* env) {
     env->rewards[0] = 0.0;
     env->terminals[0] = 0;
     int action;
+    int bot_side = 3 - env->side; 
     int is_legal = 0;
     if(env->selfplay){
-        action = env->turn == 0 ? (int)env->actions[0] : (int)env->actions[1];
+        action = (env->turn +1 == env->side) ? (int)env->actions[0] : (int)env->actions[1];
     } else {
         action = (int)env->actions[0];
     }
@@ -721,8 +726,8 @@ void c_step(CGo* env) {
          return;
     }
     // play against bots 
-    if(!env->selfplay && env->turn == 1){
-        enemy_greedy_hard(env);
+    if(!env->selfplay && env->turn == (bot_side - 1)){
+        enemy_greedy_hard(env, bot_side);
         if (env->terminals[0] == 1) {
             end_game(env);
         }
@@ -733,7 +738,7 @@ void c_step(CGo* env) {
     }
     // process action
     if(action == NOOP){
-        if(env->turn == 0){
+        if(env->turn + 1 == env->side){
             env->legal_move_count +=1;
             env->rewards[0] = env->reward_move_pass;
             env->log.episode_return += env->reward_move_pass;
@@ -751,13 +756,13 @@ void c_step(CGo* env) {
         is_legal = make_move(env, action - 1, env->turn + 1); 
         if(is_legal) {
             env->moves_made++;
-            if(env->turn == 0){
+            if(env->turn + 1 == env->side){
                 env->legal_move_count +=1;
                 env->rewards[0] = env->reward_move_valid;
                 env->log.episode_return += env->reward_move_valid;
             }
         } else {
-            if(env->turn ==0){
+            if(env->turn + 1 == env->side){
                 env->rewards[0] = env->reward_move_invalid;
                 env->log.episode_return += env->reward_move_invalid;
             }
@@ -863,13 +868,24 @@ void c_render(CGo* env) {
         TextFormat("Tick: %d", (int)env->tick),
         left, top + 150, 20, PUFF_WHITE
     );
-    // show capture count for both players
+    if(env->side == 1){
+        DrawText(
+            TextFormat("Agent: black %d", (int)env->tick),
+            left, top + 170, 20, PUFF_WHITE
+        );
+    }
+    else {
+        DrawText(
+            TextFormat("Agent: white %d", (int)env->tick),
+            left, top + 170, 20, PUFF_WHITE
+        );
+    }
     DrawText(
-        TextFormat("Player 1 Capture Count: %d", env->capture_count[0]),
+        TextFormat("Black Capture Count: %d", env->capture_count[0]),
         left, top, 20, PUFF_WHITE
     );
     DrawText(
-        TextFormat("Player 2 Capture Count: %d", env->capture_count[1]),
+        TextFormat("White Capture Count: %d", env->capture_count[1]),
         left, top + 40, 20, PUFF_WHITE
     );
     EndDrawing();

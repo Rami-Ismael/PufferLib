@@ -37,7 +37,7 @@ class Go(pufferlib.PufferEnv):
         self.tick = 0
         self.selfplay = selfplay
         factor = 2 if selfplay else 1
-        self.num_obs = (grid_size) * (grid_size)*2 + 2
+        self.num_obs = (grid_size) * (grid_size)*2 + 1
         self.num_act = (grid_size) * (grid_size) + 1
         self.single_observation_space = gymnasium.spaces.Box(low=0, high=1,
             shape=(self.num_obs*factor,), dtype=np.float32)
@@ -71,6 +71,7 @@ class Go(pufferlib.PufferEnv):
                 reward_move_valid = reward_move_valid,
                 reward_player_capture = reward_player_capture,
                 reward_opponent_capture = reward_opponent_capture,
+                side = (i % 2) + 1,
                 selfplay = selfplay
             ))
         self.c_envs = binding.vectorize(*c_envs)
