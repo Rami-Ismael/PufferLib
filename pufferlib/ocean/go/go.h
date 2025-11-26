@@ -349,6 +349,7 @@ void capture_group(CGo* env, int* board, int root, int* affected_groups, int* af
     int front = 0, rear = 0;
 
     int captured_player = board[root];       // Player whose stones are being captured
+    if (captured_player != 1 && captured_player !=2) return; 
     int capturing_player = 3 - captured_player;          // Player who captures
 
     queue[rear++] = root;
@@ -451,6 +452,10 @@ int make_move(CGo* env, int pos, int player){
         }
         return 0 ;
     }
+    int cap0 = env->capture_count[0];
+    int cap1 = env->capture_count[1];
+    float r0 = env->rewards[0];
+    float er0 = env->log.episode_return;
     // temp structures
     memcpy(env->temp_board_states, env->board_states, sizeof(int) * (env->grid_size) * (env->grid_size));
     memcpy(env->temp_groups, env->groups, sizeof(Group) * (env->grid_size) * (env->grid_size));
@@ -507,6 +512,11 @@ int make_move(CGo* env, int pos, int player){
         }
         // Check for ko rule violation
         if(is_ko(env)) {
+            env->capture_count[0] = cap0;
+            env->capture_count[1] = cap1;
+            env->rewards[0] = r0;
+            env->log.episode_return = er0;
+
             if(player == env->side){
                 env->illegal_move_count+=1;
             }
@@ -516,6 +526,10 @@ int make_move(CGo* env, int pos, int player){
     // self capture
     int root = find(env->temp_groups, pos);
     if (env->temp_groups[root].liberties == 0) {
+        env->capture_count[0] = cap0;
+        env->capture_count[1] = cap1;
+        env->rewards[0] = r0;
+        env->log.episode_return = er0;
         if(player == env->side){
             env->illegal_move_count+=1;
         }
@@ -549,11 +563,12 @@ void enemy_random_move(CGo* env, int side){
     // Try to make a move in a random empty position
     for(int i = 0; i < count; i++){
         if(make_move(env, positions[i], side)){
-            env->previous_move = positions[i];
+            env->previous_move = positions[i] + 1;
             return;
         }
     }
     // If no move is possible, pass or end the game
+    env->previous_move = 0;
     env->terminals[0] = 1;
 }
 
@@ -616,7 +631,7 @@ void enemy_greedy_hard(CGo* env, int side){
     for (int priority = 0; priority < 4; priority++) {
         for (int i = 0; i < liberty_counts[priority]; i++) {
             if (make_move(env, liberties[priority][i], side)) {
-                env->previous_move = liberties[priority][i];
+                env->previous_move = liberties[priority][i]+1;
                 return;
             }
         }
@@ -751,7 +766,7 @@ void c_step(CGo* env) {
             end_game(env);
             return;
         }
-
+        env->turn = (env->turn+1)%2;
         compute_observations(env);
         return;
     }

@@ -433,6 +433,7 @@ class Go(nn.Module):
         self.grid_size = int(np.sqrt((obs_size-1)/2))
         output_size = self.grid_size - 4
         cnn_flat_size = cnn_channels * output_size * output_size
+        self.current_obs = None
         
         self.flat = pufferlib.pytorch.layer_init(nn.Linear(1,32))
         
@@ -457,6 +458,7 @@ class Go(nn.Module):
         full_board = grid_size * grid_size 
         black_board = observations[:, :full_board].view(-1,1, grid_size,grid_size).float()
         white_board = observations[:, full_board:-1].view(-1,1, grid_size, grid_size).float()
+        self.current_obs = black_board + white_board
         board_features = torch.cat([black_board, white_board],dim=1)
         flat_feature1 = observations[:, -1].unsqueeze(1).float()
         # Pass board through cnn
@@ -470,8 +472,11 @@ class Go(nn.Module):
         return features
 
     def decode_actions(self, flat_hidden, state=None):
+        full_board = self.grid_size*self.grid_size;
         value = self.value_fn(flat_hidden)
         action = self.actor(flat_hidden)
+        illegal = (self.current_obs[:, 0] == 1).reshape(action.shape[0], -1)
+        action[:, 1:].masked_fill_(illegal, -1e9)
         return action, value
     
 class MOBA(nn.Module):
