@@ -767,6 +767,7 @@ void c_step(CGo* env) {
             end_game(env);
             return;
         }
+        env->previous_move = NOOP;
         env->turn = (env->turn+1)%2;
         compute_observations(env);
         return;
