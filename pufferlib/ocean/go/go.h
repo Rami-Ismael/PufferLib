@@ -535,6 +535,7 @@ int make_move(CGo* env, int pos, int player){
         }
         return 0;
     }
+    memcpy(env->previous_board_state, env->board_states, sizeof(int) * (env->grid_size) * (env->grid_size));
     memcpy(env->board_states, env->temp_board_states, sizeof(int) * (env->grid_size) * (env->grid_size));
     memcpy(env->groups, env->temp_groups, sizeof(Group) * (env->grid_size) * (env->grid_size));
     return 1;
@@ -771,7 +772,6 @@ void c_step(CGo* env) {
         return;
     }
     if (action >= MOVE_MIN && action <= (env->grid_size)*(env->grid_size)) {
-        memcpy(env->previous_board_state, env->board_states, sizeof(int) * (env->grid_size) * (env->grid_size));
         is_legal = make_move(env, action - 1, env->turn + 1); 
         if(is_legal) {
             env->moves_made++;
