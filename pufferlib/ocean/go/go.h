@@ -325,8 +325,8 @@ void compute_score_tromp_taylor(CGo* env) {
         }
         // Mixed territories (bordering_player == 3) are neutral and not counted
     }
-    float komi = (env->side == 2) ? -env->komi : env->komi;
-    env->score = (float)player_score - (float)opponent_score - komi;
+    float komi = (env->side == 2) ? env->komi : -env->komi;
+    env->score = (float)player_score - (float)opponent_score + komi;
 }
 
 int find_in_group(int* group, int group_size, int value) {
