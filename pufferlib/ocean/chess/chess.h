@@ -661,6 +661,8 @@ void init_bitboards(void) {
     bitboards_initialized = true;
 }
 
+static inline int get_pst_value(Piece pc, Square sq);
+
 void pos_set_startpos(Position* pos) {
     memset(pos, 0, sizeof(Position));
     
