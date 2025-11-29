@@ -10,11 +10,7 @@ static PyObject* my_shared(PyObject* self, PyObject* args, PyObject* kwargs) {
 }
 
 static int my_init(Env *env, PyObject *args, PyObject *kwargs) {
-    static int bitboards_initialized = 0;
-    if (!bitboards_initialized) {
-        init_bitboards();
-        bitboards_initialized = 1;
-    }
+    init_bitboards();
     
     env->max_moves = 500;
     env->reward_draw = 0.0f;
@@ -22,6 +18,10 @@ static int my_init(Env *env, PyObject *args, PyObject *kwargs) {
     env->reward_invalid_move = -0.1f;
     env->reward_valid_piece = 0.0f;
     env->reward_valid_move = 0.0f;
+    env->reward_material = 0.0f;
+    env->reward_position = 0.0f;
+    env->reward_castling = 0.0f;
+    env->reward_repetition = 0.0f;
     env->client = NULL;
     env->render_fps = 30;
     env->human_play = 0;
@@ -68,6 +68,34 @@ static int my_init(Env *env, PyObject *args, PyObject *kwargs) {
             env->reward_valid_move = (float)PyFloat_AsDouble(reward_valid_move_obj);
         } else if (reward_valid_move_obj != NULL && PyLong_Check(reward_valid_move_obj)) {
             env->reward_valid_move = (float)PyLong_AsDouble(reward_valid_move_obj);
+        }
+
+        PyObject* reward_material_obj = PyDict_GetItemString(kwargs, "reward_material");
+        if (reward_material_obj != NULL && PyFloat_Check(reward_material_obj)) {
+            env->reward_material = (float)PyFloat_AsDouble(reward_material_obj);
+        } else if (reward_material_obj != NULL && PyLong_Check(reward_material_obj)) {
+            env->reward_material = (float)PyLong_AsDouble(reward_material_obj);
+        }
+
+        PyObject* reward_position_obj = PyDict_GetItemString(kwargs, "reward_position");
+        if (reward_position_obj != NULL && PyFloat_Check(reward_position_obj)) {
+            env->reward_position = (float)PyFloat_AsDouble(reward_position_obj);
+        } else if (reward_position_obj != NULL && PyLong_Check(reward_position_obj)) {
+            env->reward_position = (float)PyLong_AsDouble(reward_position_obj);
+        }
+
+        PyObject* reward_castling_obj = PyDict_GetItemString(kwargs, "reward_castling");
+        if (reward_castling_obj != NULL && PyFloat_Check(reward_castling_obj)) {
+            env->reward_castling = (float)PyFloat_AsDouble(reward_castling_obj);
+        } else if (reward_castling_obj != NULL && PyLong_Check(reward_castling_obj)) {
+            env->reward_castling = (float)PyLong_AsDouble(reward_castling_obj);
+        }
+
+        PyObject* reward_repetition_obj = PyDict_GetItemString(kwargs, "reward_repetition");
+        if (reward_repetition_obj != NULL && PyFloat_Check(reward_repetition_obj)) {
+            env->reward_repetition = (float)PyFloat_AsDouble(reward_repetition_obj);
+        } else if (reward_repetition_obj != NULL && PyLong_Check(reward_repetition_obj)) {
+            env->reward_repetition = (float)PyLong_AsDouble(reward_repetition_obj);
         }
 
         PyObject* fps_obj = PyDict_GetItemString(kwargs, "render_fps");
@@ -118,6 +146,8 @@ static int my_init(Env *env, PyObject *args, PyObject *kwargs) {
     return 0;
 }
 
+static float total_games_played = 0.0f;
+
 static int my_log(PyObject *dict, Log *log) {
     assign_to_dict(dict, "perf", log->perf);
     assign_to_dict(dict, "score", log->score);
@@ -126,6 +156,10 @@ static int my_log(PyObject *dict, Log *log) {
     assign_to_dict(dict, "chess_moves", log->chess_moves);
     assign_to_dict(dict, "episode_length", log->episode_length);
     assign_to_dict(dict, "episode_return", log->episode_return);
+    
+    total_games_played += log->n;
+    assign_to_dict(dict, "games_played", total_games_played);
+    
     float avg_invalid_rate = (log->n > 0) ? (log->invalid_action_rate / log->n) : 0.0f;
     assign_to_dict(dict, "invalid_action_rate", avg_invalid_rate);
     return 0;
