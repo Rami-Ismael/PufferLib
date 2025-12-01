@@ -419,7 +419,7 @@ class Go(nn.Module):
         # boards = current, previous
         self.cnn = nn.Sequential(
             pufferlib.pytorch.layer_init(
-                nn.Conv2d(2, cnn_channels, 3, stride=1)),
+                nn.Conv2d(4, cnn_channels, 3, stride=1)),
             nn.ReLU(),
             pufferlib.pytorch.layer_init(
                 nn.Conv2d(cnn_channels, cnn_channels, 3, stride = 1)),
@@ -430,7 +430,7 @@ class Go(nn.Module):
         if env.selfplay:
             obs_size = int(obs_size * 0.5)
 
-        self.grid_size = int(np.sqrt((obs_size-1)/2))
+        self.grid_size = int(np.sqrt((obs_size-1)/4))
         output_size = self.grid_size - 4
         cnn_flat_size = cnn_channels * output_size * output_size
         
@@ -453,11 +453,13 @@ class Go(nn.Module):
         return self.forward(x, state)
 
     def encode_observations(self, observations, state=None):
-        grid_size = int(np.sqrt((observations.shape[1] - 1) / 2))
-        full_board = grid_size * grid_size 
+        grid_size = int(np.sqrt((observations.shape[1] - 1) / 4))
+        full_board = grid_size * grid_size
         black_board = observations[:, :full_board].view(-1,1, grid_size,grid_size).float()
-        white_board = observations[:, full_board:-1].view(-1,1, grid_size, grid_size).float()
-        board_features = torch.cat([black_board, white_board],dim=1)
+        white_board = observations[:, full_board:full_board*2].view(-1,1, grid_size, grid_size).float()
+        past_black_board = observations[:, full_board*2:full_board*3].view(-1,1, grid_size,grid_size).float()
+        past_white_board = observations[:, full_board*3:full_board*4].view(-1,1, grid_size, grid_size).float()
+        board_features = torch.cat([black_board, white_board, past_black_board, past_white_board],dim=1)
         flat_feature1 = observations[:, -1].unsqueeze(1).float()
         # Pass board through cnn
         cnn_features = self.cnn(board_features)

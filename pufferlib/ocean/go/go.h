@@ -192,7 +192,7 @@ void free_allocated(CGo* env) {
 }
 
 void compute_observations(CGo* env) {
-    int obs_len = env->grid_size * env->grid_size * 2 + 1;
+    int obs_len = env->grid_size * env->grid_size * 4 + 1;
     for(int i = 0; i < 2; i++){
         int observation_indx=0;
         if(!env->selfplay && i==1) return;
@@ -221,6 +221,25 @@ void compute_observations(CGo* env) {
             }
             observation_indx++;
         }
+        for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
+            if(env->previous_board_state[i] == self ){
+                env->observations[offset + observation_indx] = 1.0;
+            }	
+            else {
+                env->observations[offset + observation_indx] = 0.0;
+            }
+            observation_indx++;
+        }
+        for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
+            if(env->previous_board_state[i] == opp ){
+                env->observations[offset + observation_indx] = 1.0;
+            }	
+            else {
+                env->observations[offset + observation_indx] = 0.0;
+            }
+            observation_indx++;
+        }
+
         float color = self - 1;
         env->observations[offset + observation_indx] = color;
     }
