@@ -165,8 +165,14 @@ void init(CGo* env) {
 
 void allocate(CGo* env) {
     init(env);
-    env->observations = (float*)calloc((env->grid_size)*(env->grid_size)*2 + 2, sizeof(float));
-    env->actions = (int*)calloc(1, sizeof(int));
+    if(env->selfplay){
+        env->observations = (float*)calloc(2*((env->grid_size)*(env->grid_size)*4 +1), sizeof(float));
+        env->actions = (int*)calloc(2, sizeof(int));
+    } else{
+        env->observations = (float*)calloc((env->grid_size)*(env->grid_size)*4 +1, sizeof(float));
+        env->actions = (int*)calloc(1, sizeof(int));
+    }
+    env->actions = (int*)calloc(2, sizeof(int));
     env->rewards = (float*)calloc(1, sizeof(float));
     env->terminals = (unsigned char*)calloc(1, sizeof(unsigned char));
 }
@@ -193,57 +199,42 @@ void free_allocated(CGo* env) {
 
 void compute_observations(CGo* env) {
     int obs_len = env->grid_size * env->grid_size * 4 + 1;
-    for(int i = 0; i < 2; i++){
-        int observation_indx=0;
-        if(!env->selfplay && i==1) return;
-        int offset = i * obs_len;
-        int self = env->side;
-        int opp = 3 - self;
-        if(i == 1){
+    int N = env->grid_size * env->grid_size;
+    int iterations = env->selfplay ? 2 : 1;
+
+    for(int i = 0; i < iterations; i++){
+        float* current_obs = env->observations + (i * obs_len);
+        
+        int self, opp;
+        if (i == 0) {
+            self = env->side;
+            opp = 3 - self;
+        } else {
+            // Flip perspective for selfplay
             self = 3 - env->side;
             opp = env->side;
         }
-        for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
-            if(env->board_states[i] == self ){
-                env->observations[offset + observation_indx] = 1.0;
-            }	
-            else {
-                env->observations[offset + observation_indx] = 0.0;
-            }
-            observation_indx++;
-        }
-        for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
-            if(env->board_states[i] == opp ){
-                env->observations[offset + observation_indx] = 1.0;
-            }	
-            else {
-                env->observations[offset + observation_indx] = 0.0;
-            }
-            observation_indx++;
-        }
-        for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
-            if(env->previous_board_state[i] == self ){
-                env->observations[offset + observation_indx] = 1.0;
-            }	
-            else {
-                env->observations[offset + observation_indx] = 0.0;
-            }
-            observation_indx++;
-        }
-        for (int i = 0; i < (env->grid_size)*(env->grid_size); i++) {
-            if(env->previous_board_state[i] == opp ){
-                env->observations[offset + observation_indx] = 1.0;
-            }	
-            else {
-                env->observations[offset + observation_indx] = 0.0;
-            }
-            observation_indx++;
+
+        // Memory Layout: [Current Self][Current Opp][Prev Self][Prev Opp]
+        float* plane_self      = current_obs;
+        float* plane_opp       = current_obs + N;
+        float* plane_prev_self = current_obs + (2 * N);
+        float* plane_prev_opp  = current_obs + (3 * N);
+
+        for (int idx = 0; idx < N; idx++) {
+            int val = env->board_states[idx];
+            int prev_val = env->previous_board_state[idx];
+
+            plane_self[idx]      = (float)(val == self);
+            plane_opp[idx]       = (float)(val == opp);
+            
+            plane_prev_self[idx] = (float)(prev_val == self);
+            plane_prev_opp[idx]  = (float)(prev_val == opp);
         }
 
-        float color = self - 1;
-        env->observations[offset + observation_indx] = color;
-    }
-
+        // Set the color bit at the very end
+        current_obs[4 * N] = (float)(self - 1);
+    } 
 }
 
 int is_valid_position(CGo* env, int x, int y) {

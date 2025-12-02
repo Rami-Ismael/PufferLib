@@ -203,17 +203,20 @@ void performance_test() {
         .grid_square_size = 600/9,
         .moves_made = 0,
         .komi = 7.5,
-	.reward_move_pass = -0.25,
-	.reward_move_invalid = -0.1,
-	.reward_move_valid = 0.1
+        .selfplay = 0,
+        .reward_move_pass = -0.25,
+        .reward_move_invalid = -0.1,
+        .reward_move_valid = 0.1
     };
     allocate(&env);
+    printf("allocate\n");
     c_reset(&env);
-
+    printf("reset\n");
     long start = time(NULL);
     int i = 0;
     while (time(NULL) - start < test_time) {
         env.actions[0] = rand() % (env.grid_size)*(env.grid_size);
+        env.actions[1] = rand() % (env.grid_size)*(env.grid_size);
         c_step(&env);
         i++;
     }
@@ -223,7 +226,7 @@ void performance_test() {
 }
 
 int main() {
-    demo(7);
-    // performance_test();
+    //demo(7);
+     performance_test();
     return 0;
 }
