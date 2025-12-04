@@ -20,6 +20,7 @@ static int my_init(Env* env, PyObject* args, PyObject* kwargs) {
     env->reward_player_capture = unpack(kwargs, "reward_player_capture");
     env->reward_opponent_capture = unpack(kwargs, "reward_opponent_capture");
     env->selfplay = unpack(kwargs, "selfplay");    
+    env->human_play = unpack(kwargs, "human_play");
     init(env);
     return 0;
 }

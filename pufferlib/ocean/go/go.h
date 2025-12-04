@@ -103,6 +103,7 @@ struct CGo {
     int illegal_move_count;
     int pass_move_count;
     int previous_move;
+    int human_play;
 };
 
 void add_log(CGo* env) {
@@ -741,14 +742,21 @@ void c_step(CGo* env) {
     int action;
     int bot_side = 3 - env->side; 
     int is_legal = 0;
+    if(env->human_play){
+        human_play(env);
+    }
     if(env->selfplay){
         action = (env->turn +1 == env->side) ? (int)env->actions[0] : (int)env->actions[1];
     } else {
         action = (int)env->actions[0];
     }
+    if(action == -1){
+        compute_observations(env);
+        return;
+    }
     // useful for training , can prob be a hyper param. Recommend to increase with larger board size
     float max_moves = 3 * env->grid_size * env->grid_size;
-    if (env->tick > max_moves) {
+    if (env->tick > max_moves && !env->human_play) {
          env->terminals[0] = 1;
          end_game(env);
          compute_observations(env);
@@ -831,6 +839,49 @@ Client* make_client(int width, int height) {
     InitWindow(width, height, "PufferLib Ray Go");
     SetTargetFPS(10);
     return client;
+}
+
+void human_play(CGo* env){
+    int indx=1;
+    if(!env->selfplay || !env->human_play){
+        return;
+    }
+    if(env->selfplay && env->turn + 1 != env->side){
+        env->actions[indx] = -1;
+    }
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        Vector2 mousePos = GetMousePosition();
+
+        // Calculate the offset for the board
+        int boardOffsetX = env->grid_square_size;
+        int boardOffsetY = env->grid_square_size;
+        
+        // Adjust mouse position relative to the board
+        int relativeX = mousePos.x - boardOffsetX;
+        int relativeY = mousePos.y - boardOffsetY;
+        
+        // Calculate cell indices for the corners
+        int cellX = (relativeX + env->grid_square_size / 2) / env->grid_square_size;
+        int cellY = (relativeY + env->grid_square_size / 2) / env->grid_square_size;
+        
+        // Ensure the click is within the game board
+        if (cellX >= 0 && cellX <= env->grid_size && cellY >= 0 && cellY <= env->grid_size) {
+            // Calculate the point index (1-19) based on the click position
+            int pointIndex = cellY * (env->grid_size) + cellX + 1; 
+            env->actions[indx] = (unsigned short)pointIndex;
+        }
+        // Check if pass button is clicked
+        int passButtonX = env->width - 300;
+        int passButtonY = 200;
+        int passButtonWidth = 100;
+        int passButtonHeight = 50;
+
+        if (mousePos.x >= passButtonX && mousePos.x <= passButtonX + passButtonWidth &&
+            mousePos.y >= passButtonY && mousePos.y <= passButtonY + passButtonHeight) {
+            env->actions[indx] = 0; // Send action 0 for pass
+        }
+    }
+
 }
 
 void c_render(CGo* env) {
