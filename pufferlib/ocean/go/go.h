@@ -24,6 +24,8 @@ struct Log {
     float illegal_move_count;
     float legal_move_count;
     float pass_move_count;
+    float white_wins;
+    float black_wins;
 };
 
 typedef struct Group Group;
@@ -109,21 +111,34 @@ void add_log(CGo* env) {
     env->log.episode_length += env->tick;
     
     // Calculate perf as a win rate (1.0 if win, 0.0 if loss)
-    float win_value = 0.0;
-    if (env->score > 0) {
-        win_value = 1.0; // Win
+    float win_value = (env->score > 0) ? 1.0f : (env->score < 0) ? 0.0f : 0.5f;
+    float black_win = 0.0;
+    float white_win = 0.0;
+    if(env->score > 0){
+        if(env->side == 1){
+            black_win = 1.0;
+        }
+        else{
+            white_win = 1.0;
+        }
     }
-    else if (env->score < 0) {
-        win_value = 0.0; // Loss
-    }
-    else {
-        win_value = 0.5; // Tie
+    else if (env->score < 0){
+        if(env->side == 1){
+            white_win = 1.0;
+        }
+        else{
+            black_win = 1.0; 
+        }
+    } else {
+        black_win = 0.5;
+        white_win = 0.5;
     }
     env->log.illegal_move_count += env->illegal_move_count;
     env->log.legal_move_count += env->legal_move_count;
     env->log.pass_move_count += env->pass_move_count;
-    env->log.perf = (env->log.perf * env->log.n + win_value) / (env->log.n + 1.0);
-    
+    env->log.perf += win_value;
+    env->log.black_wins += black_win;
+    env->log.white_wins += white_win;
     env->log.score += env->score;
     env->log.episode_return += env->rewards[0];
     env->log.n += 1.0;
@@ -788,7 +803,7 @@ void c_step(CGo* env) {
             env->moves_made++;
             if(env->turn + 1 == env->side){
                 env->legal_move_count +=1;
-                env->rewards[0] = env->reward_move_valid;
+                env->rewards[0] += env->reward_move_valid;
                 env->log.episode_return += env->reward_move_valid;
             }
         } else {

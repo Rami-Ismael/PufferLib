@@ -432,7 +432,7 @@ class Go(nn.Module):
 
         self.grid_size = int(np.sqrt((obs_size-1)/4))
         cnn_flat_size = cnn_channels * self.grid_size * self.grid_size
-        
+        self.current_mask = None 
         
         self.proj = pufferlib.pytorch.layer_init(nn.Linear(cnn_flat_size, hidden_size))
 
@@ -456,6 +456,7 @@ class Go(nn.Module):
         batch_size = observations.shape[0]
         board_data = observations[:, :-1]
         boards = board_data.view(batch_size, 4, N, N)
+        self.current_mask = (boards[:, 0] + boards[:, 1]) > 0
         color_bit = observations[:,-1].view(batch_size, 1, 1, 1)
         color_plane = color_bit.expand(batch_size, 1 , N, N)
         x = torch.cat([boards, color_plane], dim=1)
@@ -466,8 +467,11 @@ class Go(nn.Module):
         return x
 
     def decode_actions(self, flat_hidden, state=None):
+        full_board = self.grid_size * self.grid_size
         value = self.value_fn(flat_hidden)
         action = self.actor(flat_hidden)
+        illegal = self.current_mask.view(flat_hidden.shape[0], -1)
+        action[:, 1:].masked_fill_(illegal, -1e9)
         return action, value
     
 class MOBA(nn.Module):
