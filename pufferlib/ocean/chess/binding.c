@@ -24,7 +24,9 @@ static int my_init(Env *env, PyObject *args, PyObject *kwargs) {
     env->reward_repetition = 0.0f;
     env->client = NULL;
     env->render_fps = 30;
+    env->selfplay = 1;
     env->human_play = 0;
+    env->human_color = -1;
     env->fen_curriculum = NULL;
     env->num_fens = 0;
     strcpy(env->starting_fen, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -103,9 +105,19 @@ static int my_init(Env *env, PyObject *args, PyObject *kwargs) {
             env->render_fps = (int)PyLong_AsLong(fps_obj);
         }
 
+        PyObject* selfplay_obj = PyDict_GetItemString(kwargs, "selfplay");
+        if (selfplay_obj != NULL && PyLong_Check(selfplay_obj)) {
+            env->selfplay = (int)PyLong_AsLong(selfplay_obj);
+        }
+
         PyObject* human_obj = PyDict_GetItemString(kwargs, "human_play");
         if (human_obj != NULL && PyLong_Check(human_obj)) {
             env->human_play = (int)PyLong_AsLong(human_obj);
+        }
+
+        PyObject* learner_color_obj = PyDict_GetItemString(kwargs, "learner_color");
+        if (learner_color_obj != NULL && PyLong_Check(learner_color_obj)) {
+            env->learner_color = (int)PyLong_AsLong(learner_color_obj);
         }
 
         env->enable_50_move_rule = 1;
