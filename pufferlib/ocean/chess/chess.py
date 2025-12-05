@@ -10,19 +10,21 @@ class Chess(pufferlib.PufferEnv):
                  reward_invalid_piece=-0.01, reward_invalid_move=-0.01, 
                  reward_valid_piece=0.0, reward_valid_move=0.0,
                  reward_material=0.0, reward_position=0.0, reward_castling=0.0, reward_repetition=0.0,
-                 render_fps=30, human_play=0,
+                 render_fps=30, selfplay=1, human_play=0,
                  starting_fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
                  multi_fen=False,
                  enable_50_move_rule=1, enable_threefold_repetition=1):
         
-        self.single_observation_space = gymnasium.spaces.Box(
-            low=0, high=255, shape=(1077*2,), dtype=np.uint8)
-        self.single_action_space = gymnasium.spaces.Discrete(96)
         self.render_mode = render_mode
         self.num_agents = num_envs
         self.log_interval = log_interval
         self.tick = 0
-        self.selfplay = 1
+        self.selfplay = selfplay
+        
+        factor = 2 if selfplay else 1
+        self.single_observation_space = gymnasium.spaces.Box(
+            low=0, high=255, shape=(1077*factor,), dtype=np.uint8)
+        self.single_action_space = gymnasium.spaces.Discrete(96)
         
         fen_curriculum = None
         if str(multi_fen).lower() in ('true', '1', 'yes'):
@@ -41,8 +43,6 @@ class Chess(pufferlib.PufferEnv):
         
         if self.selfplay:
             self.actions = np.zeros(num_envs * 2, dtype=np.int32)
-
-        factor = 2 if self.selfplay else 1
         c_envs = []
         for i in range(num_envs):
             c_envs.append(binding.env_init(
@@ -63,11 +63,13 @@ class Chess(pufferlib.PufferEnv):
                 reward_castling=reward_castling,
                 reward_repetition=reward_repetition,
                 render_fps=render_fps,
+                selfplay=selfplay,
                 human_play=human_play,
                 starting_fen=starting_fen,
                 fen_curriculum=fen_curriculum,
                 enable_50_move_rule=enable_50_move_rule,
                 enable_threefold_repetition=enable_threefold_repetition,
+                learner_color=i % 2,
                 seed=seed + i
             ))
         self.c_envs = binding.vectorize(*c_envs)
