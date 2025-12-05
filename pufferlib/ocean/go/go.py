@@ -28,6 +28,7 @@ class Go(pufferlib.PufferEnv):
             reward_player_capture = 0.25,
             reward_opponent_capture = -0.25,
             selfplay = 0,
+            human_play = 0,
             buf = None, seed=0):
 
         # env
@@ -72,7 +73,8 @@ class Go(pufferlib.PufferEnv):
                 reward_player_capture = reward_player_capture,
                 reward_opponent_capture = reward_opponent_capture,
                 side = (i % 2) + 1,
-                selfplay = selfplay
+                selfplay = selfplay,
+                human_play = human_play
             ))
         self.c_envs = binding.vectorize(*c_envs)
 
