@@ -330,14 +330,16 @@ void compute_score_tromp_taylor(CGo* env) {
                 }
                 
                 int npos = ny * env->grid_size + nx;
-                
-                if (env->board_states[npos] == 0 && !env->visited[npos]) {
+                int neighbor_color = env->board_states[npos];
+                if (neighbor_color ==0) {
                     // Add unvisited empty points to queue
-                    queue[rear++] = npos;
-                    env->visited[npos] = 1;
+                    if(!env->visited[npos]) {
+                        queue[rear++] = npos;
+                        env->visited[npos] = 1;
+                    }
                 } else if (bordering_player == 0) {
-                    bordering_player = env->board_states[npos];
-                } else if (bordering_player != env->board_states[npos]) {
+                    bordering_player = neighbor_color;
+                } else if (bordering_player != neighbor_color) {
                     bordering_player = 3;  // Mixed territory
                 }
             }
