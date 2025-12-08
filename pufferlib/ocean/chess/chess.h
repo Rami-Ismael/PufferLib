@@ -121,274 +121,6 @@ enum {
 #define Rank7BB (Rank1BB << 48)
 #define Rank8BB (Rank1BB << 56)
 
-extern Bitboard SquareBB[65];
-extern Bitboard FileBB[8];
-extern Bitboard RankBB[8];
-extern Bitboard PawnAttacks[2][64];
-extern Bitboard KnightAttacks[64];
-extern Bitboard KingAttacks[64];
-extern Bitboard BetweenBB[64][64];
-extern Bitboard LineBB[64][64];
-
-extern Bitboard rook_file_attacks[8][256];
-extern Bitboard rook_rank_attacks[8][256];
-
-typedef struct {
-    Key psq[16][64];
-    Key enpassant[8];
-    Key castling[16];
-    Key side;
-} Zobrist;
-
-extern Zobrist zob;
-
-typedef struct {
-    Bitboard byTypeBB[7];    // [0]=all, [1-6]=PAWN,KNIGHT,BISHOP,ROOK,QUEEN,KING
-    Bitboard byColorBB[2];
-    uint8_t board[64];
-    uint8_t pieceCount[16];
-    ChessColor sideToMove;
-    uint8_t castlingRights;
-    uint8_t epSquare;
-    uint8_t rule50;
-    uint16_t gamePly;
-    Key key;
-    int16_t materialScore;
-    int16_t psqtScore;
-    int16_t cachedEval;
-    uint8_t evalValid;
-} Position;
-
-typedef struct {
-    Move move;
-    int16_t value;
-} ExtMove;
-
-typedef struct {
-    ExtMove moves[256];
-    int count;
-} MoveList;
-
-enum {
-    O_BOARD = 0,
-    O_SIDE = 768,
-    O_CASTLE = 770,
-    O_EP = 786,
-    O_PICK_PHASE = 851,
-    O_SELECTED_PIECE = 853,
-    O_VALID_PIECES = 917,
-    O_VALID_DESTS = 981,
-    O_VALID_PROMOS = 1045,
-    OBS_SIZE = 1077
-};
-
-
-typedef struct {
-    float perf;
-    float score;
-    float draw_rate;
-    float timeout_rate;
-    float chess_moves;          // Average chess moves per game
-    float episode_length;       // Average episode length in ticks (2-phase system)
-    float episode_return;
-    float invalid_action_rate;
-    float game_length_score;    
-    float n;
-} Log;
-
-typedef struct {
-    Texture2D pieces;
-    int cell_size;
-} Client;
-
-typedef struct {
-    Piece captured;
-    uint8_t castlingRights;
-    uint8_t epSquare;
-    uint8_t rule50;
-    int16_t materialScore;
-    int16_t psqtScore;
-    Key key;
-    uint8_t pliesFromNull;
-} UndoInfo;
-
-typedef struct {
-    Log log;
-    Client* client;
-    uint8_t* observations;
-    int* actions;
-    float* rewards;
-    unsigned char* terminals;
-    
-    Position pos;
-    MoveList legal_moves;
-    ChessColor legal_moves_side;
-    Key legal_moves_key;
-    int game_result;
-    int tick;
-    int chess_moves;
-    int max_moves;
-    float reward_draw;
-    int render_fps;
-    int human_play;
-    
-    char starting_fen[128];
-    char** fen_curriculum;
-    int num_fens;
-    
-    UndoInfo undo_stack[MAX_GAME_PLIES];
-    int undo_stack_ptr;
-    
-    int invalid_actions_this_episode;
-    
-    int pick_phase[2];
-    Square selected_square[2];
-    MoveList valid_destinations[2];
-    float reward_invalid_piece;
-    float reward_invalid_move;
-    float reward_valid_piece;
-    float reward_valid_move;
-    float reward_material;
-    float reward_position;  // PST-based positional reward
-    float reward_castling;
-    float reward_repetition;
-    
-    int enable_50_move_rule;
-    int enable_threefold_repetition;
-    
-    int learner_color; // 0 for White, 1 for Black
-    
-    float white_score;
-    float black_score;
-    char last_result[32];
-} Chess;
-
-
-static inline Bitboard sq_bb(Square s) {
-    return SquareBB[s];
-}
-
-static inline int popcount(Bitboard b) {
-    return __builtin_popcountll(b);
-}
-
-static inline Square lsb(Bitboard b) {
-    assert(b);
-    return __builtin_ctzll(b);
-}
-
-static inline Square pop_lsb(Bitboard* b) {
-    Square s = lsb(*b);
-    *b &= *b - 1;
-    return s;
-}
-
-static inline bool more_than_one(Bitboard b) {
-    return b & (b - 1);
-}
-
-static inline Bitboard shift_bb(int Direction, Bitboard b) {
-    return Direction == NORTH ? b << 8
-         : Direction == SOUTH ? b >> 8
-         : Direction == EAST ? (b & ~FileHBB) << 1
-         : Direction == WEST ? (b & ~FileABB) >> 1
-         : Direction == NORTH_EAST ? (b & ~FileHBB) << 9
-         : Direction == SOUTH_EAST ? (b & ~FileHBB) >> 7
-         : Direction == NORTH_WEST ? (b & ~FileABB) << 7
-         : Direction == SOUTH_WEST ? (b & ~FileABB) >> 9
-         : 0;
-}
-
-static inline Bitboard pawn_attacks_bb(ChessColor c, Square s) {
-    return PawnAttacks[c][s];
-}
-
-static inline Bitboard knight_attacks_bb(Square s) {
-    return KnightAttacks[s];
-}
-
-static inline Bitboard king_attacks_bb(Square s) {
-    return KingAttacks[s];
-}
-
-
-static inline Bitboard rook_attacks_bb(Square s, Bitboard occupied) {
-    Bitboard attacks = 0;
-    int r = rank_of(s), f = file_of(s);
-    for (int rr = r + 1; rr < 8; rr++) {
-        Square sq = make_square(f, rr);
-        attacks |= sq_bb(sq);
-        if (occupied & sq_bb(sq)) break;
-    }
-    for (int rr = r - 1; rr >= 0; rr--) {
-        Square sq = make_square(f, rr);
-        attacks |= sq_bb(sq);
-        if (occupied & sq_bb(sq)) break;
-    }
-    for (int ff = f + 1; ff < 8; ff++) {
-        Square sq = make_square(ff, r);
-        attacks |= sq_bb(sq);
-        if (occupied & sq_bb(sq)) break;
-    }
-    for (int ff = f - 1; ff >= 0; ff--) {
-        Square sq = make_square(ff, r);
-        attacks |= sq_bb(sq);
-        if (occupied & sq_bb(sq)) break;
-    }
-    return attacks;
-}
-
-static inline Bitboard bishop_attacks_bb(Square s, Bitboard occupied) {
-    Bitboard attacks = 0;
-    int r = rank_of(s), f = file_of(s);
-    for (int rr = r + 1, ff = f + 1; rr < 8 && ff < 8; rr++, ff++) {
-        Square sq = make_square(ff, rr);
-        attacks |= sq_bb(sq);
-        if (occupied & sq_bb(sq)) break;
-    }
-    for (int rr = r - 1, ff = f + 1; rr >= 0 && ff < 8; rr--, ff++) {
-        Square sq = make_square(ff, rr);
-        attacks |= sq_bb(sq);
-        if (occupied & sq_bb(sq)) break;
-    }
-    for (int rr = r - 1, ff = f - 1; rr >= 0 && ff >= 0; rr--, ff--) {
-        Square sq = make_square(ff, rr);
-        attacks |= sq_bb(sq);
-        if (occupied & sq_bb(sq)) break;
-    }
-    for (int rr = r + 1, ff = f - 1; rr < 8 && ff >= 0; rr++, ff--) {
-        Square sq = make_square(ff, rr);
-        attacks |= sq_bb(sq);
-        if (occupied & sq_bb(sq)) break;
-    }
-    return attacks;
-}
-
-static inline Bitboard queen_attacks_bb(Square s, Bitboard occupied) {
-    return rook_attacks_bb(s, occupied) | bishop_attacks_bb(s, occupied);
-}
-
-
-void init_bitboards(void);
-void pos_set(Position* pos, const char* fen);
-void pos_set_startpos(Position* pos);
-
-void generate_legal(Position* pos, MoveList* ml, UndoInfo* undo_stack, int* undo_stack_ptr);
-
-void do_move(Position* pos, Move m, UndoInfo* undo_stack, int* undo_stack_ptr);
-void undo_move(Position* pos, Move m, UndoInfo* undo_stack, int* undo_stack_ptr);
-
-bool is_check(Position* pos, ChessColor c);
-bool is_draw_with_history(Position* pos, UndoInfo* undo_stack, int undo_stack_ptr);
-
-uint64_t perft(Position* pos, int depth);
-
-void populate_observations(Chess* env);
-void c_reset(Chess* env);
-void c_step(Chess* env);
-void c_render(Chess* env);
-void c_close(Chess* env);
-
 static const char* PIECE_CHARS[] = {
     "",
     "P", "N", "B", "R", "Q", "K",
@@ -397,18 +129,6 @@ static const char* PIECE_CHARS[] = {
 };
 
 static const int PIECE_VALUES_CP[7] = {0, 100, 320, 330, 500, 900, 0};
-
-Bitboard SquareBB[65];
-Bitboard FileBB[8];
-Bitboard RankBB[8];
-Bitboard PawnAttacks[2][64];
-Bitboard KnightAttacks[64];
-Bitboard KingAttacks[64];
-Bitboard BetweenBB[64][64];
-Bitboard LineBB[64][64];
-Zobrist zob;
-
-static bool bitboards_initialized = false;
 
 // Piece-Square Tables (numbers calculated from Stockfish)
 static inline int mirror_file(int file) {
@@ -547,7 +267,6 @@ static const int KingPST_EG[64] = {
     5, 60, 75, 75, 75, 75, 60,  5
 };
 
-
 static uint64_t prng_state = 1070372;
 static inline uint64_t prng_rand(void) {
     prng_state ^= prng_state >> 12;
@@ -555,6 +274,270 @@ static inline uint64_t prng_rand(void) {
     prng_state ^= prng_state >> 27;
     return prng_state * 2685821657736338717ULL;
 }
+
+extern Bitboard SquareBB[65];
+extern Bitboard FileBB[8];
+extern Bitboard RankBB[8];
+extern Bitboard PawnAttacks[2][64];
+extern Bitboard KnightAttacks[64];
+extern Bitboard KingAttacks[64];
+extern Bitboard BetweenBB[64][64];
+extern Bitboard LineBB[64][64];
+
+extern Bitboard rook_file_attacks[8][256];
+extern Bitboard rook_rank_attacks[8][256];
+
+typedef struct {
+    Key psq[16][64];
+    Key enpassant[8];
+    Key castling[16];
+    Key side;
+} Zobrist;
+
+extern Zobrist zob;
+
+typedef struct {
+    Bitboard byTypeBB[7];    // [0]=all, [1-6]=PAWN,KNIGHT,BISHOP,ROOK,QUEEN,KING
+    Bitboard byColorBB[2];
+    uint8_t board[64];
+    uint8_t pieceCount[16];
+    ChessColor sideToMove;
+    uint8_t castlingRights;
+    uint8_t epSquare;
+    uint8_t rule50;
+    uint16_t gamePly;
+    Key key;
+    int16_t materialScore;
+    int16_t psqtScore;
+    int16_t cachedEval;
+    uint8_t evalValid;
+} Position;
+
+typedef struct {
+    Move move;
+    int16_t value;
+} ExtMove;
+
+typedef struct {
+    ExtMove moves[256];
+    int count;
+} MoveList;
+
+enum {
+    O_BOARD = 0,
+    O_SIDE = 768,
+    O_CASTLE = 770,
+    O_EP = 786,
+    O_PICK_PHASE = 851,
+    O_SELECTED_PIECE = 853,
+    O_VALID_PIECES = 917,
+    O_VALID_DESTS = 981,
+    O_VALID_PROMOS = 1045,
+    OBS_SIZE = 1077
+};
+
+
+typedef struct {
+    float perf;
+    float score;
+    float draw_rate;
+    float timeout_rate;
+    float chess_moves;          // Average chess moves per game
+    float episode_length;       // Average episode length in ticks (2-phase system)
+    float episode_return;
+    float invalid_action_rate;
+    float game_length_score;    
+    float n;
+} Log;
+
+typedef struct {
+    Texture2D pieces;
+    int cell_size;
+} Client;
+
+typedef struct {
+    Piece captured;
+    uint8_t castlingRights;
+    uint8_t epSquare;
+    uint8_t rule50;
+    int16_t materialScore;
+    int16_t psqtScore;
+    Key key;
+    uint8_t pliesFromNull;
+} UndoInfo;
+
+typedef struct {
+    Log log;
+    Client* client;
+    uint8_t* observations;
+    int* actions;
+    float* rewards;
+    unsigned char* terminals;
+    
+    Position pos;
+    MoveList legal_moves;
+    ChessColor legal_moves_side;
+    Key legal_moves_key;
+    int game_result;
+    int tick;
+    int chess_moves;
+    int max_moves;
+    float reward_draw;
+    int render_fps;
+    int selfplay;
+    int human_play;
+    
+    char starting_fen[128];
+    char** fen_curriculum;
+    int num_fens;
+    
+    UndoInfo undo_stack[MAX_GAME_PLIES];
+    int undo_stack_ptr;
+    
+    int invalid_actions_this_episode;
+    
+    int pick_phase[2];
+    Square selected_square[2];
+    MoveList valid_destinations[2];
+    float reward_invalid_piece;
+    float reward_invalid_move;
+    float reward_valid_piece;
+    float reward_valid_move;
+    float reward_material;
+    float reward_position;  // PST-based positional reward
+    float reward_castling;
+    float reward_repetition;
+    
+    int enable_50_move_rule;
+    int enable_threefold_repetition;
+    
+    int learner_color; // 0 for White, 1 for Black
+    int human_color;
+    float white_score;
+    float black_score;
+    float learner_wins;
+    float learner_losses; 
+    float learner_draws;
+    char last_result[32];
+} Chess;
+
+
+static inline Bitboard sq_bb(Square s) {
+    return SquareBB[s];
+}
+
+static inline int popcount(Bitboard b) {
+    return __builtin_popcountll(b);
+}
+
+static inline Square lsb(Bitboard b) {
+    assert(b);
+    return __builtin_ctzll(b);
+}
+
+static inline Square pop_lsb(Bitboard* b) {
+    Square s = lsb(*b);
+    *b &= *b - 1;
+    return s;
+}
+
+static inline bool more_than_one(Bitboard b) {
+    return b & (b - 1);
+}
+
+static inline Bitboard shift_bb(int Direction, Bitboard b) {
+    return Direction == NORTH ? b << 8
+         : Direction == SOUTH ? b >> 8
+         : Direction == EAST ? (b & ~FileHBB) << 1
+         : Direction == WEST ? (b & ~FileABB) >> 1
+         : Direction == NORTH_EAST ? (b & ~FileHBB) << 9
+         : Direction == SOUTH_EAST ? (b & ~FileHBB) >> 7
+         : Direction == NORTH_WEST ? (b & ~FileABB) << 7
+         : Direction == SOUTH_WEST ? (b & ~FileABB) >> 9
+         : 0;
+}
+
+static inline Bitboard pawn_attacks_bb(ChessColor c, Square s) {
+    return PawnAttacks[c][s];
+}
+
+static inline Bitboard knight_attacks_bb(Square s) {
+    return KnightAttacks[s];
+}
+
+static inline Bitboard king_attacks_bb(Square s) {
+    return KingAttacks[s];
+}
+
+
+static inline Bitboard rook_attacks_bb(Square s, Bitboard occupied) {
+    Bitboard attacks = 0;
+    int r = rank_of(s), f = file_of(s);
+    for (int rr = r + 1; rr < 8; rr++) {
+        Square sq = make_square(f, rr);
+        attacks |= sq_bb(sq);
+        if (occupied & sq_bb(sq)) break;
+    }
+    for (int rr = r - 1; rr >= 0; rr--) {
+        Square sq = make_square(f, rr);
+        attacks |= sq_bb(sq);
+        if (occupied & sq_bb(sq)) break;
+    }
+    for (int ff = f + 1; ff < 8; ff++) {
+        Square sq = make_square(ff, r);
+        attacks |= sq_bb(sq);
+        if (occupied & sq_bb(sq)) break;
+    }
+    for (int ff = f - 1; ff >= 0; ff--) {
+        Square sq = make_square(ff, r);
+        attacks |= sq_bb(sq);
+        if (occupied & sq_bb(sq)) break;
+    }
+    return attacks;
+}
+
+static inline Bitboard bishop_attacks_bb(Square s, Bitboard occupied) {
+    Bitboard attacks = 0;
+    int r = rank_of(s), f = file_of(s);
+    for (int rr = r + 1, ff = f + 1; rr < 8 && ff < 8; rr++, ff++) {
+        Square sq = make_square(ff, rr);
+        attacks |= sq_bb(sq);
+        if (occupied & sq_bb(sq)) break;
+    }
+    for (int rr = r - 1, ff = f + 1; rr >= 0 && ff < 8; rr--, ff++) {
+        Square sq = make_square(ff, rr);
+        attacks |= sq_bb(sq);
+        if (occupied & sq_bb(sq)) break;
+    }
+    for (int rr = r - 1, ff = f - 1; rr >= 0 && ff >= 0; rr--, ff--) {
+        Square sq = make_square(ff, rr);
+        attacks |= sq_bb(sq);
+        if (occupied & sq_bb(sq)) break;
+    }
+    for (int rr = r + 1, ff = f - 1; rr < 8 && ff >= 0; rr++, ff--) {
+        Square sq = make_square(ff, rr);
+        attacks |= sq_bb(sq);
+        if (occupied & sq_bb(sq)) break;
+    }
+    return attacks;
+}
+
+static inline Bitboard queen_attacks_bb(Square s, Bitboard occupied) {
+    return rook_attacks_bb(s, occupied) | bishop_attacks_bb(s, occupied);
+}
+
+
+Bitboard SquareBB[65];
+Bitboard FileBB[8];
+Bitboard RankBB[8];
+Bitboard PawnAttacks[2][64];
+Bitboard KnightAttacks[64];
+Bitboard KingAttacks[64];
+Bitboard BetweenBB[64][64];
+Bitboard LineBB[64][64];
+Zobrist zob;
+
+static bool bitboards_initialized = false;
 
 void init_bitboards(void) {
     if (bitboards_initialized) return;
@@ -1473,12 +1456,14 @@ void populate_observations(Chess* env) {
     uint8_t* obs = env->observations;
     Position* pos = &env->pos;
     
-    for (int player = 0; player < 2; player++) {
+    int num_players = env->selfplay ? 2 : 1;
+    for (int player_iter = 0; player_iter < num_players; player_iter++) {
+        int player = env->selfplay ? player_iter : env->learner_color;
         int buffer_idx;
-        if (env->learner_color == CHESS_WHITE) {
-            buffer_idx = player;
+        if (env->selfplay) {
+            buffer_idx = (env->learner_color == CHESS_WHITE) ? player_iter : (1 - player_iter);
         } else {
-            buffer_idx = 1 - player;
+            buffer_idx = 0;
         }
         
         uint8_t* player_obs = obs + (buffer_idx * OBS_SIZE);
@@ -1701,7 +1686,7 @@ void c_reset(Chess* env) {
     env->selected_square[1] = SQ_NONE;
     env->valid_destinations[0].count = 0;
     env->valid_destinations[1].count = 0;
-    env->learner_color = rand() % 2;
+    env->learner_color = 1 - env->learner_color;
     
     // Select starting position or curriculum
     if (env->num_fens > 0) {
@@ -1892,10 +1877,50 @@ void clip_rewards(Chess* env) {
     }
 }
 
+void human_play(Chess* env) {
+    if (!env->human_play) {
+        return;
+    }
+    
+    if (env->selfplay && env->human_play) {
+        fprintf(stderr, "FATAL: selfplay=1 AND human_play=1 is invalid configuration\n");
+        exit(1);
+    }
+    
+
+    if (env->human_color == -1) {
+        env->actions[0] = -1;
+        return;
+    }
+    
+    ChessColor current_side = env->pos.sideToMove;
+    if (current_side == env->human_color) {
+        env->actions[0] = -1;
+    }
+}
+
 void c_step(Chess* env) {
+    if (!env->selfplay && !env->human_play) {
+        fprintf(stderr, "FATAL: selfplay=0 AND human_play=0 is invalid configuration\n");
+        exit(1);
+    }
+    
+    env->rewards[0] = 0.0f;
+    env->terminals[0] = 0;
+    env->tick++;
+    
+    int action;
     if (env->human_play) {
-        env->rewards[0] = 0.0f;
-        env->terminals[0] = 0;
+        human_play(env);
+    }
+    if (env->selfplay) {
+        ChessColor current_side = env->pos.sideToMove;
+        action = (current_side == env->learner_color) ? env->actions[0] : env->actions[1];
+    } else {
+        action = env->actions[0];
+    }
+    
+    if (action == -1) {
         if (env->legal_moves_side != env->pos.sideToMove || env->legal_moves_key != env->pos.key) {
             generate_legal(&env->pos, &env->legal_moves, env->undo_stack, &env->undo_stack_ptr);
             env->legal_moves_side = env->pos.sideToMove;
@@ -1903,19 +1928,6 @@ void c_step(Chess* env) {
         }
         populate_observations(env);
         return;
-    }
-    
-    env->rewards[0] = 0.0f;
-    env->terminals[0] = 0;
-    env->tick++;
-    
-    int white_action, black_action;
-    if (env->learner_color == CHESS_WHITE) {
-        white_action = env->actions[0];
-        black_action = env->actions[1];
-    } else {
-        white_action = env->actions[1];
-        black_action = env->actions[0];
     }
 
     bool use_dense_rewards = (env->reward_material != 0.0f || env->reward_position != 0.0f);
@@ -1927,12 +1939,7 @@ void c_step(Chess* env) {
     
     ChessColor mover = env->pos.sideToMove;
     
-    bool move_completed = false;
-    if (mover == CHESS_WHITE) {
-        move_completed = process_player_action(env, white_action, CHESS_WHITE);
-    } else {
-        move_completed = process_player_action(env, black_action, CHESS_BLACK);
-    }
+    bool move_completed = process_player_action(env, action, mover);
     if (move_completed && use_dense_rewards) {
         int16_t mat_after = env->pos.materialScore;
         int16_t pst_after = env->pos.psqtScore;
@@ -1996,6 +2003,7 @@ void c_step(Chess* env) {
             
             env->white_score += 0.5f;
             env->black_score += 0.5f;
+            env->learner_draws += 1.0f;
             strcpy(env->last_result, "Draw");
         } else if (env->game_result == 1) {
             if (env->learner_color == CHESS_WHITE) {
@@ -2006,6 +2014,11 @@ void c_step(Chess* env) {
                 win_value = 1.0f;
             }
             env->black_score += 1.0f;
+            if (env->learner_color == CHESS_BLACK) {
+                env->learner_wins += 1.0f;
+            } else {
+                env->learner_losses += 1.0f;
+            }
             strcpy(env->last_result, "Black Wins");
             env->log.draw_rate += 0.0f;
         } else if (env->game_result == 2) {
@@ -2017,6 +2030,11 @@ void c_step(Chess* env) {
                 win_value = 0.0f;
             }
             env->white_score += 1.0f;
+            if (env->learner_color == CHESS_WHITE) {
+                env->learner_wins += 1.0f;
+            } else {
+                env->learner_losses += 1.0f;
+            }
             strcpy(env->last_result, "White Wins");
             env->log.draw_rate += 0.0f;
         }
@@ -2056,6 +2074,9 @@ void c_render(Chess* env) {
         
         env->white_score = 0.0f;
         env->black_score = 0.0f;
+        env->learner_wins = 0.0f;
+        env->learner_losses = 0.0f;
+        env->learner_draws = 0.0f;
         strcpy(env->last_result, "Game starting...");
     }
     
@@ -2064,21 +2085,61 @@ void c_render(Chess* env) {
         exit(0);
     }
     
+
+    if (env->human_play && env->human_color == -1) {
+        BeginDrawing();
+        ClearBackground((Color){40, 40, 40, 255});
+        
+        DrawText("Choose Your Color", 256 - 100, 200, 24, WHITE);
+        
+        int button_width = 120;
+        int button_height = 40;
+        int center_x = 256;
+        int white_y = 280;
+        int black_y = 340;
+        
+        Rectangle white_button = {center_x - button_width/2, white_y, button_width, button_height};
+        Rectangle black_button = {center_x - button_width/2, black_y, button_width, button_height};
+        
+        DrawRectangleRec(white_button, LIGHTGRAY);
+        DrawRectangleLinesEx(white_button, 2, BLACK);
+        DrawText("Play White", center_x - 45, white_y + 12, 18, BLACK);
+        
+        DrawRectangleRec(black_button, GRAY);
+        DrawRectangleLinesEx(black_button, 2, BLACK);
+        DrawText("Play Black", center_x - 45, black_y + 12, 18, WHITE);
+        
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            Vector2 mousePos = GetMousePosition();
+            if (CheckCollisionPointRec(mousePos, white_button)) {
+                env->human_color = CHESS_WHITE;
+                env->learner_color = CHESS_BLACK;
+            } else if (CheckCollisionPointRec(mousePos, black_button)) {
+                env->human_color = CHESS_BLACK;
+                env->learner_color = CHESS_WHITE;
+            }
+        }
+        
+        EndDrawing();
+        return;
+    }
+    
     // Speed controls
     static int paused = 0;
     static int frame_delay = 12;
     
     static int selected_sq = -1;
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+    if (env->human_play && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Vector2 mp = GetMousePosition();
         int file = (int)(mp.x) / cell_size;
         int rank = 7 - ((int)(mp.y) / cell_size);
         if (file >= 0 && file < 8 && rank >= 0 && rank < 8) {
             int clicked_sq = (int)make_square(file, rank);
             if (selected_sq == -1) {
-                if (env->pos.sideToMove == CHESS_WHITE) {
+
+                if (env->pos.sideToMove == env->human_color) {
                     Piece pc = piece_on(&env->pos, (Square)clicked_sq);
-                    if (pc != NO_PIECE && color_of(pc) == CHESS_WHITE) {
+                    if (pc != NO_PIECE && color_of(pc) == env->human_color) {
                         bool has_from = false;
                         for (int i = 0; i < env->legal_moves.count; i++) {
                             if ((int)from_sq(env->legal_moves.moves[i].move) == clicked_sq) { has_from = true; break; }
@@ -2095,8 +2156,12 @@ void c_render(Chess* env) {
                 if (chosen != MOVE_NONE) {
                     do_move(&env->pos, chosen, env->undo_stack, &env->undo_stack_ptr);
                     env->tick++;
+                    env->chess_moves++;
                     generate_legal(&env->pos, &env->legal_moves, env->undo_stack, &env->undo_stack_ptr);
                     env->legal_moves_side = env->pos.sideToMove;
+                    env->legal_moves_key = env->pos.key;
+                    env->actions[0] = -1;
+                    populate_observations(env);
                 }
                 selected_sq = -1;
             }
@@ -2158,6 +2223,11 @@ void c_render(Chess* env) {
     snprintf(score_text, sizeof(score_text), "White: %.1f  Black: %.1f", 
              env->white_score, env->black_score);
     DrawText(score_text, 10, scoreboard_y, 20, WHITE);
+    
+    char learner_text[128];
+    snprintf(learner_text, sizeof(learner_text), "Learner: %.0f-%.0f-%.0f (W-L-D)", 
+             env->learner_wins, env->learner_losses, env->learner_draws);
+    DrawText(learner_text, 10, scoreboard_y + 55, 16, GREEN);
     
     if (env->last_result[0] != '\0') {
         Color result_color = YELLOW;
@@ -2284,9 +2354,8 @@ void c_render(Chess* env) {
         }
         usleep(16000); 
     }
-    
 
-    if (frame_delay > 1) {
+    if (frame_delay > 1 && !(env->human_play && env->human_color != -1 && env->pos.sideToMove == env->human_color)) {
         usleep(frame_delay * 16000);
     }
 }
