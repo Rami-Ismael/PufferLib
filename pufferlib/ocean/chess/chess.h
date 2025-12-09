@@ -2173,7 +2173,7 @@ void c_render(Chess* env) {
     
     for (int rank = 0; rank < 8; rank++) {
         for (int file = 0; file < 8; file++) {
-            Color square_color = ((rank + file) % 2 == 0) 
+            Color square_color = ((rank + file) % 2 == 1) 
                 ? (Color){240, 217, 181, 255}
                 : (Color){181, 136, 99, 255};
             
