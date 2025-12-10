@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <math.h>
+#include <time.h>
 #include <unistd.h> 
 #include "raylib.h"
 
@@ -348,6 +349,7 @@ typedef struct {
     float invalid_action_rate;
     float game_length_score;    
     float n;
+    float total_games;          // Cumulative games (increments on terminal=1)
 } Log;
 
 typedef struct {
@@ -419,6 +421,11 @@ typedef struct {
     float learner_losses; 
     float learner_draws;
     char last_result[32];
+    
+    Move pgn_moves[MAX_GAME_PLIES];
+    int pgn_move_count;
+    int show_game_end_popup;
+    int reset_requested;
 } Chess;
 
 
@@ -1679,6 +1686,8 @@ void c_reset(Chess* env) {
     env->game_result = 0;
     env->undo_stack_ptr = 0;
     env->invalid_actions_this_episode = 0;
+    env->pgn_move_count = 0;
+    env->show_game_end_popup = 0;
     
     env->pick_phase[0] = 0;
     env->pick_phase[1] = 0;
@@ -1686,7 +1695,12 @@ void c_reset(Chess* env) {
     env->selected_square[1] = SQ_NONE;
     env->valid_destinations[0].count = 0;
     env->valid_destinations[1].count = 0;
-    env->learner_color = 1 - env->learner_color;
+    
+    if (env->human_play) {
+        env->human_color = -1;
+    } else {
+        env->learner_color = 1 - env->learner_color;
+    }
     
     // Select starting position or curriculum
     if (env->num_fens > 0) {
@@ -1845,6 +1859,10 @@ bool process_player_action(Chess* env, int action, ChessColor player) {
         env->rewards[0] += env->reward_castling;
     }
     
+    if (env->human_play && env->pgn_move_count < MAX_GAME_PLIES) {
+        env->pgn_moves[env->pgn_move_count++] = chosen_move;
+    }
+    
     do_move(&env->pos, chosen_move, env->undo_stack, &env->undo_stack_ptr);
     
     if (env->undo_stack_ptr > 0 && env->undo_stack[env->undo_stack_ptr - 1].pliesFromNull > 99) {
@@ -1981,6 +1999,7 @@ void c_step(Chess* env) {
         env->log.score = env->log.perf + 0.2f * env->log.game_length_score - 0.1f * avg_draw_rate;
         
         env->log.n += 1.0f;
+        env->log.total_games += 1.0f;
         c_reset(env);
         return;
     }
@@ -2053,11 +2072,64 @@ void c_step(Chess* env) {
         env->log.score = env->log.perf + 0.2f * env->log.game_length_score - 0.1f * avg_draw_rate;
         
         env->log.n += 1.0f;
-        c_reset(env);
+        env->log.total_games += 1.0f;
+        
+        if (env->human_play) {
+            env->show_game_end_popup = 1;
+        } else {
+            c_reset(env);
+        }
         return;
     }
     
     populate_observations(env);
+}
+
+void export_pgn(Chess* env, const char* filename) {
+    FILE* f = fopen(filename, "w");
+    if (!f) return;
+    
+    fprintf(f, "[Event \"Human vs AI\"]\n");
+    fprintf(f, "[Site \"PufferLib\"]\n");
+    fprintf(f, "[White \"%s\"]\n", env->human_color == CHESS_WHITE ? "Human" : "AI");
+    fprintf(f, "[Black \"%s\"]\n", env->human_color == CHESS_BLACK ? "Human" : "AI");
+    fprintf(f, "[Result \"%s\"]\n\n", env->last_result);
+    
+    const char files[] = "abcdefgh";
+    const char ranks[] = "12345678";
+    
+    for (int i = 0; i < env->pgn_move_count; i++) {
+        if (i % 2 == 0) {
+            fprintf(f, "%d. ", i/2 + 1);
+        }
+        
+        Move m = env->pgn_moves[i];
+        Square from = from_sq(m);
+        Square to = to_sq(m);
+        int move_type = type_of_m(m);
+        
+        if (move_type == CASTLING) {
+            if (to > from) {
+                fprintf(f, "O-O ");
+            } else {
+                fprintf(f, "O-O-O ");
+            }
+        } else {
+            fprintf(f, "%c%c%c%c", files[file_of(from)], ranks[rank_of(from)],
+                    files[file_of(to)], ranks[rank_of(to)]);
+            
+            if (move_type == PROMOTION) {
+                char promo_pieces[] = ".NBRQ";
+                fprintf(f, "%c", promo_pieces[promotion_type(m)]);
+            }
+            fprintf(f, " ");
+        }
+        
+        if ((i + 1) % 8 == 0) fprintf(f, "\n");
+    }
+    
+    fprintf(f, "\n");
+    fclose(f);
 }
 
 // GUI is a tad scuffed, but it works.
@@ -2085,6 +2157,51 @@ void c_render(Chess* env) {
         exit(0);
     }
     
+    if (env->human_play && env->show_game_end_popup) {
+        BeginDrawing();
+        ClearBackground((Color){40, 40, 40, 255});
+        
+        int popup_width = 300;
+        int popup_height = 200;
+        int popup_x = (board_size - popup_width) / 2;
+        int popup_y = (board_size - popup_height) / 2;
+        
+        DrawRectangle(popup_x, popup_y, popup_width, popup_height, (Color){60, 60, 60, 255});
+        DrawRectangleLines(popup_x, popup_y, popup_width, popup_height, WHITE);
+        
+        DrawText("Game Over!", popup_x + 70, popup_y + 20, 24, WHITE);
+        DrawText(env->last_result, popup_x + 80, popup_y + 55, 18, YELLOW);
+        
+        int btn_width = 120;
+        int btn_height = 35;
+        int btn_y = popup_y + 110;
+        
+        Rectangle save_btn = {popup_x + 20, btn_y, btn_width, btn_height};
+        Rectangle new_game_btn = {popup_x + 160, btn_y, btn_width, btn_height};
+        
+        DrawRectangleRec(save_btn, DARKGREEN);
+        DrawRectangleLinesEx(save_btn, 2, WHITE);
+        DrawText("Save PGN", popup_x + 35, btn_y + 10, 16, WHITE);
+        
+        DrawRectangleRec(new_game_btn, DARKBLUE);
+        DrawRectangleLinesEx(new_game_btn, 2, WHITE);
+        DrawText("New Game", popup_x + 175, btn_y + 10, 16, WHITE);
+        
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            Vector2 mouse = GetMousePosition();
+            if (CheckCollisionPointRec(mouse, save_btn)) {
+                char filename[64];
+                snprintf(filename, sizeof(filename), "game_%d.pgn", (int)time(NULL));
+                export_pgn(env, filename);
+                printf("Saved PGN to %s\n", filename);
+            } else if (CheckCollisionPointRec(mouse, new_game_btn)) {
+                c_reset(env);
+            }
+        }
+        
+        EndDrawing();
+        return;
+    }
 
     if (env->human_play && env->human_color == -1) {
         BeginDrawing();
@@ -2154,6 +2271,9 @@ void c_render(Chess* env) {
                     if ((int)from_sq(m) == selected_sq && (int)to_sq(m) == clicked_sq) { chosen = m; break; }
                 }
                 if (chosen != MOVE_NONE) {
+                    if (env->pgn_move_count < MAX_GAME_PLIES) {
+                        env->pgn_moves[env->pgn_move_count++] = chosen;
+                    }
                     do_move(&env->pos, chosen, env->undo_stack, &env->undo_stack_ptr);
                     env->tick++;
                     env->chess_moves++;
@@ -2241,13 +2361,15 @@ void c_render(Chess* env) {
     snprintf(move_text, sizeof(move_text), "Move: %d", env->chess_moves);
     DrawText(move_text, board_size - 100, scoreboard_y, 18, LIGHTGRAY);
     
-    const char* learner_str = (env->learner_color == CHESS_WHITE) ? "Learner: White" : "Learner: Black";
-    DrawText(learner_str, board_size - 120, scoreboard_y + 25, 16, LIGHTGRAY);
+    if (!env->human_play) {
+        const char* learner_str = (env->learner_color == CHESS_WHITE) ? "Learner: White" : "Learner: Black";
+        DrawText(learner_str, board_size - 120, scoreboard_y + 25, 16, LIGHTGRAY);
+    }
     
     const int btn_width = 36;
     const int btn_height = 24;
     const int btn_y = scoreboard_y + 45;
-    const int btn_start_x = board_size / 2 - 70;
+    const int btn_start_x = env->human_play ? board_size / 2 - 100 : board_size / 2 - 70;
     
     Rectangle minus_btn = {btn_start_x, btn_y, btn_width, btn_height};
     DrawRectangleRec(minus_btn, DARKGRAY);
@@ -2263,6 +2385,14 @@ void c_render(Chess* env) {
     DrawRectangleRec(plus_btn, DARKGRAY);
     DrawRectangleLinesEx(plus_btn, 2, LIGHTGRAY);
     DrawText("+", btn_start_x + 2*btn_width + 32, btn_y + 4, 20, WHITE);
+    
+    Rectangle restart_btn = {0, 0, 0, 0};
+    if (env->human_play) {
+        restart_btn = (Rectangle){board_size - 60, btn_y, 55, btn_height};
+        DrawRectangleRec(restart_btn, MAROON);
+        DrawRectangleLinesEx(restart_btn, 2, LIGHTGRAY);
+        DrawText("Exit", board_size - 53, btn_y + 4, 16, WHITE);
+    }
     
     // Speed indicator
     char speed_text[32];
@@ -2282,6 +2412,9 @@ void c_render(Chess* env) {
         }
         if (CheckCollisionPointRec(mouse, plus_btn)) {
             frame_delay = frame_delay > 4 ? frame_delay - 4 : 1;
+        }
+        if (env->human_play && CheckCollisionPointRec(mouse, restart_btn)) {
+            c_reset(env);
         }
     }
     
