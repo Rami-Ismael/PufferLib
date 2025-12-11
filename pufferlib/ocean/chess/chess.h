@@ -349,7 +349,6 @@ typedef struct {
     float invalid_action_rate;
     float game_length_score;    
     float n;
-    float total_games;          // Cumulative games (increments on terminal=1)
 } Log;
 
 typedef struct {
@@ -1999,7 +1998,6 @@ void c_step(Chess* env) {
         env->log.score = env->log.perf + 0.2f * env->log.game_length_score - 0.1f * avg_draw_rate;
         
         env->log.n += 1.0f;
-        env->log.total_games += 1.0f;
         c_reset(env);
         return;
     }
@@ -2072,7 +2070,6 @@ void c_step(Chess* env) {
         env->log.score = env->log.perf + 0.2f * env->log.game_length_score - 0.1f * avg_draw_rate;
         
         env->log.n += 1.0f;
-        env->log.total_games += 1.0f;
         
         if (env->human_play) {
             env->show_game_end_popup = 1;
