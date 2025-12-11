@@ -18,6 +18,7 @@ class Chess(pufferlib.PufferEnv):
         self.render_mode = render_mode
         self.num_agents = num_envs
         self.log_interval = log_interval
+        self.cumulative_games = 0.0 
         self.tick = 0
         self.selfplay = selfplay
         
@@ -83,7 +84,13 @@ class Chess(pufferlib.PufferEnv):
         self.tick += 1
         self.actions[:] = actions
         binding.vec_step(self.c_envs)
-        info = [binding.vec_log(self.c_envs)] if self.tick % self.log_interval == 0 else []
+        info = []
+        if self.tick % self.log_interval == 0:
+            log_dict = binding.vec_log(self.c_envs)
+            if 'n' in log_dict:
+                self.cumulative_games += log_dict['n']
+                log_dict['games_played'] = self.cumulative_games
+            info = [log_dict]
         return self.observations, self.rewards, self.terminals, self.truncations, info
     
     def render(self):
