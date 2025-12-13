@@ -12,7 +12,7 @@ class Chess(pufferlib.PufferEnv):
                  reward_material=0.0, reward_position=0.0, reward_castling=0.0, reward_repetition=0.0,
                  render_fps=30, selfplay=1, human_play=0,
                  starting_fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-                 multi_fen=False,
+                 random_fen_pct=0,
                  enable_50_move_rule=1, enable_threefold_repetition=1):
         
         self.render_mode = render_mode
@@ -21,24 +21,12 @@ class Chess(pufferlib.PufferEnv):
         self.cumulative_games = 0.0 
         self.tick = 0
         self.selfplay = selfplay
+        self.random_fen_pct = random_fen_pct
         
         factor = 2 if selfplay else 1
         self.single_observation_space = gymnasium.spaces.Box(
             low=0, high=255, shape=(1077*factor,), dtype=np.uint8)
         self.single_action_space = gymnasium.spaces.Discrete(96)
-        
-        fen_curriculum = None
-        if str(multi_fen).lower() in ('true', '1', 'yes'):
-            import os
-            fens_path = os.path.join(os.path.dirname(__file__), 'fens.txt')
-            try:
-                with open(fens_path, 'r') as f:
-                    fen_curriculum = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-                if num_envs == 1 or buf is None:
-                    print(f"Loaded {len(fen_curriculum)} positions from pufferlib/ocean/chess/fens.txt")
-            except FileNotFoundError:
-                if num_envs == 1 or buf is None:
-                    print("Warning: multi_fen=True but pufferlib/ocean/chess/fens.txt not found, using default starting position")
         
         super().__init__(buf)
         
@@ -46,6 +34,13 @@ class Chess(pufferlib.PufferEnv):
             self.actions = np.zeros(num_envs * 2, dtype=np.int32)
         c_envs = []
         for i in range(num_envs):
+            if random_fen_pct > 0 and random_fen_pct < 100:
+                step = 100 // random_fen_pct
+                use_random_fen = 1 if (i % step == 0) else 0
+            elif random_fen_pct >= 100:
+                use_random_fen = 1
+            else:
+                use_random_fen = 0
             c_envs.append(binding.env_init(
                 self.observations[i:(i+1)],
                 self.actions[i*factor:(i+1)*factor],
@@ -67,7 +62,7 @@ class Chess(pufferlib.PufferEnv):
                 selfplay=selfplay,
                 human_play=human_play,
                 starting_fen=starting_fen,
-                fen_curriculum=fen_curriculum,
+                random_fen=use_random_fen,
                 enable_50_move_rule=enable_50_move_rule,
                 enable_threefold_repetition=enable_threefold_repetition,
                 learner_color=i % 2,
