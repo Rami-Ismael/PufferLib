@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
@@ -82,10 +83,10 @@ struct CGo {
     int board_height;
     int grid_square_size;
     int grid_size;
-    int* board_states;
-    int* previous_board_state;
+    uint8_t* board_states;
+    uint8_t* previous_board_state;
     int last_capture_position;
-    int* temp_board_states;
+    uint8_t* temp_board_states;
     int moves_made;
     int* capture_count;
     float komi;
@@ -168,10 +169,10 @@ void init(CGo* env) {
     int grid_size = env->grid_size*env->grid_size;
     env->board_x = (int*)calloc(board_render_size, sizeof(int));
     env->board_y = (int*)calloc(board_render_size, sizeof(int));
-    env->board_states = (int*)calloc(grid_size, sizeof(int));
+    env->board_states = (uint8_t*)calloc(grid_size, sizeof(uint8_t));
     env->visited = (int*)calloc(grid_size, sizeof(int));
-    env->previous_board_state = (int*)calloc(grid_size, sizeof(int));
-    env->temp_board_states = (int*)calloc(grid_size, sizeof(int));
+    env->previous_board_state = (uint8_t*)calloc(grid_size, sizeof(uint8_t));
+    env->temp_board_states = (uint8_t*)calloc(grid_size, sizeof(uint8_t));
     env->capture_count = (int*)calloc(2, sizeof(int));
     env->groups = (Group*)calloc(grid_size, sizeof(Group));
     env->temp_groups = (Group*)calloc(grid_size, sizeof(Group));
@@ -330,14 +331,16 @@ void compute_score_tromp_taylor(CGo* env) {
                 }
                 
                 int npos = ny * env->grid_size + nx;
-                
-                if (env->board_states[npos] == 0 && !env->visited[npos]) {
+                int neighbor_color = env->board_states[npos];
+                if (neighbor_color ==0) {
                     // Add unvisited empty points to queue
-                    queue[rear++] = npos;
-                    env->visited[npos] = 1;
+                    if(!env->visited[npos]) {
+                        queue[rear++] = npos;
+                        env->visited[npos] = 1;
+                    }
                 } else if (bordering_player == 0) {
-                    bordering_player = env->board_states[npos];
-                } else if (bordering_player != env->board_states[npos]) {
+                    bordering_player = neighbor_color;
+                } else if (bordering_player != neighbor_color) {
                     bordering_player = 3;  // Mixed territory
                 }
             }
@@ -353,6 +356,7 @@ void compute_score_tromp_taylor(CGo* env) {
     }
     float komi = (env->side == 2) ? env->komi : -env->komi;
     env->score = (float)player_score - (float)opponent_score + komi;
+    //printf("Score: %f\n", env->score);
 }
 
 int find_in_group(int* group, int group_size, int value) {
@@ -365,7 +369,7 @@ int find_in_group(int* group, int group_size, int value) {
 }
 
 
-void capture_group(CGo* env, int* board, int root, int* affected_groups, int* affected_count) {
+void capture_group(CGo* env, uint8_t* board, int root, int* affected_groups, int* affected_count) {
     // Reset visited array
     reset_visited(env);
 
@@ -483,7 +487,7 @@ int make_move(CGo* env, int pos, int player){
     float r0 = env->rewards[0];
     float er0 = env->log.episode_return;
     // temp structures
-    memcpy(env->temp_board_states, env->board_states, sizeof(int) * (env->grid_size) * (env->grid_size));
+    memcpy(env->temp_board_states, env->board_states, sizeof(uint8_t) * (env->grid_size) * (env->grid_size));
     memcpy(env->temp_groups, env->groups, sizeof(Group) * (env->grid_size) * (env->grid_size));
     // create new group
     env->temp_board_states[pos] = player;
@@ -561,8 +565,8 @@ int make_move(CGo* env, int pos, int player){
         }
         return 0;
     }
-    memcpy(env->previous_board_state, env->board_states, sizeof(int) * (env->grid_size) * (env->grid_size));
-    memcpy(env->board_states, env->temp_board_states, sizeof(int) * (env->grid_size) * (env->grid_size));
+    memcpy(env->previous_board_state, env->board_states, sizeof(uint8_t) * (env->grid_size) * (env->grid_size));
+    memcpy(env->board_states, env->temp_board_states, sizeof(uint8_t) * (env->grid_size) * (env->grid_size));
     memcpy(env->groups, env->temp_groups, sizeof(Group) * (env->grid_size) * (env->grid_size));
     return 1;
 
@@ -725,22 +729,6 @@ void c_reset(CGo* env) {
     compute_observations(env);
 }
 
-void end_game(CGo* env){
-    compute_score_tromp_taylor(env);
-    if (env->score > 0) {
-        env->rewards[0] = 1.0;
-    }
-    else if (env->score < 0) {
-        env->rewards[0] = -1.0;
-    }
-    else {
-        env->rewards[0] = 0.0;
-    }
-    env->terminals[0] = 1;
-    add_log(env);
-    c_reset(env);
-}
-
 void clip_rewards(CGo* env){
     if(env->rewards[0] > 1){
 	    env->rewards[0] = 1;
@@ -748,6 +736,69 @@ void clip_rewards(CGo* env){
     if(env->rewards[0] < -1){
 	    env->rewards[0] = -1;
     }
+}
+
+void end_game(CGo* env){
+    compute_score_tromp_taylor(env);
+    /*if (env->score > 0) {
+        env->rewards[0] = 1.0;
+    }
+    else if (env->score < 0) {
+        env->rewards[0] = -1.0;
+    }
+    else {
+        env->rewards[0] = 0.0;
+    }*/
+    env->rewards[0] = env->score / 10.0f;
+    clip_rewards(env);
+    env->terminals[0] = 1;
+    add_log(env);
+    c_reset(env);
+}
+
+void human_play(CGo* env){
+    int indx=1;
+    if(!env->selfplay || !env->human_play){
+        return;
+    }
+    if(env->selfplay && env->turn + 1 != env->side){
+        env->actions[indx] = -1;
+    }
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        Vector2 mousePos = GetMousePosition();
+
+        // Calculate the offset for the board
+        int boardOffsetX = env->grid_square_size;
+        int boardOffsetY = env->grid_square_size;
+        
+        // Adjust mouse position relative to the board
+        int relativeX = mousePos.x - boardOffsetX;
+        int relativeY = mousePos.y - boardOffsetY;
+        
+        // Calculate cell indices for the corners
+        int cellX = (relativeX + env->grid_square_size / 2) / env->grid_square_size;
+        int cellY = (relativeY + env->grid_square_size / 2) / env->grid_square_size;
+        
+        // Ensure the click is within the game board
+        if (cellX >= 0 && cellX <= env->grid_size && cellY >= 0 && cellY <= env->grid_size) {
+            // Calculate the point index (1-19) based on the click position
+            int pointIndex = cellY * (env->grid_size) + cellX + 1; 
+            env->actions[indx] = (unsigned short)pointIndex;
+        }
+        // Check if pass button is clicked
+        int left = (env->grid_size + 1)*env->grid_square_size;
+        int top = env->grid_square_size;
+        int passButtonX = left;
+        int passButtonY = top + 90;
+        int passButtonWidth = 100;
+        int passButtonHeight = 50;
+
+        if (mousePos.x >= passButtonX && mousePos.x <= passButtonX + passButtonWidth &&
+            mousePos.y >= passButtonY && mousePos.y <= passButtonY + passButtonHeight) {
+            env->actions[indx] = 0; // Send action 0 for pass
+        }
+    }
+
 }
 
 void c_step(CGo* env) {
@@ -791,6 +842,7 @@ void c_step(CGo* env) {
     // process action
     if(action == NOOP){
         if(env->turn + 1 == env->side){
+            //printf("Pass\n");
             env->legal_move_count +=1;
             env->rewards[0] = env->reward_move_pass;
             env->log.episode_return += env->reward_move_pass;
@@ -823,8 +875,6 @@ void c_step(CGo* env) {
     }
     env->previous_move = action;
 
-    clip_rewards(env); 
-
     if (env->terminals[0] == 1) {
         end_game(env);
         return;
@@ -856,48 +906,6 @@ Client* make_client(int width, int height) {
     return client;
 }
 
-void human_play(CGo* env){
-    int indx=1;
-    if(!env->selfplay || !env->human_play){
-        return;
-    }
-    if(env->selfplay && env->turn + 1 != env->side){
-        env->actions[indx] = -1;
-    }
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        Vector2 mousePos = GetMousePosition();
-
-        // Calculate the offset for the board
-        int boardOffsetX = env->grid_square_size;
-        int boardOffsetY = env->grid_square_size;
-        
-        // Adjust mouse position relative to the board
-        int relativeX = mousePos.x - boardOffsetX;
-        int relativeY = mousePos.y - boardOffsetY;
-        
-        // Calculate cell indices for the corners
-        int cellX = (relativeX + env->grid_square_size / 2) / env->grid_square_size;
-        int cellY = (relativeY + env->grid_square_size / 2) / env->grid_square_size;
-        
-        // Ensure the click is within the game board
-        if (cellX >= 0 && cellX <= env->grid_size && cellY >= 0 && cellY <= env->grid_size) {
-            // Calculate the point index (1-19) based on the click position
-            int pointIndex = cellY * (env->grid_size) + cellX + 1; 
-            env->actions[indx] = (unsigned short)pointIndex;
-        }
-        // Check if pass button is clicked
-        int passButtonX = env->width - 300;
-        int passButtonY = 200;
-        int passButtonWidth = 100;
-        int passButtonHeight = 50;
-
-        if (mousePos.x >= passButtonX && mousePos.x <= passButtonX + passButtonWidth &&
-            mousePos.y >= passButtonY && mousePos.y <= passButtonY + passButtonHeight) {
-            env->actions[indx] = 0; // Send action 0 for pass
-        }
-    }
-
-}
 
 void c_render(CGo* env) {
     if (env->client == NULL) {
