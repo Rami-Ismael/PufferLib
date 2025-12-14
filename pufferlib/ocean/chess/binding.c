@@ -31,6 +31,11 @@ static int my_init(Env *env, PyObject *args, PyObject *kwargs) {
     env->num_fens = 0;
     strcpy(env->starting_fen, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     
+    env->log_pgn = 0;
+    env->log_pgn_choice_made = 1;
+    env->pgn_filename[0] = '\0';
+    env->pgn_game_number = 0;
+    
     if (kwargs != NULL) {
         PyObject* max_moves_obj = PyDict_GetItemString(kwargs, "max_moves");
         if (max_moves_obj != NULL && PyLong_Check(max_moves_obj)) {
@@ -132,17 +137,10 @@ static int my_init(Env *env, PyObject *args, PyObject *kwargs) {
             env->enable_threefold_repetition = (int)PyLong_AsLong(enable_3fold_obj);
         }
 
-        PyObject* fen_list = PyDict_GetItemString(kwargs, "fen_curriculum");
-        if (fen_list != NULL && PyList_Check(fen_list)) {
-            env->num_fens = PyList_Size(fen_list);
-            env->fen_curriculum = (char**)malloc(env->num_fens * sizeof(char*));
-            for (int i = 0; i < env->num_fens; i++) {
-                PyObject* fen_obj = PyList_GetItem(fen_list, i);
-                const char* fen_str = PyUnicode_AsUTF8(fen_obj);
-                env->fen_curriculum[i] = (char*)malloc(128 * sizeof(char));
-                strncpy(env->fen_curriculum[i], fen_str, 127);
-                env->fen_curriculum[i][127] = '\0';
-            }
+        env->random_fen = 0;
+        PyObject* random_fen_obj = PyDict_GetItemString(kwargs, "random_fen");
+        if (random_fen_obj != NULL && PyLong_Check(random_fen_obj)) {
+            env->random_fen = (int)PyLong_AsLong(random_fen_obj);
         }
         
         PyObject* fen_obj = PyDict_GetItemString(kwargs, "starting_fen");
@@ -158,8 +156,6 @@ static int my_init(Env *env, PyObject *args, PyObject *kwargs) {
     return 0;
 }
 
-static float total_games_played = 0.0f;
-
 static int my_log(PyObject *dict, Log *log) {
     assign_to_dict(dict, "perf", log->perf);
     assign_to_dict(dict, "score", log->score);
@@ -168,9 +164,6 @@ static int my_log(PyObject *dict, Log *log) {
     assign_to_dict(dict, "chess_moves", log->chess_moves);
     assign_to_dict(dict, "episode_length", log->episode_length);
     assign_to_dict(dict, "episode_return", log->episode_return);
-    
-    total_games_played += log->n;
-    assign_to_dict(dict, "games_played", total_games_played);
     
     float avg_invalid_rate = (log->n > 0) ? (log->invalid_action_rate / log->n) : 0.0f;
     assign_to_dict(dict, "invalid_action_rate", avg_invalid_rate);
